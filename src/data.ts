@@ -101,7 +101,7 @@ export const RES: Resource[] = ([
   ['Class 3 EVS — Activity Sheets', 'Worksheets', 'P', 'EVS', '3.3 MB'],
   ['Class 4 English Grammar — Practice Worksheets', 'Worksheets', 'P', 'English', '1.4 MB'],
   ['Class 10 Social Science — Map Work Practice', 'Revision notes', 'S', 'Social Science', '2.7 MB'],
-  ['CBSE Class 9–10 Syllabus 2026–27', 'Syllabus', 'S', 'All subjects', '1.1 MB'],
+  ['CBSE Class 9–10 Syllabus 2027–28', 'Syllabus', 'S', 'All subjects', '1.1 MB'],
   ['CUET (UG) General Test — Pattern & Syllabus', 'Syllabus', 'C', 'General Aptitude', '0.6 MB'],
   ['Organic Chemistry, Simplified — Errata (2nd ed.)', 'Errata', 'SS', 'Chemistry', '0.3 MB'],
 ] as [string, string, LevelKey, string, string][]).map((r, i) => ({ id: 'r' + i, t: r[0], k: r[1], lv: r[2], su: r[3], size: r[4] }));
@@ -154,7 +154,7 @@ export const specsFor = (bk: Book) => {
   return [
     ['ISBN', '978-93-' + (48210 + bi * 37) + '-' + (bi % 9) + '-' + ((bi * 7) % 10)],
     ['Pages', String(bk.pg)],
-    ['Edition', '2026–27'],
+    ['Edition', '2027–28'],
     [bk.bd ? 'Board' : 'Exam / series', bk.bd || bk.cl],
     ['Level', LV[bk.lv]],
     ['Language', bk.id === 'hin7' ? 'Hindi' : 'English'],
