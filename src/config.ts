@@ -6,4 +6,6 @@ export const config = {
   showTopBar: true,
   /** Pill link to elmaster in the header (hidden on narrow screens either way). */
   showElmasterInNav: true,
+  /** Public enquiries address. Placeholder — replace with the real one. */
+  contactEmail: 'enquiries@eldenpress.in',
 };
