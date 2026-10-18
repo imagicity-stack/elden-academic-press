@@ -21,7 +21,7 @@ export function TopBar() {
     <div className="topbar">
       <div className="wrap topbar__inner">
         <div className="topbar__msg">
-          <span className="topbar__tag">SESSION 2026–27</span>
+          <span className="topbar__tag">SESSION 2027–28</span>
           <span>New titles for CBSE, ICSE &amp; State Boards are out.</span>
           <button type="button" className="topbar__cta" onClick={() => openModal('sample')}>Request inspection copies</button>
         </div>
