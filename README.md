@@ -13,7 +13,20 @@ npm run build    # type-check + production build to dist/
 npm run preview  # serve the production build
 ```
 
-The site uses client-side routing, so the host must serve `index.html` for all paths (SPA fallback).
+The site uses client-side routing, so the host must serve `index.html` for all paths (`vercel.json` does this on Vercel).
+
+## Launch switch: `VITE_SITE_LIVE`
+
+Until launch, every URL shows a single **coming-soon page** (`src/pages/ComingSoon.tsx`) describing what's on the way.
+
+| `VITE_SITE_LIVE` | Result |
+|---|---|
+| `true` | Full website |
+| unset / anything else | Coming-soon page |
+
+On Vercel: **Project → Settings → Environment Variables**, add `VITE_SITE_LIVE` = `true` for Production, then **redeploy**. Vite bakes the value in at build time, so changing it only takes effect on the next deployment.
+
+Locally: copy `.env.example` to `.env.local` and set `VITE_SITE_LIVE=true` to work on the full site.
 
 ## Pages
 
