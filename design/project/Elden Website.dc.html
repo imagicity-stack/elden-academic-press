@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Montserrat:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:#FAF7F1;color:#171A1F;font-family:Montserrat,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#0E1F33;text-decoration:none}
+a:hover{color:#87561F}
+input,select,textarea,button{font-family:inherit}
+::selection{background:#E8DAC3}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column">
+
+<sc-if value="{{ showTopBar }}" hint-placeholder-val="{{ true }}">
+<div style="background:#0E1F33;color:#E9E2D6;font:500 12px/1.4 Montserrat,sans-serif">
+  <div style="max-width:1240px;margin:0 auto;padding:9px clamp(18px,4vw,40px);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="color:#E2B68A;font-weight:600;letter-spacing:.08em">SESSION 2026–27</span><span>New titles for CBSE, ICSE &amp; State Boards are out.</span><button onClick="{{ openSampleGeneral }}" style="background:none;border:0;padding:0;color:#FAF7F1;font:600 12px Montserrat,sans-serif;text-decoration:underline;text-underline-offset:3px;cursor:pointer">Request inspection copies</button></div>
+    <div style="display:flex;gap:22px;align-items:center">
+      <button onClick="{{ goContact }}" style="background:none;border:0;padding:0;color:#E9E2D6;font:500 12px Montserrat,sans-serif;cursor:pointer" style-hover="color:#FFFFFF">Find a distributor</button>
+      <button onClick="{{ goAbout }}" style="background:none;border:0;padding:0;color:#E9E2D6;font:500 12px Montserrat,sans-serif;cursor:pointer" style-hover="color:#FFFFFF">Publish with us</button>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<header style="position:sticky;top:0;z-index:40;background:rgba(250,247,241,.94);backdrop-filter:blur(10px);border-bottom:1px solid #E3DCCF">
+  <div style="max-width:1240px;margin:0 auto;padding:14px clamp(18px,4vw,40px);display:flex;align-items:center;justify-content:space-between;gap:24px">
+    <button onClick="{{ goHome }}" aria-label="Elden Academic Press — home" style="display:flex;align-items:center;gap:12px;background:none;border:0;padding:0;cursor:pointer;flex:none">
+      <img src="assets/elden-mark.png" alt="" style="height:42px;width:auto;display:block">
+      <span style="display:flex;flex-direction:column;align-items:flex-start;gap:3px">
+        <span style="font:600 25px/0.9 'Cormorant Garamond',serif;letter-spacing:.3em;color:#0B0D10;margin-right:-.3em">ELDEN</span>
+        <span style="font:500 8.5px/1 Montserrat,sans-serif;letter-spacing:.32em;color:#87561F">ACADEMIC PRESS</span>
+      </span>
+    </button>
+    <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:28px">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="6">
+          <button onClick="{{ n.go }}" style="background:none;border:0;padding:8px 0;border-bottom:2px solid {{ n.bd }};font:600 13.5px/1 Montserrat,sans-serif;color:{{ n.col }};cursor:pointer" style-hover="color:#87561F">{{ n.label }}</button>
+        </sc-for>
+      </nav>
+    </sc-if>
+    <div style="display:flex;align-items:center;gap:10px">
+      <sc-if value="{{ showElmNav }}" hint-placeholder-val="{{ true }}">
+        <a href="{{ elmasterUrl }}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:9px 14px;border:1.5px solid #0E1F33;border-radius:999px;font:700 13px/1 Montserrat,sans-serif;color:#0E1F33;letter-spacing:-.01em" style-hover="background:#0E1F33;color:#FAF7F1"><span style="width:8px;height:8px;border-radius:50%;background:oklch(0.72 0.13 185)"></span>elmaster ↗</a>
+      </sc-if>
+      <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ openSampleGeneral }}" style="background:#9C6A2F;color:#FFFFFF;border:0;padding:11px 18px;border-radius:2px;font:600 13px/1 Montserrat,sans-serif;cursor:pointer;transition:background .2s" style-hover="background:#6B3A0A">Request a sample</button>
+      </sc-if>
+      <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ toggleMenu }}" style="background:#0E1F33;color:#FAF7F1;border:0;padding:11px 16px;min-height:44px;border-radius:2px;font:600 13px/1 Montserrat,sans-serif;cursor:pointer">{{ menuLabel }}</button>
+      </sc-if>
+    </div>
+  </div>
+  <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="border-top:1px solid #E3DCCF;padding:8px clamp(18px,4vw,40px) 18px;display:flex;flex-direction:column">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="6">
+        <button onClick="{{ n.go }}" style="background:none;border:0;border-bottom:1px solid #EDE7DC;padding:14px 0;text-align:left;font:600 15px Montserrat,sans-serif;color:{{ n.col }};cursor:pointer">{{ n.label }}</button>
+      </sc-for>
+      <button onClick="{{ openSampleGeneral }}" style="margin-top:14px;background:#9C6A2F;color:#FFFFFF;border:0;padding:14px;border-radius:2px;font:600 14px Montserrat,sans-serif;cursor:pointer">Request a sample</button>
+    </div>
+  </sc-if>
+</header>
+
+<main style="flex:1">
+
+<!-- ===================== HOME ===================== -->
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="Home">
+
+<section style="position:relative;overflow:hidden;border-bottom:1px solid #E3DCCF">
+  <div style="max-width:1240px;margin:0 auto;padding:clamp(48px,7vw,96px) clamp(18px,4vw,40px) clamp(56px,7vw,100px);display:flex;flex-wrap:wrap;align-items:center;gap:clamp(40px,6vw,80px)">
+    <div style="flex:1 1 440px;min-width:0;display:flex;flex-direction:column;gap:26px">
+      <div style="font:600 11.5px/1.5 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#87561F">CBSE · ICSE · State Boards · Competitive exams</div>
+      <h1 style="margin:0;font:600 clamp(46px,6.4vw,84px)/0.98 'Cormorant Garamond',serif;color:#0E1F33;letter-spacing:-.01em;text-wrap:balance">Books that teach. Material that prepares.</h1>
+      <p style="margin:0;max-width:520px;font:400 16.5px/1.65 Montserrat,sans-serif;color:#45423C;text-wrap:pretty">Textbooks, reference books, practice papers and journals for classrooms across India — written by teachers, reviewed by subject experts.</p>
+      <form onSubmit="{{ heroSearch }}" style="display:flex;max-width:560px;background:#FFFFFF;border:1.5px solid #0E1F33;border-radius:2px">
+        <input value="{{ heroQ }}" onChange="{{ setHeroQ }}" placeholder="Search by title, subject, class or exam" style="flex:1;min-width:0;border:0;outline:none;background:transparent;padding:16px 18px;font:500 15px Montserrat,sans-serif;color:#171A1F">
+        <button type="submit" style="background:#0E1F33;color:#FAF7F1;border:0;padding:0 22px;font:600 14px Montserrat,sans-serif;cursor:pointer" style-hover="background:#1E3A57">Search</button>
+      </form>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <span style="font:500 12.5px Montserrat,sans-serif;color:#6E695F;margin-right:4px">Popular:</span>
+        <sc-for list="{{ quick }}" as="ql" hint-placeholder-count="5">
+          <button onClick="{{ ql.go }}" style="background:transparent;border:1px solid #D6CCBB;border-radius:999px;padding:7px 13px;font:500 12.5px Montserrat,sans-serif;color:#2B2E33;cursor:pointer" style-hover="border-color:#0E1F33;background:#FFFFFF">{{ ql.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="flex:1 1 380px;min-width:0;position:relative;height:clamp(380px,40vw,500px)">
+      <div style="position:absolute;inset:8% 4% 4% 14%;background:#F0E8DA;border-radius:2px"></div>
+      <sc-for list="{{ heroBooks }}" as="b" hint-placeholder-count="3">
+        <div onClick="{{ b.open }}" style="position:absolute;width:clamp(170px,17vw,230px);left:{{ b.x }};top:{{ b.y }};transform:rotate({{ b.r }});z-index:{{ b.z }};cursor:pointer;transition:transform .3s">
+          <div style="position:relative;aspect-ratio:3/4;background:{{ b.c.bg }};color:{{ b.c.fg }};padding:20px 18px 16px 24px;display:flex;flex-direction:column;overflow:hidden;border-radius:2px 5px 5px 2px;box-shadow:0 30px 50px -24px rgba(14,31,51,.6),0 2px 4px rgba(14,31,51,.1)">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:8px;background:rgba(0,0,0,.16)"></div>
+            <div style="position:absolute;right:18px;top:20px;display:flex;align-items:flex-end;gap:5px;height:54px"><div style="width:7px;height:100%;background:{{ b.c.ac }}"></div><div style="width:7px;height:78%;background:{{ b.c.ac }};opacity:.7"></div><div style="width:7px;height:60%;background:{{ b.c.ac }};opacity:.45"></div></div>
+            <div style="font:600 8.5px/1.4 Montserrat,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:{{ b.c.ac }};max-width:60%">{{ b.s }}</div>
+            <div style="margin-top:auto;font:600 26px/1.02 'Cormorant Garamond',serif;text-wrap:balance">{{ b.t }}</div>
+            <div style="margin-top:14px;padding-top:10px;border-top:1px solid {{ b.c.ac }};display:flex;justify-content:space-between;gap:8px;font:600 8.5px/1.2 Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase"><span>{{ b.meta }}</span><span style="color:{{ b.c.ac }}">Elden</span></div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section style="max-width:1240px;margin:0 auto;padding:clamp(56px,8vw,96px) clamp(18px,4vw,40px) 0">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:32px">
+    <h2 style="margin:0;font:600 clamp(32px,4vw,46px)/1.05 'Cormorant Garamond',serif;color:#0E1F33">Find what you need</h2>
+    <p style="margin:0;max-width:420px;font:400 14.5px/1.6 Montserrat,sans-serif;color:#5A5650">Start from where you are — a class, an exam, a classroom or a research desk.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));border-top:1px solid #E3DCCF;border-left:1px solid #E3DCCF">
+    <sc-for list="{{ paths }}" as="p" hint-placeholder-count="4">
+      <button onClick="{{ p.go }}" style="text-align:left;background:#FAF7F1;border:0;border-right:1px solid #E3DCCF;border-bottom:1px solid #E3DCCF;padding:30px 24px 28px;display:flex;flex-direction:column;gap:14px;cursor:pointer;min-height:250px;transition:background .2s" style-hover="background:#FFFFFF">
+        <span style="font:600 15px/1 'Cormorant Garamond',serif;color:#9C6A2F;letter-spacing:.1em">{{ p.n }}</span>
+        <span style="font:600 27px/1.1 'Cormorant Garamond',serif;color:#0E1F33">{{ p.t }}</span>
+        <span style="font:400 14px/1.6 Montserrat,sans-serif;color:#55514A;text-wrap:pretty">{{ p.d }}</span>
+        <span style="margin-top:auto;font:600 13px Montserrat,sans-serif;color:#0E1F33">{{ p.cta }} →</span>
+      </button>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px 28px;align-items:center;padding:22px 0;border-bottom:1px solid #E3DCCF">
+    <span style="font:600 11px Montserrat,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#87561F">Browse by type</span>
+    <sc-for list="{{ typeLinks }}" as="tl" hint-placeholder-count="7">
+      <button onClick="{{ tl.go }}" style="background:none;border:0;padding:4px 0;font:500 14px Montserrat,sans-serif;color:#171A1F;cursor:pointer;display:flex;gap:6px;align-items:baseline" style-hover="color:#87561F">{{ tl.label }}<span style="font-size:12px;color:#8A857B">{{ tl.count }}</span></button>
+    </sc-for>
+  </div>
+</section>
+
+<section style="max-width:1240px;margin:0 auto;padding:clamp(56px,8vw,96px) clamp(18px,4vw,40px)">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:36px">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#87561F">New this session</div>
+      <h2 style="margin:0;font:600 clamp(32px,4vw,46px)/1.05 'Cormorant Garamond',serif;color:#0E1F33">Fresh off the press</h2>
+    </div>
+    <button onClick="{{ goCatalogue }}" style="background:none;border:0;border-bottom:1.5px solid #0E1F33;padding:0 0 4px;font:600 14px Montserrat,sans-serif;color:#0E1F33;cursor:pointer">View full catalogue →</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:36px 26px">
+    <sc-for list="{{ newBooks }}" as="b" hint-placeholder-count="5">
+      <div onClick="{{ b.open }}" style="display:flex;flex-direction:column;gap:16px;cursor:pointer;min-width:0;transition:transform .25s" style-hover="transform:translateY(-4px)">
+        <div style="position:relative;aspect-ratio:3/4;background:{{ b.c.bg }};color:{{ b.c.fg }};padding:18px 16px 14px 22px;display:flex;flex-direction:column;overflow:hidden;border-radius:2px 5px 5px 2px;box-shadow:0 18px 30px -20px rgba(14,31,51,.55),0 2px 4px rgba(14,31,51,.08)">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:7px;background:rgba(0,0,0,.16)"></div>
+          <div style="position:absolute;right:16px;top:18px;display:flex;align-items:flex-end;gap:4px;height:44px"><div style="width:6px;height:100%;background:{{ b.c.ac }}"></div><div style="width:6px;height:78%;background:{{ b.c.ac }};opacity:.7"></div><div style="width:6px;height:60%;background:{{ b.c.ac }};opacity:.45"></div></div>
+          <div style="font:600 8px/1.4 Montserrat,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:{{ b.c.ac }};max-width:60%">{{ b.s }}</div>
+          <div style="margin-top:auto;font:600 22px/1.02 'Cormorant Garamond',serif;text-wrap:balance">{{ b.t }}</div>
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid {{ b.c.ac }};display:flex;justify-content:space-between;gap:8px;font:600 8px/1.2 Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase"><span>{{ b.meta }}</span><span style="color:{{ b.c.ac }}">Elden</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="font:600 10.5px/1.2 Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#87561F">{{ b.ty }}</div>
+          <div style="font:600 21px/1.15 'Cormorant Garamond',serif;color:#0E1F33">{{ b.t }}</div>
+          <div style="font:400 13px/1.4 Montserrat,sans-serif;color:#5E5A52">{{ b.a }}</div>
+          <div style="font:600 14px/1.4 Montserrat,sans-serif;color:#171A1F;margin-top:4px">{{ b.price }}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section style="background:#F2ECE1;border-top:1px solid #E3DCCF;border-bottom:1px solid #E3DCCF">
+  <div style="max-width:1240px;margin:0 auto;padding:clamp(56px,8vw,96px) clamp(18px,4vw,40px);display:flex;flex-wrap:wrap;gap:clamp(36px,6vw,80px)">
+    <div style="flex:1 1 320px;display:flex;flex-direction:column;gap:20px;min-width:0">
+      <div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#87561F">Study Hub · Free</div>
+      <h2 style="margin:0;font:600 clamp(32px,4vw,46px)/1.05 'Cormorant Garamond',serif;color:#0E1F33;text-wrap:balance">Sample papers, notes and answer keys — free to download.</h2>
+      <p style="margin:0;font:400 15px/1.65 Montserrat,sans-serif;color:#45423C;max-width:440px">Updated every session for students revising at home and teachers setting class tests.</p>
+      <div><button onClick="{{ goHub }}" style="background:#0E1F33;color:#FAF7F1;border:0;padding:14px 22px;border-radius:2px;font:600 14px Montserrat,sans-serif;cursor:pointer" style-hover="background:#1E3A57">Open the Study Hub</button></div>
+    </div>
+    <div style="flex:1.4 1 460px;min-width:0;display:flex;flex-direction:column;border-top:1.5px solid #0E1F33">
+      <sc-for list="{{ hubPreview }}" as="r" hint-placeholder-count="5">
+        <div style="display:flex;align-items:center;gap:18px;padding:18px 0;border-bottom:1px solid #DCD2C1">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+            <div style="font:600 15px/1.35 Montserrat,sans-serif;color:#171A1F">{{ r.t }}</div>
+            <div style="font:500 12.5px/1.3 Montserrat,sans-serif;color:#6E695F">{{ r.k }} · {{ r.lvl }} · PDF {{ r.size }}</div>
+          </div>
+          <button onClick="{{ r.dl }}" style="flex:none;background:transparent;border:1.5px solid #0E1F33;padding:9px 14px;border-radius:2px;font:600 12.5px Montserrat,sans-serif;color:#0E1F33;cursor:pointer;min-height:40px" style-hover="background:#0E1F33;color:#FAF7F1">{{ r.dlLabel }}</button>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section style="background:#0A1624;color:#E9EEF2;position:relative;overflow:hidden">
+  <div style="max-width:1240px;margin:0 auto;padding:clamp(60px,8vw,104px) clamp(18px,4vw,40px);display:flex;flex-wrap:wrap;align-items:center;gap:clamp(40px,6vw,80px)">
+    <div style="flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:22px">
+      <div style="display:flex;align-items:center;gap:10px;font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#9FB0C0"><span style="width:8px;height:8px;border-radius:50%;background:oklch(0.80 0.12 185)"></span>Our learning platform</div>
+      <div style="font:700 clamp(52px,7vw,84px)/0.9 Montserrat,sans-serif;letter-spacing:-.045em;color:#FFFFFF"><span style="color:oklch(0.80 0.12 185)">el</span>master</div>
+      <p style="margin:0;max-width:500px;font:400 17px/1.6 Montserrat,sans-serif;color:#C9D3DC;text-wrap:pretty">Every Elden book has a digital companion. Scan the QR code inside to continue on elmaster — video lessons, practice tests and progress tracking.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12);max-width:560px">
+        <sc-for list="{{ elmFeatures }}" as="ef" hint-placeholder-count="4">
+          <div style="background:#0A1624;padding:16px 18px;display:flex;flex-direction:column;gap:4px"><span style="font:600 14px/1.3 Montserrat,sans-serif;color:#FFFFFF">{{ ef.t }}</span><span style="font:400 12.5px/1.45 Montserrat,sans-serif;color:#9FB0C0">{{ ef.d }}</span></div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px">
+        <a href="{{ elmasterUrl }}" target="_blank" rel="noopener" style="background:oklch(0.80 0.12 185);color:#08131F;padding:15px 24px;border-radius:999px;font:700 14px/1 Montserrat,sans-serif" style-hover="background:oklch(0.86 0.11 185);color:#08131F">Go to elmaster ↗</a>
+        <a href="{{ elmasterUrl }}" target="_blank" rel="noopener" style="border:1.5px solid rgba(255,255,255,.35);color:#FFFFFF;padding:14px 22px;border-radius:999px;font:600 14px/1 Montserrat,sans-serif" style-hover="border-color:#FFFFFF;color:#FFFFFF">elmaster for schools</a>
+      </div>
+    </div>
+    <div style="flex:1 1 380px;min-width:0;aspect-ratio:4/3;border:1px solid rgba(255,255,255,.14);border-radius:14px;background:repeating-linear-gradient(135deg,rgba(255,255,255,.045) 0 10px,transparent 10px 20px);display:grid;place-items:center">
+      <span style="font:400 12px/1.4 'JetBrains Mono',monospace;color:#8FA0B2;text-align:center;padding:0 20px">elmaster screenshot — app or dashboard</span>
+    </div>
+  </div>
+</section>
+
+<section style="max-width:1240px;margin:0 auto;padding:clamp(56px,8vw,96px) clamp(18px,4vw,40px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:24px">
+  <div style="background:#0E1F33;color:#F6F0E6;padding:clamp(28px,4vw,44px);display:flex;flex-direction:column;gap:16px;border-radius:2px">
+    <div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#E2B68A">For schools &amp; teachers</div>
+    <h3 style="margin:0;font:600 clamp(28px,3vw,36px)/1.1 'Cormorant Garamond',serif;color:#FFFFFF">Evaluating books for next session?</h3>
+    <p style="margin:0;font:400 14.5px/1.65 Montserrat,sans-serif;color:#C8CED6;max-width:460px">Request inspection copies, teacher's manuals and bulk pricing for your school or coaching centre.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:auto;padding-top:8px">
+      <button onClick="{{ openSampleGeneral }}" style="background:#CC955F;color:#0E1F33;border:0;padding:13px 20px;border-radius:2px;font:700 13.5px Montserrat,sans-serif;cursor:pointer" style-hover="background:#E2B68A">Request a sample</button>
+      <button onClick="{{ goContact }}" style="background:transparent;color:#FFFFFF;border:1.5px solid rgba(255,255,255,.4);padding:12px 18px;border-radius:2px;font:600 13.5px Montserrat,sans-serif;cursor:pointer" style-hover="border-color:#FFFFFF">Find a distributor</button>
+    </div>
+  </div>
+  <div style="background:#FFFFFF;border:1px solid #E3DCCF;padding:clamp(28px,4vw,44px);display:flex;flex-direction:column;gap:16px;border-radius:2px">
+    <div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#87561F">For authors &amp; researchers</div>
+    <h3 style="margin:0;font:600 clamp(28px,3vw,36px)/1.1 'Cormorant Garamond',serif;color:#0E1F33">Write with Elden. Publish in our journals.</h3>
+    <p style="margin:0;font:400 14.5px/1.65 Montserrat,sans-serif;color:#55514A;max-width:460px">We work with teachers, subject experts and researchers on textbooks, reference works and peer-reviewed articles.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:auto;padding-top:8px">
+      <button onClick="{{ goAbout }}" style="background:#0E1F33;color:#FAF7F1;border:0;padding:13px 20px;border-radius:2px;font:600 13.5px Montserrat,sans-serif;cursor:pointer" style-hover="background:#1E3A57">Submit a proposal</button>
+      <button onClick="{{ goJournals }}" style="background:transparent;color:#0E1F33;border:1.5px solid #0E1F33;padding:12px 18px;border-radius:2px;font:600 13.5px Montserrat,sans-serif;cursor:pointer" style-hover="background:#F2ECE1">Browse journals</button>
+    </div>
+  </div>
+</section>
+
+</div>
+</sc-if>
+
+<!-- ===================== CATALOGUE ===================== -->
+<sc-if value="{{ isCat }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Catalogue" style="max-width:1240px;margin:0 auto;padding:clamp(32px,5vw,56px) clamp(18px,4vw,40px) clamp(64px,8vw,104px)">
+  <div style="display:flex;gap:8px;font:500 12.5px Montserrat,sans-serif;color:#6E695F;margin-bottom:18px"><button onClick="{{ goHome }}" style="background:none;border:0;padding:0;color:#6E695F;cursor:pointer;font:inherit">Home</button><span>/</span><span style="color:#171A1F">Catalogue</span></div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;padding-bottom:26px;border-bottom:1.5px solid #0E1F33">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <h1 style="margin:0;font:600 clamp(40px,5vw,60px)/1 'Cormorant Garamond',serif;color:#0E1F33">Catalogue</h1>
+      <div style="font:500 14px Montserrat,sans-serif;color:#5A5650">{{ resultLabel }}</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;flex:1 1 360px;justify-content:flex-end">
+      <input value="{{ q }}" onChange="{{ setQ }}" placeholder="Search titles, authors, exams…" style="flex:1 1 220px;max-width:360px;border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px 14px;border-radius:2px;font:500 14px Montserrat,sans-serif;color:#171A1F;outline:none">
+      <select value="{{ sort }}" onChange="{{ setSort }}" style="border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px 12px;border-radius:2px;font:600 13.5px Montserrat,sans-serif;color:#171A1F;cursor:pointer">
+        <option>Featured</option><option>Newest</option><option>Price: low to high</option><option>Price: high to low</option><option>Title A–Z</option>
+      </select>
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:clamp(24px,4vw,48px);padding-top:28px;align-items:flex-start">
+    <aside style="flex:1 1 {{ asideBasis }};min-width:0;display:flex;flex-direction:column;gap:6px">
+      <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ toggleFilters }}" style="background:#FFFFFF;border:1.5px solid #0E1F33;padding:12px 14px;min-height:44px;border-radius:2px;font:600 14px Montserrat,sans-serif;color:#0E1F33;cursor:pointer;text-align:left">{{ filtersLabel }}</button>
+      </sc-if>
+      <sc-if value="{{ showFilters }}" hint-placeholder-val="{{ true }}">
+        <sc-for list="{{ facets }}" as="g" hint-placeholder-count="5">
+          <div style="padding:16px 0 12px;border-bottom:1px solid #E3DCCF">
+            <div style="font:700 11px/1 Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#0E1F33;margin-bottom:10px">{{ g.label }}</div>
+            <sc-for list="{{ g.opts }}" as="o" hint-placeholder-count="4">
+              <button onClick="{{ o.toggle }}" style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:6px 0;cursor:pointer;font:500 13.5px/1.3 Montserrat,sans-serif;color:{{ o.col }};text-align:left">
+                <span style="width:17px;height:17px;border:1.5px solid {{ o.bd }};background:{{ o.bg }};border-radius:3px;display:grid;place-items:center;color:#FFFFFF;font-size:11px;line-height:1;flex:none">{{ o.tick }}</span>
+                <span style="flex:1">{{ o.label }}</span>
+                <span style="color:#8A857B;font-size:12px">{{ o.count }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-for>
+      </sc-if>
+    </aside>
+    <div style="flex:999 1 520px;min-width:0;display:flex;flex-direction:column;gap:24px">
+      <sc-if value="{{ hasActive }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <sc-for list="{{ activeChips }}" as="ch" hint-placeholder-count="2">
+            <button onClick="{{ ch.remove }}" style="display:flex;align-items:center;gap:8px;background:#0E1F33;color:#FAF7F1;border:0;border-radius:999px;padding:7px 12px;font:600 12.5px Montserrat,sans-serif;cursor:pointer">{{ ch.label }}<span style="opacity:.7">×</span></button>
+          </sc-for>
+          <button onClick="{{ clearAll }}" style="background:none;border:0;padding:6px 4px;font:600 12.5px Montserrat,sans-serif;color:#87561F;cursor:pointer;text-decoration:underline;text-underline-offset:3px">Clear all</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:64px 24px;border:1px dashed #CFC5B4;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center">
+          <div style="font:600 28px 'Cormorant Garamond',serif;color:#0E1F33">No titles match these filters</div>
+          <div style="font:400 14px Montserrat,sans-serif;color:#5A5650">Try removing a filter, or ask us — we may have it in print.</div>
+          <button onClick="{{ clearAll }}" style="margin-top:6px;background:#0E1F33;color:#FAF7F1;border:0;padding:12px 18px;border-radius:2px;font:600 13.5px Montserrat,sans-serif;cursor:pointer">Clear filters</button>
+        </div>
+      </sc-if>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:40px 24px">
+        <sc-for list="{{ results }}" as="b" hint-placeholder-count="8">
+          <div onClick="{{ b.open }}" style="display:flex;flex-direction:column;gap:16px;cursor:pointer;min-width:0;transition:transform .25s" style-hover="transform:translateY(-4px)">
+            <div style="position:relative;aspect-ratio:3/4;background:{{ b.c.bg }};color:{{ b.c.fg }};padding:18px 16px 14px 22px;display:flex;flex-direction:column;overflow:hidden;border-radius:2px 5px 5px 2px;box-shadow:0 18px 30px -20px rgba(14,31,51,.55),0 2px 4px rgba(14,31,51,.08)">
+              <div style="position:absolute;left:0;top:0;bottom:0;width:7px;background:rgba(0,0,0,.16)"></div>
+              <div style="position:absolute;right:16px;top:18px;display:flex;align-items:flex-end;gap:4px;height:44px"><div style="width:6px;height:100%;background:{{ b.c.ac }}"></div><div style="width:6px;height:78%;background:{{ b.c.ac }};opacity:.7"></div><div style="width:6px;height:60%;background:{{ b.c.ac }};opacity:.45"></div></div>
+              <div style="font:600 8px/1.4 Montserrat,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:{{ b.c.ac }};max-width:60%">{{ b.s }}</div>
+              <div style="margin-top:auto;font:600 22px/1.02 'Cormorant Garamond',serif;text-wrap:balance">{{ b.t }}</div>
+              <div style="margin-top:12px;padding-top:10px;border-top:1px solid {{ b.c.ac }};display:flex;justify-content:space-between;gap:8px;font:600 8px/1.2 Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase"><span>{{ b.meta }}</span><span style="color:{{ b.c.ac }}">Elden</span></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <div style="font:600 10.5px/1.2 Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#87561F">{{ b.ty }}</div>
+              <div style="font:600 21px/1.15 'Cormorant Garamond',serif;color:#0E1F33">{{ b.t }}</div>
+              <div style="font:400 13px/1.4 Montserrat,sans-serif;color:#5E5A52">{{ b.a }}</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px">
+                <div style="display:flex;flex-direction:column;gap:2px"><span style="font:600 14px/1.2 Montserrat,sans-serif;color:#171A1F">{{ b.price }}</span><span style="font:500 11.5px/1.2 Montserrat,sans-serif;color:#7A756B">{{ b.fmts }}</span></div>
+                <button onClick="{{ b.sample }}" style="flex:none;background:transparent;border:1.5px solid #CFC5B4;padding:8px 11px;border-radius:2px;font:600 12px Montserrat,sans-serif;color:#0E1F33;cursor:pointer" style-hover="border-color:#0E1F33">Sample</button>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ===================== BOOK DETAIL ===================== -->
+<sc-if value="{{ isBook }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Book detail">
+<div style="max-width:1240px;margin:0 auto;padding:clamp(28px,4vw,48px) clamp(18px,4vw,40px) clamp(48px,6vw,80px)">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;font:500 12.5px Montserrat,sans-serif;color:#6E695F;margin-bottom:28px"><button onClick="{{ goHome }}" style="background:none;border:0;padding:0;color:#6E695F;cursor:pointer;font:inherit">Home</button><span>/</span><button onClick="{{ goCatalogue }}" style="background:none;border:0;padding:0;color:#6E695F;cursor:pointer;font:inherit">Catalogue</button><span>/</span><span style="color:#171A1F">{{ book.t }}</span></div>
+  <div style="display:flex;flex-wrap:wrap;gap:clamp(36px,6vw,80px);align-items:flex-start">
+    <div style="flex:1 1 280px;max-width:420px;min-width:0;background:#F0E8DA;padding:clamp(28px,4vw,48px);border-radius:2px">
+      <div style="position:relative;aspect-ratio:3/4;background:{{ book.c.bg }};color:{{ book.c.fg }};padding:32px 28px 24px 38px;display:flex;flex-direction:column;overflow:hidden;border-radius:2px 6px 6px 2px;box-shadow:0 34px 50px -26px rgba(14,31,51,.65),0 2px 6px rgba(14,31,51,.12)">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:11px;background:rgba(0,0,0,.16)"></div>
+        <div style="position:absolute;right:28px;top:32px;display:flex;align-items:flex-end;gap:7px;height:84px"><div style="width:11px;height:100%;background:{{ book.c.ac }}"></div><div style="width:11px;height:78%;background:{{ book.c.ac }};opacity:.7"></div><div style="width:11px;height:60%;background:{{ book.c.ac }};opacity:.45"></div></div>
+        <div style="font:600 11px/1.4 Montserrat,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:{{ book.c.ac }};max-width:55%">{{ book.s }}</div>
+        <div style="margin-top:auto;padding-top:96px;max-width:88%;font:600 clamp(26px,3vw,40px)/1 'Cormorant Garamond',serif;text-wrap:balance">{{ book.t }}</div>
+        <div style="margin-top:8px;font:500 12px/1.4 Montserrat,sans-serif;opacity:.85">{{ book.a }}</div>
+        <div style="margin-top:18px;padding-top:12px;border-top:1px solid {{ book.c.ac }};display:flex;justify-content:space-between;gap:8px;font:600 10px/1.2 Montserrat,sans-serif;letter-spacing:.18em;text-transform:uppercase"><span>{{ book.meta }}</span><span style="color:{{ book.c.ac }}">Elden</span></div>
+      </div>
+    </div>
+    <div style="flex:999 1 420px;min-width:0;display:flex;flex-direction:column;gap:22px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <span style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#87561F">{{ book.ty }}</span>
+        <span style="width:4px;height:4px;border-radius:50%;background:#CFC5B4"></span>
+        <span style="font:500 12.5px/1 Montserrat,sans-serif;color:#5A5650">{{ book.lvl }}</span>
+        <sc-if value="{{ book.nw }}" hint-placeholder-val="{{ false }}"><span style="background:#0E1F33;color:#FAF7F1;font:700 10px/1 Montserrat,sans-serif;letter-spacing:.14em;padding:5px 8px;border-radius:2px">NEW</span></sc-if>
+      </div>
+      <h1 style="margin:0;font:600 clamp(40px,5vw,62px)/1 'Cormorant Garamond',serif;color:#0E1F33;text-wrap:balance">{{ book.t }}</h1>
+      <div style="font:500 15px/1.5 Montserrat,sans-serif;color:#45423C">by <span style="color:#171A1F;font-weight:600">{{ book.a }}</span> · {{ book.meta }}</div>
+      <p style="margin:0;font:400 16px/1.7 Montserrat,sans-serif;color:#3F3D39;max-width:620px;text-wrap:pretty">{{ book.bl }}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <sc-for list="{{ formats }}" as="fm" hint-placeholder-count="2">
+          <button onClick="{{ fm.pick }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:150px;padding:14px 16px;background:{{ fm.bg }};border:1.5px solid {{ fm.bd }};border-radius:2px;cursor:pointer;text-align:left">
+            <span style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#6E695F">{{ fm.label }}</span>
+            <span style="font:600 20px/1.1 Montserrat,sans-serif;color:#0E1F33">{{ fm.price }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <button onClick="{{ book.sample }}" style="background:#0E1F33;color:#FAF7F1;border:0;padding:15px 24px;border-radius:2px;font:600 14px Montserrat,sans-serif;cursor:pointer" style-hover="background:#1E3A57">Request a sample copy</button>
+        <button onClick="{{ book.bulk }}" style="background:transparent;color:#0E1F33;border:1.5px solid #0E1F33;padding:14px 22px;border-radius:2px;font:600 14px Montserrat,sans-serif;cursor:pointer" style-hover="background:#F2ECE1">School / bulk enquiry</button>
+        <button onClick="{{ goContact }}" style="background:none;color:#87561F;border:0;padding:14px 6px;font:600 14px Montserrat,sans-serif;cursor:pointer;text-decoration:underline;text-underline-offset:4px">Find a distributor</button>
+      </div>
+      <sc-if value="{{ book.em }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:#0A1624;color:#C9D3DC;padding:16px 18px;border-radius:10px;max-width:620px">
+          <span style="font:700 18px/1 Montserrat,sans-serif;letter-spacing:-.04em;color:#FFFFFF"><span style="color:oklch(0.80 0.12 185)">el</span>master</span>
+          <span style="flex:1 1 240px;font:400 13.5px/1.5 Montserrat,sans-serif">Includes a digital companion — scan the QR inside for videos and chapter tests.</span>
+          <a href="{{ elmasterUrl }}" target="_blank" rel="noopener" style="font:700 13px Montserrat,sans-serif;color:oklch(0.80 0.12 185)">Preview ↗</a>
+        </div>
+      </sc-if>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));border-top:1px solid #E3DCCF;margin-top:6px">
+        <sc-for list="{{ specs }}" as="sp" hint-placeholder-count="6">
+          <div style="padding:14px 0;border-bottom:1px solid #E3DCCF;display:flex;flex-direction:column;gap:5px;padding-right:12px">
+            <span style="font:600 10.5px/1 Montserrat,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7A756B">{{ sp.k }}</span>
+            <span style="font:500 14px/1.35 Montserrat,sans-serif;color:#171A1F">{{ sp.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="border-top:1px solid #E3DCCF;background:#FFFFFF">
+  <div style="max-width:1240px;margin:0 auto;padding:0 clamp(18px,4vw,40px) clamp(48px,6vw,80px)">
+    <div style="display:flex;gap:32px;border-bottom:1px solid #E3DCCF;overflow-x:auto">
+      <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
+        <button onClick="{{ tb.pick }}" style="background:none;border:0;border-bottom:2.5px solid {{ tb.bd }};padding:22px 0 16px;font:600 14.5px Montserrat,sans-serif;color:{{ tb.col }};cursor:pointer;white-space:nowrap">{{ tb.label }}</button>
+      </sc-for>
+    </div>
+    <div style="padding-top:36px;max-width:820px">
+      <sc-if value="{{ tabOverview }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <h3 style="margin:0;font:600 30px/1.15 'Cormorant Garamond',serif;color:#0E1F33">What's inside</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 32px">
+            <sc-for list="{{ highlights }}" as="h" hint-placeholder-count="4">
+              <div style="display:flex;gap:12px;align-items:baseline;font:400 15px/1.55 Montserrat,sans-serif;color:#3F3D39"><span style="width:7px;height:7px;background:#9C6A2F;flex:none;transform:translateY(-2px)"></span>{{ h }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ tabContents }}" hint-placeholder-val="{{ false }}">
+        <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column">
+          <sc-for list="{{ contents }}" as="ct" hint-placeholder-count="6">
+            <li style="display:flex;gap:20px;padding:14px 0;border-bottom:1px solid #EDE7DC;font:500 15px/1.4 Montserrat,sans-serif;color:#171A1F"><span style="font:600 18px/1.2 'Cormorant Garamond',serif;color:#9C6A2F;width:28px;flex:none">{{ ct.n }}</span>{{ ct.t }}</li>
+          </sc-for>
+        </ol>
+      </sc-if>
+      <sc-if value="{{ tabTeachers }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px;align-items:flex-start">
+          <h3 style="margin:0;font:600 30px/1.15 'Cormorant Garamond',serif;color:#0E1F33">Teacher resources</h3>
+          <p style="margin:0;font:400 15px/1.7 Montserrat,sans-serif;color:#3F3D39">Teacher's manual, chapter-wise answer keys, lesson plans and question banks are available to registered schools adopting this title.</p>
+          <button onClick="{{ book.teacher }}" style="background:#0E1F33;color:#FAF7F1;border:0;padding:13px 20px;border-radius:2px;font:600 13.5px Montserrat,sans-serif;cursor:pointer">Request teacher access</button>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+
+<section style="max-width:1240px;margin:0 auto;padding:clamp(48px,6vw,80px) clamp(18px,4vw,40px)">
+  <h2 style="margin:0 0 32px;font:600 clamp(28px,3.4vw,40px)/1.05 'Cormorant Garamond',serif;color:#0E1F33">You may also need</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:36px 24px">
+    <sc-for list="{{ related }}" as="b" hint-placeholder-count="4">
+      <div onClick="{{ b.open }}" style="display:flex;flex-direction:column;gap:16px;cursor:pointer;min-width:0;transition:transform .25s" style-hover="transform:translateY(-4px)">
+        <div style="position:relative;aspect-ratio:3/4;background:{{ b.c.bg }};color:{{ b.c.fg }};padding:18px 16px 14px 22px;display:flex;flex-direction:column;overflow:hidden;border-radius:2px 5px 5px 2px;box-shadow:0 18px 30px -20px rgba(14,31,51,.55),0 2px 4px rgba(14,31,51,.08)">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:7px;background:rgba(0,0,0,.16)"></div>
+          <div style="position:absolute;right:16px;top:18px;display:flex;align-items:flex-end;gap:4px;height:44px"><div style="width:6px;height:100%;background:{{ b.c.ac }}"></div><div style="width:6px;height:78%;background:{{ b.c.ac }};opacity:.7"></div><div style="width:6px;height:60%;background:{{ b.c.ac }};opacity:.45"></div></div>
+          <div style="font:600 8px/1.4 Montserrat,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:{{ b.c.ac }};max-width:60%">{{ b.s }}</div>
+          <div style="margin-top:auto;font:600 22px/1.02 'Cormorant Garamond',serif;text-wrap:balance">{{ b.t }}</div>
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid {{ b.c.ac }};display:flex;justify-content:space-between;gap:8px;font:600 8px/1.2 Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase"><span>{{ b.meta }}</span><span style="color:{{ b.c.ac }}">Elden</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="font:600 10.5px/1.2 Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#87561F">{{ b.ty }}</div>
+          <div style="font:600 21px/1.15 'Cormorant Garamond',serif;color:#0E1F33">{{ b.t }}</div>
+          <div style="font:600 14px/1.4 Montserrat,sans-serif;color:#171A1F">{{ b.price }}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+</div>
+</sc-if>
+
+<!-- ===================== STUDY HUB ===================== -->
+<sc-if value="{{ isHub }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Study Hub">
+<section style="background:#0E1F33;color:#F6F0E6">
+  <div style="max-width:1240px;margin:0 auto;padding:clamp(48px,7vw,88px) clamp(18px,4vw,40px);display:flex;flex-wrap:wrap;gap:32px;align-items:flex-end;justify-content:space-between">
+    <div style="flex:1 1 480px;display:flex;flex-direction:column;gap:18px;min-width:0">
+      <div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#E2B68A">Study Hub</div>
+      <h1 style="margin:0;font:600 clamp(42px,5.6vw,70px)/1 'Cormorant Garamond',serif;color:#FFFFFF;text-wrap:balance">Free study material, updated every session.</h1>
+      <p style="margin:0;max-width:540px;font:400 16px/1.65 Montserrat,sans-serif;color:#C8CED6">Sample papers, revision notes, answer keys and worksheets for Classes 1–12 and competitive exams. No sign-up needed.</p>
+    </div>
+    <a href="{{ elmasterUrl }}" target="_blank" rel="noopener" style="flex:0 1 320px;display:flex;flex-direction:column;gap:8px;padding:20px 22px;border:1px solid rgba(255,255,255,.2);border-radius:10px;color:#C9D3DC" style-hover="border-color:oklch(0.80 0.12 185);color:#C9D3DC">
+      <span style="font:700 20px/1 Montserrat,sans-serif;letter-spacing:-.04em;color:#FFFFFF"><span style="color:oklch(0.80 0.12 185)">el</span>master</span>
+      <span style="font:400 13.5px/1.5 Montserrat,sans-serif">Want video lessons and timed mock tests? Continue on elmaster ↗</span>
+    </a>
+  </div>
+</section>
+<div style="max-width:1240px;margin:0 auto;padding:clamp(32px,5vw,56px) clamp(18px,4vw,40px) clamp(64px,8vw,104px);display:flex;flex-direction:column;gap:26px">
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <sc-for list="{{ hubKinds }}" as="k" hint-placeholder-count="7">
+        <button onClick="{{ k.pick }}" style="background:{{ k.bg }};color:{{ k.col }};border:1.5px solid {{ k.bd }};border-radius:999px;padding:9px 15px;min-height:40px;font:600 13px Montserrat,sans-serif;cursor:pointer">{{ k.label }}</button>
+      </sc-for>
+    </div>
+    <div style="display:flex;gap:8px 18px;flex-wrap:wrap;align-items:center">
+      <span style="font:600 11px Montserrat,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7A756B">Level</span>
+      <sc-for list="{{ hubLevels }}" as="l" hint-placeholder-count="6">
+        <button onClick="{{ l.pick }}" style="background:none;border:0;border-bottom:2px solid {{ l.bd }};padding:6px 0;font:600 13.5px Montserrat,sans-serif;color:{{ l.col }};cursor:pointer">{{ l.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;border-top:1.5px solid #0E1F33">
+    <sc-for list="{{ hubRows }}" as="r" hint-placeholder-count="8">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;padding:20px 0;border-bottom:1px solid #E3DCCF">
+        <div style="flex:0 0 130px;font:600 10.5px/1.3 Montserrat,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#87561F">{{ r.k }}</div>
+        <div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:5px">
+          <div style="font:600 16px/1.35 Montserrat,sans-serif;color:#171A1F">{{ r.t }}</div>
+          <div style="font:500 12.5px/1.3 Montserrat,sans-serif;color:#6E695F">{{ r.lvl }} · {{ r.su }} · PDF {{ r.size }}</div>
+        </div>
+        <button onClick="{{ r.dl }}" style="flex:none;background:{{ r.bg }};color:{{ r.col }};border:1.5px solid #0E1F33;padding:10px 16px;min-height:42px;border-radius:2px;font:600 13px Montserrat,sans-serif;cursor:pointer">{{ r.dlLabel }}</button>
+      </div>
+    </sc-for>
+    <sc-if value="{{ hubEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:48px 0;font:500 15px Montserrat,sans-serif;color:#5A5650">Nothing here yet for this combination — new material is added through the session.</div>
+    </sc-if>
+  </div>
+  <div style="margin-top:24px;display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;background:#F2ECE1;border:1px solid #E3DCCF;padding:clamp(24px,4vw,36px)">
+    <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:8px;min-width:0">
+      <div style="font:600 28px/1.1 'Cormorant Garamond',serif;color:#0E1F33">Teachers' corner</div>
+      <div style="font:400 14.5px/1.6 Montserrat,sans-serif;color:#45423C">Lesson plans, teacher's manuals and editable question banks for schools using Elden titles.</div>
+    </div>
+    <button onClick="{{ openTeacher }}" style="background:#0E1F33;color:#FAF7F1;border:0;padding:14px 22px;border-radius:2px;font:600 14px Montserrat,sans-serif;cursor:pointer">Request teacher access</button>
+  </div>
+</div>
+</div>
+</sc-if>
+
+<!-- ===================== ABOUT / AUTHORS ===================== -->
+<sc-if value="{{ isAbout }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="About and authors">
+<section style="max-width:1240px;margin:0 auto;padding:clamp(48px,7vw,96px) clamp(18px,4vw,40px);display:flex;flex-wrap:wrap;gap:clamp(36px,6vw,80px);align-items:flex-end">
+  <div style="flex:1.3 1 460px;display:flex;flex-direction:column;gap:20px;min-width:0">
+    <div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#87561F">About Elden</div>
+    <h1 style="margin:0;font:600 clamp(44px,6vw,76px)/0.98 'Cormorant Garamond',serif;color:#0E1F33;text-wrap:balance">A press built around the classroom.</h1>
+  </div>
+  <p style="flex:1 1 340px;margin:0;font:400 16px/1.75 Montserrat,sans-serif;color:#3F3D39;text-wrap:pretty">Elden Academic Press publishes for students from Class 1 to the research desk. Our books are written with practising teachers, checked against the current syllabus, and paired with digital practice on elmaster.</p>
+</section>
+<section style="border-top:1px solid #E3DCCF;border-bottom:1px solid #E3DCCF;background:#FFFFFF">
+  <div style="max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+    <sc-for list="{{ pillars }}" as="pl" hint-placeholder-count="4">
+      <div style="padding:clamp(28px,4vw,40px) clamp(18px,3vw,32px);border-right:1px solid #E3DCCF;display:flex;flex-direction:column;gap:10px">
+        <div style="font:600 24px/1.15 'Cormorant Garamond',serif;color:#0E1F33">{{ pl.t }}</div>
+        <div style="font:400 14px/1.6 Montserrat,sans-serif;color:#55514A">{{ pl.d }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+<section style="max-width:1240px;margin:0 auto;padding:clamp(56px,8vw,96px) clamp(18px,4vw,40px);display:flex;flex-wrap:wrap;gap:clamp(40px,6vw,80px);align-items:flex-start">
+  <div style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:22px">
+    <div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#87561F">For authors</div>
+    <h2 style="margin:0;font:600 clamp(34px,4vw,50px)/1.02 'Cormorant Garamond',serif;color:#0E1F33">Publish with Elden</h2>
+    <p style="margin:0;font:400 15px/1.7 Montserrat,sans-serif;color:#45423C">We commission textbooks, reference works and study material, and welcome unsolicited proposals from teachers and subject experts.</p>
+    <ol style="margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;border-top:1.5px solid #0E1F33">
+      <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
+        <li style="display:flex;gap:20px;padding:18px 0;border-bottom:1px solid #E3DCCF">
+          <span style="font:600 26px/1 'Cormorant Garamond',serif;color:#9C6A2F;width:34px;flex:none">{{ st.n }}</span>
+          <span style="display:flex;flex-direction:column;gap:4px"><span style="font:600 15px/1.3 Montserrat,sans-serif;color:#171A1F">{{ st.t }}</span><span style="font:400 13.5px/1.55 Montserrat,sans-serif;color:#5A5650">{{ st.d }}</span></span>
+        </li>
+      </sc-for>
+    </ol>
+  </div>
+  <div style="flex:1.2 1 440px;min-width:0;background:#FFFFFF;border:1px solid #E3DCCF;padding:clamp(24px,4vw,40px)">
+    <sc-if value="{{ proposalSent }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:14px;padding:40px 0;align-items:flex-start">
+        <div style="font:600 32px/1.1 'Cormorant Garamond',serif;color:#0E1F33">Proposal received.</div>
+        <div style="font:400 15px/1.6 Montserrat,sans-serif;color:#45423C">Our editorial team will review it and write back to you by email.</div>
+        <button onClick="{{ resetProposal }}" style="background:none;border:0;padding:0;font:600 14px Montserrat,sans-serif;color:#87561F;cursor:pointer;text-decoration:underline;text-underline-offset:4px">Submit another</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ proposalOpen }}" hint-placeholder-val="{{ true }}">
+      <form onSubmit="{{ sendProposal }}" style="display:flex;flex-direction:column;gap:18px">
+        <div style="font:600 28px/1.1 'Cormorant Garamond',serif;color:#0E1F33">Send a proposal</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Full name<input required style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Email<input type="email" required style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">School / institution<input style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Proposal type<select style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif"><option>Textbook</option><option>Reference book</option><option>Study guide / practice papers</option><option>Journal article</option></select></label>
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Subject<input style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Class / level<input style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Synopsis<textarea rows="5" placeholder="What is the book about, who is it for, and how is it different?" style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px/1.5 Montserrat,sans-serif;outline:none;resize:vertical"></textarea></label>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><button type="submit" style="background:#0E1F33;color:#FAF7F1;border:0;padding:14px 24px;border-radius:2px;font:600 14px Montserrat,sans-serif;cursor:pointer">Submit proposal</button><span style="font:400 12.5px Montserrat,sans-serif;color:#7A756B">Sample chapters can follow by email.</span></div>
+      </form>
+    </sc-if>
+  </div>
+</section>
+<section style="background:#F2ECE1;border-top:1px solid #E3DCCF">
+  <div style="max-width:1240px;margin:0 auto;padding:clamp(56px,8vw,96px) clamp(18px,4vw,40px)">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:32px">
+      <div style="display:flex;flex-direction:column;gap:12px"><div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#87561F">Journals</div><h2 style="margin:0;font:600 clamp(34px,4vw,50px)/1.02 'Cormorant Garamond',serif;color:#0E1F33">Peer-reviewed, open to submissions</h2></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:24px">
+      <sc-for list="{{ journals }}" as="j" hint-placeholder-count="2">
+        <div style="background:#FFFFFF;border:1px solid #E3DCCF;padding:clamp(24px,3vw,34px);display:flex;gap:24px;flex-wrap:wrap">
+          <div onClick="{{ j.open }}" style="width:110px;flex:none;cursor:pointer;position:relative;aspect-ratio:3/4;background:{{ j.c.bg }};color:{{ j.c.fg }};padding:12px 10px 10px 14px;display:flex;flex-direction:column;overflow:hidden;border-radius:2px 4px 4px 2px;box-shadow:0 14px 24px -16px rgba(14,31,51,.55)">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:5px;background:rgba(0,0,0,.16)"></div>
+            <div style="font:600 6.5px/1.4 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:{{ j.c.ac }}">Journal</div>
+            <div style="margin-top:auto;font:600 13px/1.05 'Cormorant Garamond',serif">{{ j.t }}</div>
+          </div>
+          <div style="flex:1 1 200px;display:flex;flex-direction:column;gap:10px;min-width:0">
+            <div style="font:600 24px/1.15 'Cormorant Garamond',serif;color:#0E1F33">{{ j.t }}</div>
+            <div style="font:500 12.5px Montserrat,sans-serif;color:#6E695F">{{ j.cl }} · {{ j.price }}</div>
+            <div style="font:400 14px/1.6 Montserrat,sans-serif;color:#45423C">{{ j.bl }}</div>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:auto;padding-top:6px">
+              <button onClick="{{ j.open }}" style="background:none;border:0;padding:0;font:600 13.5px Montserrat,sans-serif;color:#0E1F33;cursor:pointer;border-bottom:1.5px solid #0E1F33">Current issue</button>
+              <button onClick="{{ goContact }}" style="background:none;border:0;padding:0;font:600 13.5px Montserrat,sans-serif;color:#87561F;cursor:pointer;border-bottom:1.5px solid #87561F">Submit a manuscript</button>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+</div>
+</sc-if>
+
+<!-- ===================== CONTACT ===================== -->
+<sc-if value="{{ isContact }}" hint-placeholder-val="{{ false }}">
+<div data-screen-label="Contact and distributors">
+<section style="max-width:1240px;margin:0 auto;padding:clamp(48px,7vw,88px) clamp(18px,4vw,40px);display:flex;flex-wrap:wrap;gap:clamp(40px,6vw,80px);align-items:flex-start">
+  <div style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:22px">
+    <div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#87561F">Contact</div>
+    <h1 style="margin:0;font:600 clamp(44px,6vw,72px)/0.98 'Cormorant Garamond',serif;color:#0E1F33">Talk to us.</h1>
+    <p style="margin:0;font:400 15.5px/1.7 Montserrat,sans-serif;color:#45423C;max-width:420px">Questions about a title, school orders, sample copies or publishing — send a note and the right team will reply.</p>
+    <div style="display:flex;flex-direction:column;border-top:1.5px solid #0E1F33;margin-top:8px">
+      <sc-for list="{{ contactLines }}" as="cl" hint-placeholder-count="3">
+        <div style="display:flex;flex-direction:column;gap:5px;padding:16px 0;border-bottom:1px solid #E3DCCF"><span style="font:600 10.5px/1 Montserrat,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7A756B">{{ cl.k }}</span><span style="font:500 15px/1.5 Montserrat,sans-serif;color:#171A1F">{{ cl.v }}</span></div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="flex:1.3 1 460px;min-width:0;background:#FFFFFF;border:1px solid #E3DCCF;padding:clamp(24px,4vw,40px)">
+    <sc-if value="{{ contactSent }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:14px;padding:40px 0;align-items:flex-start">
+        <div style="font:600 32px/1.1 'Cormorant Garamond',serif;color:#0E1F33">Thanks — message sent.</div>
+        <div style="font:400 15px/1.6 Montserrat,sans-serif;color:#45423C">We'll get back to you by phone or email.</div>
+        <button onClick="{{ resetContact }}" style="background:none;border:0;padding:0;font:600 14px Montserrat,sans-serif;color:#87561F;cursor:pointer;text-decoration:underline;text-underline-offset:4px">Send another message</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ contactOpen }}" hint-placeholder-val="{{ true }}">
+      <form onSubmit="{{ sendContact }}" style="display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <span style="font:600 12px Montserrat,sans-serif;color:#45423C">I am a</span>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ roles }}" as="ro" hint-placeholder-count="6">
+              <button type="button" onClick="{{ ro.pick }}" style="background:{{ ro.bg }};color:{{ ro.col }};border:1.5px solid {{ ro.bd }};border-radius:999px;padding:8px 14px;min-height:38px;font:600 12.5px Montserrat,sans-serif;cursor:pointer">{{ ro.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Name<input required style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Phone<input type="tel" placeholder="+91" style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Email<input type="email" required style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+          <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">City<input style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Message<textarea rows="5" style="border:1.5px solid #CFC5B4;background:#FAF7F1;padding:12px;border-radius:2px;font:500 14px/1.5 Montserrat,sans-serif;outline:none;resize:vertical"></textarea></label>
+        <div><button type="submit" style="background:#0E1F33;color:#FAF7F1;border:0;padding:14px 24px;border-radius:2px;font:600 14px Montserrat,sans-serif;cursor:pointer">Send message</button></div>
+      </form>
+    </sc-if>
+  </div>
+</section>
+<section style="background:#F2ECE1;border-top:1px solid #E3DCCF">
+  <div style="max-width:1240px;margin:0 auto;padding:clamp(56px,8vw,96px) clamp(18px,4vw,40px);display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:12px"><div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#87561F">Distributors</div><h2 style="margin:0;font:600 clamp(34px,4vw,50px)/1.02 'Cormorant Garamond',serif;color:#0E1F33">Find Elden books near you</h2></div>
+      <button onClick="{{ becomeDist }}" style="background:none;border:0;border-bottom:1.5px solid #0E1F33;padding:0 0 4px;font:600 14px Montserrat,sans-serif;color:#0E1F33;cursor:pointer">Become a distributor →</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <sc-for list="{{ states }}" as="stt" hint-placeholder-count="8">
+        <button onClick="{{ stt.pick }}" style="background:{{ stt.bg }};color:{{ stt.col }};border:1.5px solid {{ stt.bd }};border-radius:999px;padding:9px 15px;min-height:40px;font:600 13px Montserrat,sans-serif;cursor:pointer">{{ stt.label }}</button>
+      </sc-for>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:16px">
+      <sc-for list="{{ distributors }}" as="d" hint-placeholder-count="3">
+        <div style="background:#FFFFFF;border:1px solid #E3DCCF;padding:22px;display:flex;flex-direction:column;gap:8px">
+          <div style="font:600 10.5px/1 Montserrat,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#87561F">{{ d.k }}</div>
+          <div style="font:600 22px/1.15 'Cormorant Garamond',serif;color:#0E1F33">{{ d.n }}</div>
+          <div style="font:500 13.5px/1.5 Montserrat,sans-serif;color:#55514A">{{ d.c }}</div>
+          <div style="display:flex;gap:16px;margin-top:8px"><button onClick="{{ d.enquire }}" style="background:none;border:0;padding:0;font:600 13px Montserrat,sans-serif;color:#0E1F33;cursor:pointer;border-bottom:1.5px solid #0E1F33">Enquire</button></div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+</div>
+</sc-if>
+
+</main>
+
+<footer style="background:#0E1F33;color:#C8CED6">
+  <div style="max-width:1240px;margin:0 auto;padding:clamp(48px,6vw,72px) clamp(18px,4vw,40px) 28px;display:flex;flex-direction:column;gap:44px">
+    <div style="display:flex;flex-wrap:wrap;gap:40px 56px;justify-content:space-between">
+      <div style="flex:1 1 260px;display:flex;flex-direction:column;gap:18px;max-width:340px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <img src="assets/elden-mark-light.png" alt="" style="height:44px;width:auto">
+          <span style="display:flex;flex-direction:column;gap:3px"><span style="font:600 25px/0.9 'Cormorant Garamond',serif;letter-spacing:.3em;color:#FAF7F1">ELDEN</span><span style="font:500 8.5px/1 Montserrat,sans-serif;letter-spacing:.32em;color:#CC955F">ACADEMIC PRESS</span></span>
+        </div>
+        <p style="margin:0;font:400 13.5px/1.65 Montserrat,sans-serif">Textbooks, reference, practice and research publishing for Indian classrooms.</p>
+      </div>
+      <sc-for list="{{ footerCols }}" as="fc" hint-placeholder-count="4">
+        <div style="flex:0 1 160px;display:flex;flex-direction:column;gap:12px">
+          <div style="font:600 11px/1 Montserrat,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#E2B68A;margin-bottom:4px">{{ fc.t }}</div>
+          <sc-for list="{{ fc.links }}" as="fl" hint-placeholder-count="4">
+            <button onClick="{{ fl.go }}" style="background:none;border:0;padding:0;text-align:left;font:500 13.5px/1.3 Montserrat,sans-serif;color:#C8CED6;cursor:pointer" style-hover="color:#FFFFFF">{{ fl.label }}</button>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-top:22px;border-top:1px solid rgba(255,255,255,.12);font:500 12px Montserrat,sans-serif;color:#8E99A6">
+      <span>© 2026 Elden Academic Press</span>
+      <span style="display:flex;gap:20px"><span>Privacy</span><span>Terms</span><span>Shipping &amp; returns</span></span>
+    </div>
+  </div>
+</footer>
+
+<sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeModal }}" style="position:fixed;inset:0;z-index:100;background:rgba(10,22,36,.55);backdrop-filter:blur(3px);display:grid;place-items:center;padding:20px;overflow-y:auto">
+    <div onClick="{{ stop }}" style="width:100%;max-width:560px;background:#FAF7F1;border-radius:2px;box-shadow:0 40px 80px -30px rgba(0,0,0,.5);overflow:hidden">
+      <div style="background:#0E1F33;color:#F6F0E6;padding:24px 28px;display:flex;justify-content:space-between;gap:16px;align-items:flex-start">
+        <div style="display:flex;flex-direction:column;gap:6px"><div style="font:600 28px/1.1 'Cormorant Garamond',serif;color:#FFFFFF">{{ modal.t }}</div><div style="font:400 13.5px/1.5 Montserrat,sans-serif;color:#C8CED6">{{ modal.d }}</div></div>
+        <button onClick="{{ closeModal }}" aria-label="Close" style="flex:none;width:40px;height:40px;background:rgba(255,255,255,.08);border:0;border-radius:50%;color:#FFFFFF;font:400 20px/1 Montserrat,sans-serif;cursor:pointer">×</button>
+      </div>
+      <sc-if value="{{ modalSent }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:36px 28px;display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+          <div style="font:600 28px/1.1 'Cormorant Garamond',serif;color:#0E1F33">Request received.</div>
+          <div style="font:400 14.5px/1.6 Montserrat,sans-serif;color:#45423C">Our team will contact you shortly to confirm details.</div>
+          <button onClick="{{ closeModal }}" style="margin-top:8px;background:#0E1F33;color:#FAF7F1;border:0;padding:13px 22px;border-radius:2px;font:600 14px Montserrat,sans-serif;cursor:pointer">Done</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ modalForm }}" hint-placeholder-val="{{ true }}">
+        <form onSubmit="{{ sendModal }}" style="padding:24px 28px 28px;display:flex;flex-direction:column;gap:16px">
+          <sc-if value="{{ modal.hasBook }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:12px;align-items:center;padding:12px 14px;background:#F2ECE1;border:1px solid #E3DCCF"><span style="width:28px;height:38px;background:{{ modal.c.bg }};border-radius:1px 3px 3px 1px;flex:none"></span><span style="display:flex;flex-direction:column;gap:2px"><span style="font:600 14px Montserrat,sans-serif;color:#171A1F">{{ modal.bookT }}</span><span style="font:500 12px Montserrat,sans-serif;color:#6E695F">{{ modal.bookMeta }}</span></span></div>
+          </sc-if>
+          <sc-if value="{{ modal.pickBook }}" hint-placeholder-val="{{ false }}">
+            <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Title(s) you'd like to evaluate<select style="border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif"><sc-for list="{{ allTitles }}" as="tt" hint-placeholder-count="4"><option>{{ tt }}</option></sc-for></select></label>
+          </sc-if>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+            <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Name<input required style="border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+            <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Role<select style="border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif"><option>Teacher</option><option>Principal / school admin</option><option>Coaching institute</option><option>Bookseller</option><option>Student / parent</option></select></label>
+            <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">School / institution<input required style="border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+            <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">City<input required style="border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+            <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Phone<input type="tel" required placeholder="+91" style="border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+            <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Email<input type="email" style="border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+          </div>
+          <sc-if value="{{ modal.bulk }}" hint-placeholder-val="{{ false }}">
+            <label style="display:flex;flex-direction:column;gap:7px;font:600 12px Montserrat,sans-serif;color:#45423C">Approx. copies needed<input type="number" min="1" placeholder="e.g. 120" style="border:1.5px solid #CFC5B4;background:#FFFFFF;padding:12px;border-radius:2px;font:500 14px Montserrat,sans-serif;outline:none"></label>
+          </sc-if>
+          <button type="submit" style="margin-top:4px;background:#9C6A2F;color:#FFFFFF;border:0;padding:15px 22px;border-radius:2px;font:600 14px Montserrat,sans-serif;cursor:pointer" style-hover="background:#6B3A0A">{{ modal.cta }}</button>
+        </form>
+      </sc-if>
+    </div>
+  </div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startPage&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Home&quot;,&quot;Catalogue&quot;,&quot;Book detail&quot;,&quot;Study Hub&quot;,&quot;About &amp; Authors&quot;,&quot;Contact&quot;],&quot;default&quot;:&quot;Home&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;elmasterUrl&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;https://elmaster.in&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showTopBar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;showElmasterInNav&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const PAL=[
+ {bg:'#0E1F33',fg:'#F6F0E6',ac:'#CC955F'},
+ {bg:'#6B3A0A',fg:'#FBF1E3',ac:'#E7BE92'},
+ {bg:'#E8DAC3',fg:'#0E1F33',ac:'#87561F'},
+ {bg:'#9C6A2F',fg:'#FFF8EE',ac:'#0E1F33'},
+ {bg:'#1E3A57',fg:'#F6F0E6',ac:'#E2B68A'},
+ {bg:'#F3EDE3',fg:'#6B3A0A',ac:'#0E1F33'}];
+const LV={P:'Primary (Class 1–5)',M:'Middle (Class 6–8)',S:'Secondary (Class 9–10)',SS:'Senior Secondary (11–12)',C:'Competitive exams',H:'Higher ed & research'};
+const LVS={P:'Primary',M:'Middle',S:'Secondary',SS:'Senior Sec.',C:'Competitive',H:'Higher ed'};
+const BOOKS=[
+ {id:'m8',t:'Mathematics Today',s:'Elden Core',a:'Dr. Ritu Malhotra',ty:'Textbook',lv:'M',cl:'Class 8',bd:'CBSE',su:'Mathematics',pr:395,eb:249,pg:312,p:0,nw:1,em:1,bl:'A concept-first course that moves from worked examples to exam-style problems, aligned to the latest NCERT syllabus.'},
+ {id:'neet',t:'NEET Biology: Chapterwise PYQs',s:'Elden Competitive',a:'Dr. Kavita Rao',ty:'Practice Papers',lv:'C',cl:'NEET',bd:'',su:'Biology',pr:625,eb:399,pg:540,p:1,nw:1,em:1,bl:'Ten years of NEET questions sorted by chapter and difficulty, with explanations written for self-study.'},
+ {id:'phy11',t:'Physics: Concepts & Problems',s:'Elden Advanced',a:'Prof. Arvind Sethi',ty:'Reference',lv:'SS',cl:'Class 11',bd:'CBSE',su:'Physics',pr:545,eb:349,pg:620,p:4,nw:1,em:1,bl:'Rigorous theory with graded problem sets that bridge the board syllabus and JEE preparation.'},
+ {id:'sci6',t:'Foundations of Science',s:'Elden Core',a:'Anand Iyer & Sana Kapoor',ty:'Textbook',lv:'M',cl:'Class 6',bd:'CBSE',su:'Science',pr:360,eb:229,pg:248,p:2,nw:1,em:1,bl:'Hands-on activities and everyday examples that build scientific curiosity from the first chapter.'},
+ {id:'cuet',t:'CUET (UG) General Test Guide',s:'Elden Competitive',a:'Elden Editorial Board',ty:'Study Guide',lv:'C',cl:'CUET',bd:'',su:'General Aptitude',pr:475,eb:299,pg:420,p:3,nw:1,em:1,bl:'Complete coverage of the General Test — reasoning, quantitative aptitude and current affairs — with mock papers.'},
+ {id:'evs3',t:'Our World: Environmental Studies',s:'Little Elden',a:'Meera Joshi',ty:'Textbook',lv:'P',cl:'Class 3',bd:'ICSE',su:'EVS',pr:275,eb:0,pg:136,p:5,nw:0,em:0,bl:'A colourful introduction to family, plants, animals and community, with activity pages in every lesson.'},
+ {id:'eng4',t:'English Grammar Practice',s:'Little Elden',a:'Rachel D\u2019Souza',ty:'Workbook',lv:'P',cl:'Class 4',bd:'CBSE',su:'English',pr:220,eb:0,pg:120,p:1,nw:0,em:0,bl:'Short, focused exercises on grammar and usage that children can complete independently.'},
+ {id:'mm2',t:'Mental Maths Workbook',s:'Little Elden',a:'Sunil Verma',ty:'Workbook',lv:'P',cl:'Class 2',bd:'State Boards',su:'Mathematics',pr:180,eb:0,pg:96,p:3,nw:0,em:0,bl:'Daily practice sheets that build number sense and speed — one page a day across the year.'},
+ {id:'hin7',t:'Hindi Vyakaran Abhyas',s:'Elden Core',a:'Dr. Pooja Tiwari',ty:'Workbook',lv:'M',cl:'Class 7',bd:'CBSE',su:'Hindi',pr:210,eb:149,pg:144,p:0,nw:0,em:0,bl:'Grammar exercises with clear rules and examples, aligned to the CBSE Hindi course.'},
+ {id:'ss10',t:'Social Science Revision Notes',s:'Elden Exam Edge',a:'Nikhil Bhatt',ty:'Study Guide',lv:'S',cl:'Class 10',bd:'CBSE',su:'Social Science',pr:299,eb:179,pg:232,p:4,nw:0,em:1,bl:'Chapter summaries, maps, timelines and likely questions for fast, focused board revision.'},
+ {id:'sp10',t:'Sample Papers: Science & Maths',s:'Elden Exam Edge',a:'Elden Editorial Board',ty:'Practice Papers',lv:'S',cl:'Class 10',bd:'CBSE',su:'Science',pr:349,eb:199,pg:288,p:1,nw:1,em:1,bl:'Fifteen full sample papers in the latest board pattern with marking schemes and examiner tips.'},
+ {id:'oc12',t:'Organic Chemistry, Simplified',s:'Elden Advanced',a:'Dr. Farhan Qureshi',ty:'Reference',lv:'SS',cl:'Class 12',bd:'CBSE',su:'Chemistry',pr:495,eb:299,pg:410,p:5,nw:0,em:1,bl:'Reaction mechanisms explained visually, with practice built for boards, JEE and NEET.'},
+ {id:'cs12',t:'Computer Science with Python',s:'Elden Core',a:'Ankita Desai',ty:'Textbook',lv:'SS',cl:'Class 12',bd:'CBSE',su:'Computer Science',pr:425,eb:269,pg:356,p:2,nw:0,em:1,bl:'Python, data handling and databases taught through projects, following the CBSE course.'},
+ {id:'jee',t:'JEE Main: 20 Full Mock Tests',s:'Elden Competitive',a:'Elden Editorial Board',ty:'Practice Papers',lv:'C',cl:'JEE Main',bd:'',su:'Physics',pr:575,eb:349,pg:480,p:0,nw:0,em:1,bl:'Twenty full-length tests in the current JEE Main pattern with detailed, step-by-step solutions.'},
+ {id:'upsc',t:'Indian Polity for Civil Services',s:'Elden Competitive',a:'R. S. Krishnan',ty:'Reference',lv:'C',cl:'UPSC',bd:'',su:'General Studies',pr:595,eb:379,pg:640,p:3,nw:0,em:0,bl:'The Constitution, institutions and governance explained for Prelims and Mains, with practice questions.'},
+ {id:'rme',t:'Research Methods in Education',s:'Elden Scholarly',a:'Prof. Lata Narayanan',ty:'Reference',lv:'H',cl:'B.Ed / M.Ed',bd:'',su:'Education',pr:895,eb:599,pg:384,p:4,nw:0,em:0,bl:'A practical guide to designing, conducting and reporting educational research in Indian contexts.'},
+ {id:'jer',t:'Elden Journal of Educational Research',s:'Journal',a:'Ed. Prof. Lata Narayanan',ty:'Journal',lv:'H',cl:'Vol. 4 · Issue 2',bd:'',su:'Education',pr:1200,per:' / year',eb:0,pg:168,p:0,nw:1,em:0,bl:'A peer-reviewed biannual on pedagogy, assessment and policy in Indian school and higher education.'},
+ {id:'jasp',t:'Journal of Science Pedagogy',s:'Journal',a:'Ed. Dr. Arjun Mehta',ty:'Journal',lv:'H',cl:'Vol. 2 · Issue 1',bd:'',su:'Science',pr:950,per:' / year',eb:0,pg:124,p:1,nw:0,em:0,bl:'Research and classroom practice in science and mathematics teaching, from primary to university.'}
+];
+const TYPES=['Textbook','Reference','Study Guide','Practice Papers','Workbook','Journal'];
+const SUBJ=[...new Set(BOOKS.map(b=>b.su))].sort();
+const EMPTY={type:[],level:[],subject:[],board:[],format:[]};
+const RES=[
+ ['Class 10 Science — Sample Paper Set 1','Sample papers','S','Science','2.4 MB'],
+ ['Class 10 Mathematics (Standard) — Sample Paper Set 1','Sample papers','S','Mathematics','1.9 MB'],
+ ['Class 12 Physics — Sample Paper with Marking Scheme','Sample papers','SS','Physics','3.1 MB'],
+ ['NEET Biology — Quick Revision: Human Physiology','Revision notes','C','Biology','4.6 MB'],
+ ['Mathematics Today, Class 8 — Chapter-wise Answer Key','Answer keys','M','Mathematics','1.2 MB'],
+ ['JEE Main — Formula Sheet: Mechanics','Revision notes','C','Physics','0.8 MB'],
+ ['Class 6 Science — Activity Worksheets','Worksheets','M','Science','2.0 MB'],
+ ['Class 3 EVS — Activity Sheets','Worksheets','P','EVS','3.3 MB'],
+ ['Class 4 English Grammar — Practice Worksheets','Worksheets','P','English','1.4 MB'],
+ ['Class 10 Social Science — Map Work Practice','Revision notes','S','Social Science','2.7 MB'],
+ ['CBSE Class 9–10 Syllabus 2026–27','Syllabus','S','All subjects','1.1 MB'],
+ ['CUET (UG) General Test — Pattern & Syllabus','Syllabus','C','General Aptitude','0.6 MB'],
+ ['Organic Chemistry, Simplified — Errata (2nd ed.)','Errata','SS','Chemistry','0.3 MB']
+].map((r,i)=>({id:'r'+i,t:r[0],k:r[1],lv:r[2],su:r[3],size:r[4]}));
+const DIST={
+ 'Delhi NCR':[{n:'Capital Book Distributors',c:'Daryaganj, New Delhi',k:'Wholesale'},{n:'Scholars\u2019 Corner',c:'Sector 18, Noida',k:'Retail & schools'},{n:'Aravali Educational Supplies',c:'Gurugram',k:'School supply'}],
+ 'Maharashtra':[{n:'Deccan Academic Books',c:'Appa Balwant Chowk, Pune',k:'Wholesale'},{n:'Western Book House',c:'Dadar, Mumbai',k:'Retail & schools'}],
+ 'Uttar Pradesh':[{n:'Awadh Book Agency',c:'Aminabad, Lucknow',k:'Wholesale'},{n:'Sangam Educational',c:'Civil Lines, Prayagraj',k:'Retail & coaching'}],
+ 'Karnataka':[{n:'Garden City Booksellers',c:'Avenue Road, Bengaluru',k:'Wholesale'}],
+ 'Tamil Nadu':[{n:'Coromandel Book Traders',c:'Parrys, Chennai',k:'Wholesale'},{n:'Kovai School Books',c:'R.S. Puram, Coimbatore',k:'School supply'}],
+ 'West Bengal':[{n:'College Street Educational',c:'College Street, Kolkata',k:'Wholesale'}],
+ 'Bihar':[{n:'Patliputra Book Centre',c:'Ashok Rajpath, Patna',k:'Wholesale & coaching'}],
+ 'Rajasthan':[{n:'Pink City Book Depot',c:'Chaura Rasta, Jaipur',k:'Wholesale'},{n:'Kota Aspirants\u2019 Store',c:'Talwandi, Kota',k:'Coaching supply'}]
+};
+const CONTENTS={
+ m8:['Rational Numbers','Linear Equations in One Variable','Understanding Quadrilaterals','Data Handling','Squares and Square Roots','Cubes and Cube Roots','Comparing Quantities','Algebraic Expressions and Identities','Mensuration','Exponents and Powers','Direct and Inverse Proportions','Factorisation'],
+ 'Practice Papers':['How to use this book','Exam pattern & marking scheme','Papers 1–5 with solutions','Papers 6–10 with solutions','Previous years\u2019 papers','Examiner\u2019s tips & common errors'],
+ Journal:['Editorial','Research articles','Short communications','Classroom practice notes','Book reviews','Call for papers'],
+ Textbook:['Getting started','Core concepts','Worked examples','Activities & projects','Exercises','Glossary & answers'],
+ _:['Chapter summaries','Key terms & formulae','Solved examples','Practice exercises','Self-assessment tests','Answers & hints']
+};
+const HL={
+ Textbook:['Syllabus-aligned chapters with learning outcomes','Worked examples before every exercise','Activities, projects and competency-based questions','Teacher\u2019s manual for adopting schools'],
+ Reference:['In-depth theory beyond the textbook','Graded problems from basic to advanced','Previous years\u2019 exam questions','Quick-revision summaries per chapter'],
+ 'Study Guide':['Concise chapter summaries','Important questions with model answers','Mind maps and quick-revision tables','Practice tests in exam pattern'],
+ 'Practice Papers':['Papers in the latest exam pattern','Detailed step-by-step solutions','Marking scheme and time-management tips','Online mock tests on elmaster'],
+ Workbook:['One concept per page','Graded exercises for independent practice','Answer key at the back','Perforated sheets for classroom use'],
+ Journal:['Double-blind peer review','Open to submissions year-round','Print and online editions','Indexed with DOI for every article']
+};
+const PAGES={Home:'home',Catalogue:'cat','Book detail':'book','Study Hub':'hub','About & Authors':'about',Contact:'contact'};
+const inr=n=>'\u20B9'+n.toLocaleString('en-IN');
+
+class Component extends DCLogic {
+  state={page:null,bookId:'m8',q:'',heroQ:'',sort:'Featured',f:EMPTY,hubKind:'All',hubLevel:'All',modal:null,modalSent:false,narrow:false,menu:false,filtersOpen:false,dist:'Delhi NCR',tab:'Overview',fmt:0,dl:{},role:'Teacher',contactSent:false,proposalSent:false};
+  componentDidMount(){this.onR=()=>{const n=window.innerWidth<960;if(n!==this.state.narrow)this.setState({narrow:n,menu:false});};this.onR();window.addEventListener('resize',this.onR);}
+  componentWillUnmount(){window.removeEventListener('resize',this.onR);}
+  curPage(){return this.state.page||PAGES[this.props.startPage]||'home';}
+  go(page,extra={}){this.setState({page,menu:false,...extra});try{window.scrollTo(0,0);}catch(e){}}
+  goCat(preset={},q=''){this.go('cat',{f:{...EMPTY,...preset},q,filtersOpen:false});}
+  openBook(id){this.go('book',{bookId:id,tab:'Overview',fmt:0});}
+  openModal(kind,bookId){this.setState({modal:{kind,bookId},modalSent:false,menu:false});}
+  toggle(k,o){this.setState(s=>{const cur=s.f[k];return {f:{...s.f,[k]:cur.includes(o)?cur.filter(x=>x!==o):[...cur,o]}};});}
+  vals(b,k){return k==='format'?(b.eb?['Print','E-book']:['Print']):k==='level'?[LV[b.lv]]:k==='type'?[b.ty]:k==='subject'?[b.su]:[b.bd];}
+  card(b){return {...b,c:PAL[b.p],meta:[b.cl,b.bd].filter(Boolean).join(' · '),price:inr(b.pr)+(b.per||''),fmts:b.eb?'Print · E-book':'Print',lvl:LV[b.lv],
+    open:()=>this.openBook(b.id),sample:e=>{e&&e.stopPropagation&&e.stopPropagation();this.openModal('sample',b.id);},bulk:()=>this.openModal('bulk',b.id),teacher:()=>this.openModal('teacher',b.id)};}
+  renderVals(){
+    const s=this.state,page=this.curPage(),narrow=s.narrow;
+    const sel=(on)=>on?{bg:'#0E1F33',col:'#FAF7F1',bd:'#0E1F33'}:{bg:'transparent',col:'#171A1F',bd:'#CFC5B4'};
+    const navDef=[['Home','home',()=>this.go('home')],['Catalogue','cat',()=>this.goCat()],['Study Hub','hub',()=>this.go('hub')],['Journals','',()=>this.goCat({type:['Journal']})],['For Authors','about',()=>this.go('about')],['Contact','contact',()=>this.go('contact')]];
+    const nav=navDef.map(([label,k,go])=>{const on=k===page||(page==='book'&&k==='cat');return {label,go,col:on?'#0E1F33':'#45423C',bd:on?'#9C6A2F':'transparent'};});
+    // catalogue
+    const f=s.f,q=s.q.trim().toLowerCase();
+    const hay=b=>[b.t,b.a,b.su,b.cl,b.ty,b.s,b.bd].join(' ').toLowerCase();
+    const pass=(b,skip)=>Object.keys(f).every(k=>k===skip||!f[k].length||this.vals(b,k).some(v=>f[k].includes(v)))&&(!q||hay(b).includes(q));
+    let list=BOOKS.filter(b=>pass(b));
+    const so=s.sort;
+    if(so==='Newest')list=[...list].sort((a,b)=>b.nw-a.nw);
+    else if(so==='Price: low to high')list=[...list].sort((a,b)=>a.pr-b.pr);
+    else if(so==='Price: high to low')list=[...list].sort((a,b)=>b.pr-a.pr);
+    else if(so==='Title A–Z')list=[...list].sort((a,b)=>a.t.localeCompare(b.t));
+    const FAC=[['type','Publication type',TYPES],['level','Level',Object.values(LV)],['subject','Subject',SUBJ],['board','Board',['CBSE','ICSE','State Boards']],['format','Format',['Print','E-book']]];
+    const facets=FAC.map(([k,label,opts])=>({label,opts:opts.map(o=>{const on=f[k].includes(o);const count=BOOKS.filter(b=>pass(b,k)&&this.vals(b,k).includes(o)).length;
+      return {label:o,count,toggle:()=>this.toggle(k,o),bg:on?'#0E1F33':'#FFFFFF',bd:on?'#0E1F33':'#B9B0A1',tick:on?'✓':'',col:count||on?'#171A1F':'#A8A296'};})}));
+    const activeChips=Object.keys(f).flatMap(k=>f[k].map(o=>({label:o,remove:()=>this.toggle(k,o)})));
+    if(q)activeChips.unshift({label:'“'+s.q.trim()+'”',remove:()=>this.setState({q:''})});
+    // book
+    const bk=BOOKS.find(b=>b.id===s.bookId)||BOOKS[0];const book=this.card(bk);const bi=BOOKS.indexOf(bk);
+    const fl=[{label:'Print',price:inr(bk.pr)+(bk.per||'')}];if(bk.eb)fl.push({label:'E-book',price:inr(bk.eb)});
+    const formats=fl.map((x,i)=>({...x,pick:()=>this.setState({fmt:i}),bg:s.fmt===i?'#FFFFFF':'transparent',bd:s.fmt===i?'#0E1F33':'#CFC5B4'}));
+    const specs=[['ISBN','978-93-'+(48210+bi*37)+'-'+(bi%9)+'-'+((bi*7)%10)],['Pages',String(bk.pg)],['Edition','2026–27'],[bk.bd?'Board':'Exam / series',bk.bd||bk.cl],['Level',LV[bk.lv]],['Language',bk.id==='hin7'?'Hindi':'English']].map(([k,v])=>({k,v}));
+    const tabNames=['Overview','Contents','For teachers'];
+    const tabs=tabNames.map(t=>({label:t,pick:()=>this.setState({tab:t}),bd:s.tab===t?'#0E1F33':'transparent',col:s.tab===t?'#0E1F33':'#7A756B'}));
+    const contents=(CONTENTS[bk.id]||CONTENTS[bk.ty]||CONTENTS._).map((t,i)=>({n:String(i+1).padStart(2,'0'),t}));
+    const related=BOOKS.filter(b=>b.id!==bk.id&&(b.lv===bk.lv||b.su===bk.su)).concat(BOOKS.filter(b=>b.id!==bk.id&&b.ty===bk.ty)).filter((b,i,a)=>a.indexOf(b)===i).slice(0,5).map(b=>this.card(b));
+    // hub
+    const dlRow=r=>({...r,lvl:LVS[r.lv],dl:()=>this.setState(st=>({dl:{...st.dl,[r.id]:true}})),dlLabel:s.dl[r.id]?'Downloaded ✓':'Download PDF',bg:s.dl[r.id]?'#0E1F33':'transparent',col:s.dl[r.id]?'#FAF7F1':'#0E1F33'});
+    const kinds=['All','Sample papers','Revision notes','Answer keys','Worksheets','Syllabus','Errata'];
+    const hubKinds=kinds.map(k=>({label:k,pick:()=>this.setState({hubKind:k}),...sel(s.hubKind===k)}));
+    const lvKeys=['All','P','M','S','SS','C'];
+    const hubLevels=lvKeys.map(k=>({label:k==='All'?'All levels':LVS[k],pick:()=>this.setState({hubLevel:k}),bd:s.hubLevel===k?'#9C6A2F':'transparent',col:s.hubLevel===k?'#0E1F33':'#6E695F'}));
+    const hubRows=RES.filter(r=>(s.hubKind==='All'||r.k===s.hubKind)&&(s.hubLevel==='All'||r.lv===s.hubLevel)).map(dlRow);
+    // modal
+    let modal=null;
+    if(s.modal){const mb=s.modal.bookId?BOOKS.find(b=>b.id===s.modal.bookId):null;const K=s.modal.kind;
+      const cfg={sample:['Request a sample copy','For teachers, schools and coaching institutes evaluating Elden titles.','Request sample'],bulk:['School & bulk order enquiry','Tell us about your requirement and we\u2019ll share pricing and delivery options.','Send enquiry'],teacher:['Request teacher access','Teacher\u2019s manuals, answer keys and lesson plans for adopting schools.','Request access'],dist:['Become a distributor','Partner with Elden to supply schools and bookstores in your region.','Send application']}[K];
+      modal={t:cfg[0],d:cfg[1],cta:cfg[2],hasBook:!!mb,pickBook:!mb&&K==='sample',bookT:mb?mb.t:'',bookMeta:mb?[mb.ty,mb.cl,mb.bd].filter(Boolean).join(' · '):'',c:mb?PAL[mb.p]:PAL[0],bulk:K==='bulk'||K==='dist'};}
+    const hero=['m8','neet','phy11'].map(id=>this.card(BOOKS.find(b=>b.id===id)));
+    const pos=[{x:'4%',y:'14%',r:'-7deg',z:1},{x:'30%',y:'4%',r:'0deg',z:3},{x:'56%',y:'16%',r:'7deg',z:2}];
+    const ftr=(label,go)=>({label,go});
+    return {
+      showTopBar:this.props.showTopBar??true, showElmNav:(this.props.showElmasterInNav??true)&&!narrow, elmasterUrl:this.props.elmasterUrl||'#',
+      wide:!narrow, narrow, menuOpen:narrow&&s.menu, menuLabel:s.menu?'Close':'Menu', toggleMenu:()=>this.setState({menu:!s.menu}),
+      nav, isHome:page==='home', isCat:page==='cat', isBook:page==='book', isHub:page==='hub', isAbout:page==='about', isContact:page==='contact',
+      goHome:()=>this.go('home'), goCatalogue:()=>this.goCat(), goHub:()=>this.go('hub'), goAbout:()=>this.go('about'), goContact:()=>this.go('contact'), goJournals:()=>this.goCat({type:['Journal']}),
+      openSampleGeneral:()=>this.openModal('sample',null), openTeacher:()=>this.openModal('teacher',null), becomeDist:()=>this.openModal('dist',null),
+      heroQ:s.heroQ, setHeroQ:e=>this.setState({heroQ:e.target.value}), heroSearch:e=>{e.preventDefault();this.goCat({},s.heroQ);},
+      heroBooks:hero.map((b,i)=>({...b,...pos[i]})),
+      quick:[['Class 10 sample papers',()=>this.goCat({type:['Practice Papers'],level:[LV.S]})],['NEET',()=>this.goCat({},'NEET')],['JEE Main',()=>this.goCat({},'JEE')],['CUET',()=>this.goCat({},'CUET')],['Class 1–5',()=>this.goCat({level:[LV.P]})]].map(([label,go])=>({label,go})),
+      paths:[
+        {n:'01',t:'School, Class 1–12',d:'Textbooks, workbooks and revision guides for CBSE, ICSE and State Boards.',cta:'Browse school books',go:()=>this.goCat({level:[LV.P,LV.M,LV.S,LV.SS]})},
+        {n:'02',t:'Competitive exams',d:'Reference books and practice papers for JEE, NEET, CUET and UPSC.',cta:'Browse exam prep',go:()=>this.goCat({level:[LV.C]})},
+        {n:'03',t:'Teachers & schools',d:'Inspection copies, teacher\u2019s manuals and bulk orders for your school.',cta:'Request a sample',go:()=>this.openModal('sample',null)},
+        {n:'04',t:'Researchers & authors',d:'Peer-reviewed journals, scholarly titles and proposals for new books.',cta:'Publish with us',go:()=>this.go('about')}],
+      typeLinks:[...TYPES.map(t=>({label:t==='Study Guide'?'Study guides':t==='Practice Papers'?'Practice papers':t+'s',count:BOOKS.filter(b=>b.ty===t).length,go:()=>this.goCat({type:[t]})})),{label:'E-books',count:BOOKS.filter(b=>b.eb).length,go:()=>this.goCat({format:['E-book']})}],
+      newBooks:BOOKS.filter(b=>b.nw&&b.ty!=='Journal').slice(0,5).map(b=>this.card(b)),
+      hubPreview:RES.slice(0,5).map(dlRow),
+      elmFeatures:[{t:'Video lessons',d:'Chapter-by-chapter, by Elden authors'},{t:'Mock tests',d:'Timed tests with instant analysis'},{t:'Book companion',d:'Scan the QR in any Elden title'},{t:'For teachers',d:'Assign work and track progress'}],
+      q:s.q, setQ:e=>this.setState({q:e.target.value}), sort:s.sort, setSort:e=>this.setState({sort:e.target.value}),
+      results:list.map(b=>this.card(b)), resultLabel:list.length+(list.length===1?' title':' titles'), noResults:list.length===0,
+      facets, activeChips, hasActive:activeChips.length>0, clearAll:()=>this.setState({f:EMPTY,q:''}),
+      asideBasis:narrow?'100%':'220px', showFilters:!narrow||s.filtersOpen, toggleFilters:()=>this.setState({filtersOpen:!s.filtersOpen}), filtersLabel:(s.filtersOpen?'Hide filters':'Show filters')+(activeChips.length?' ('+activeChips.length+')':''),
+      book:{...book,lvl:LV[bk.lv],nw:!!bk.nw,em:!!bk.em}, formats, specs, tabs, tabOverview:s.tab==='Overview', tabContents:s.tab==='Contents', tabTeachers:s.tab==='For teachers',
+      highlights:HL[bk.ty]||HL.Textbook, contents, related,
+      hubKinds, hubLevels, hubRows, hubEmpty:hubRows.length===0,
+      pillars:[{t:'School',d:'Textbooks and workbooks for Classes 1–12 across CBSE, ICSE and State Boards.'},{t:'Competitive',d:'Reference and practice for JEE, NEET, CUET, UPSC and more.'},{t:'Scholarly',d:'Research methods, education studies and professional titles.'},{t:'Journals',d:'Peer-reviewed journals in education and science pedagogy.'}],
+      steps:[{n:'01',t:'Send a proposal',d:'A synopsis, table of contents and a sample chapter if you have one.'},{n:'02',t:'Editorial review',d:'Our subject editors assess fit, audience and syllabus alignment.'},{n:'03',t:'Development',d:'We work with you on structure, review, design and illustration.'},{n:'04',t:'Publication',d:'Print, e-book and elmaster companion, distributed across India.'}],
+      proposalSent:s.proposalSent, proposalOpen:!s.proposalSent, sendProposal:e=>{e.preventDefault();this.setState({proposalSent:true});}, resetProposal:()=>this.setState({proposalSent:false}),
+      journals:BOOKS.filter(b=>b.ty==='Journal').map(b=>this.card(b)),
+      contactLines:[{k:'Head office',v:'New Delhi, India'},{k:'Email',v:'enquiries@eldenpress.in'},{k:'Hours',v:'Monday – Saturday, 10:00 – 18:00 IST'}],
+      roles:['Student','Parent','Teacher','School','Distributor','Author'].map(r=>({label:r,pick:()=>this.setState({role:r}),...sel(s.role===r)})),
+      contactSent:s.contactSent, contactOpen:!s.contactSent, sendContact:e=>{e.preventDefault();this.setState({contactSent:true});}, resetContact:()=>this.setState({contactSent:false}),
+      states:Object.keys(DIST).map(k=>({label:k,pick:()=>this.setState({dist:k}),...sel(s.dist===k)})),
+      distributors:(DIST[s.dist]||[]).map(d=>({...d,enquire:()=>this.go('contact',{role:'Distributor'})})),
+      footerCols:[
+        {t:'Publications',links:[ftr('Textbooks',()=>this.goCat({type:['Textbook']})),ftr('Reference books',()=>this.goCat({type:['Reference']})),ftr('Practice papers',()=>this.goCat({type:['Practice Papers']})),ftr('Workbooks',()=>this.goCat({type:['Workbook']})),ftr('E-books',()=>this.goCat({format:['E-book']}))]},
+        {t:'Students',links:[ftr('Study Hub',()=>this.go('hub')),ftr('Sample papers',()=>this.go('hub',{hubKind:'Sample papers'})),ftr('Competitive exams',()=>this.goCat({level:[LV.C]})),ftr('elmaster ↗',()=>{if(this.props.elmasterUrl)window.open(this.props.elmasterUrl,'_blank');})]},
+        {t:'Schools',links:[ftr('Request a sample',()=>this.openModal('sample',null)),ftr('Teacher resources',()=>this.openModal('teacher',null)),ftr('Find a distributor',()=>this.go('contact'))]},
+        {t:'Press',links:[ftr('About Elden',()=>this.go('about')),ftr('For authors',()=>this.go('about')),ftr('Journals',()=>this.goCat({type:['Journal']})),ftr('Contact',()=>this.go('contact'))]}],
+      modalOpen:!!modal, modal:modal||{}, modalSent:s.modalSent, modalForm:!s.modalSent, closeModal:()=>this.setState({modal:null}), stop:e=>e.stopPropagation(),
+      sendModal:e=>{e.preventDefault();this.setState({modalSent:true});}, allTitles:BOOKS.filter(b=>b.ty!=='Journal').map(b=>b.t+' — '+b.cl)
+    };
+  }
+}
+</script>
+</body>
+</html>
