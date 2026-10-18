@@ -18,7 +18,7 @@ const COLS: { t: string; links: FooterLink[] }[] = [
     ['Study Hub', '/study-hub'],
     ['Sample papers', '/study-hub?kind=' + encodeURIComponent('Sample papers')],
     ['Competitive exams', catalogueHref({ level: ['C'] })],
-    ['elmaster ↗', { href: config.elmasterUrl }],
+    ...(config.elmasterUrl ? [['elmaster ↗', { href: config.elmasterUrl }] as FooterLink] : []),
   ] },
   { t: 'Schools', links: [
     ['Request a sample', { modal: 'sample' }],

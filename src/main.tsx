@@ -1,6 +1,7 @@
 import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { WithIntro } from './components/Intro';
 import { ComingSoon } from './pages/ComingSoon';
 import './styles.css';
 
@@ -14,12 +15,14 @@ const App = lazy(() => import('./App').then((m) => ({ default: m.App })));
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {live ? (
-      <BrowserRouter>
-        <Suspense fallback={null}><App /></Suspense>
-      </BrowserRouter>
-    ) : (
-      <ComingSoon />
-    )}
+    <WithIntro>
+      {live ? (
+        <BrowserRouter>
+          <Suspense fallback={null}><App /></Suspense>
+        </BrowserRouter>
+      ) : (
+        <ComingSoon />
+      )}
+    </WithIntro>
   </StrictMode>,
 );

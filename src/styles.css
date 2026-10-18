@@ -373,7 +373,7 @@ a.text-link:hover { color: var(--bronze-text); }
 .h1-hub { margin: 0; font: 600 clamp(42px, 5.6vw, 70px)/1 var(--serif); color: #FFFFFF; text-wrap: balance; }
 .hub-hero__lede { margin: 0; max-width: 540px; font: 400 16px/1.65 var(--sans); color: #C8CED6; }
 .hub-elm { flex: 0 1 320px; display: flex; flex-direction: column; gap: 8px; padding: 20px 22px; border: 1px solid rgba(255, 255, 255, .2); border-radius: 10px; color: #C9D3DC; }
-.hub-elm:hover { border-color: var(--teal); color: #C9D3DC; }
+a.hub-elm:hover { border-color: var(--teal); color: #C9D3DC; }
 .hub-elm__mark { font-size: 20px; line-height: 1; letter-spacing: -.04em; }
 .hub-elm__text { font: 400 13.5px/1.5 var(--sans); }
 .page-hub { padding-top: clamp(32px, 5vw, 56px); padding-bottom: clamp(64px, 8vw, 104px); display: flex; flex-direction: column; gap: 26px; }

@@ -31,7 +31,7 @@ export function ComingSoon() {
             <img src="/assets/elden-mark.png" alt="" className="cs-title__mark" />
             <div className="cs-smallcaps cs-title__press">Elden Academic Press</div>
             <h1 className="cs-title__h1">
-              <span className="cs-title__now">Now</span>
+              <span className="cs-title__now">Now</span>{' '}
               <span className="cs-title__line2"><span className="cs-circled">in press<HandCircle /></span>.</span>
               <span className="cs-note" aria-hidden="true">live for<br />Session 2027–28!<HandArrow /></span>
             </h1>
@@ -40,7 +40,7 @@ export function ComingSoon() {
               A new website for the Press — every Elden title, free study material, sample copies for schools
               and a direct line to elmaster.
             </p>
-            <div className="cs-imprint cs-smallcaps"><span>New Delhi</span><i /><span>Session 2027–28</span></div>
+            <div className="cs-imprint cs-smallcaps"><span>Hazaribagh</span><i /><span>Session 2027–28</span></div>
             <Stamp />
             <Folio n="i" />
           </section>
@@ -79,7 +79,6 @@ export function ComingSoon() {
                 <span className="cs-elm"><span>el</span>master</span>
                 <p>Our learning platform is already live — video lessons, mock tests and progress tracking for Elden readers.</p>
               </div>
-              <a href={config.elmasterUrl} target="_blank" rel="noopener" className="cs-erratum__link">Go to elmaster ↗</a>
             </aside>
             <Folio n="iii" />
           </section>
@@ -87,13 +86,13 @@ export function ComingSoon() {
           <section className="cs-page cs-colophon" aria-labelledby="cs-colophon-h">
             <h2 id="cs-colophon-h" className="cs-h2 cs-smallcaps">Colophon</h2>
             <p className="cs-colophon__p">
-              This website is being set in Cormorant Garamond and Montserrat, proofed in New Delhi,
+              This website is being set in Cormorant Garamond and Montserrat, proofed in Hazaribagh,
               and will be published for Session 2027–28.
             </p>
             <p className="cs-colophon__until">Until then, our team is taking orders and sample requests as usual.</p>
             <a href={mail} className="cs-colophon__mail">{config.contactEmail}</a>
             <dl className="cs-colophon__facts">
-              <div><dt>Head office</dt><dd>New Delhi, India</dd></div>
+              <div><dt>Head office</dt><dd>{config.headOffice}</dd></div>
               <div><dt>Hours</dt><dd>Monday – Saturday, 10:00 – 18:00 IST</dd></div>
             </dl>
             <div className="cs-colophon__legal">
@@ -106,7 +105,7 @@ export function ComingSoon() {
 
         <div className="cs-slug" aria-hidden="true">
           <div className="cs-colourbar">{SWATCHES.map((c) => <i key={c} style={{ background: c }} />)}</div>
-          <span className="cs-slug__text">elden-website_v1 · proof 03 · please return corrections to {config.contactEmail}</span>
+          <span className="cs-slug__text">{config.siteUrl.replace(/^https?:\/\//, '')} · proof 04 · please return corrections to {config.contactEmail}</span>
         </div>
       </div>
     </div>
