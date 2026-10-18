@@ -129,8 +129,6 @@
 .cs-erratum__body p { margin: 0; font: 400 13.5px/1.6 var(--sans); color: #45423C; }
 .cs-elm { flex: none; font: 700 22px/1.1 var(--sans); letter-spacing: -.045em; color: var(--navy); }
 .cs-elm span { color: var(--teal-deep); }
-.cs-erratum__link { display: inline-block; margin-top: 16px; font: 700 13.5px var(--sans); color: var(--navy); border-bottom: 2px solid var(--teal); padding-bottom: 2px; }
-.cs-erratum__link:hover { color: var(--navy); border-bottom-color: var(--navy); }
 
 /* ---------- Colophon ---------- */
 .cs-colophon { padding-bottom: clamp(96px, 11vw, 140px); }
@@ -153,6 +151,11 @@
   0% { opacity: 0; transform: rotate(-14deg) scale(1.6); }
   100% { opacity: .88; transform: rotate(-14deg) scale(1); }
 }
+/* Hold these until the opening animation hands over */
+html[data-intro='playing'] .cs-circle path,
+html[data-intro='playing'] .cs-arrow path,
+html[data-intro='playing'] .cs-note,
+html[data-intro='playing'] .cs-stamp { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
   .cs-circle path, .cs-arrow path { animation: none; stroke-dashoffset: 0; }
   .cs-note { animation: none; opacity: 1; }

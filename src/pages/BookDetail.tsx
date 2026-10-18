@@ -61,7 +61,7 @@ function BookView({ book }: { book: Book }) {
               <div className="elm-note">
                 <ElmasterMark className="elm-note__mark" />
                 <span className="elm-note__text">Includes a digital companion — scan the QR inside for videos and chapter tests.</span>
-                <a href={config.elmasterUrl} target="_blank" rel="noopener" className="elm-note__link">Preview ↗</a>
+                {config.elmasterUrl && <a href={config.elmasterUrl} target="_blank" rel="noopener" className="elm-note__link">Preview ↗</a>}
               </div>
             )}
             <div className="specs">

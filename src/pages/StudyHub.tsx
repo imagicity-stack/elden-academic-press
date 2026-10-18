@@ -31,10 +31,17 @@ export function StudyHub() {
             <h1 className="h1-hub">Free study material, updated every session.</h1>
             <p className="hub-hero__lede">Sample papers, revision notes, answer keys and worksheets for Classes 1–12 and competitive exams. No sign-up needed.</p>
           </div>
-          <a href={config.elmasterUrl} target="_blank" rel="noopener" className="hub-elm">
-            <ElmasterMark className="hub-elm__mark" />
-            <span className="hub-elm__text">Want video lessons and timed mock tests? Continue on elmaster ↗</span>
-          </a>
+          {config.elmasterUrl ? (
+            <a href={config.elmasterUrl} target="_blank" rel="noopener" className="hub-elm">
+              <ElmasterMark className="hub-elm__mark" />
+              <span className="hub-elm__text">Want video lessons and timed mock tests? Continue on elmaster ↗</span>
+            </a>
+          ) : (
+            <div className="hub-elm">
+              <ElmasterMark className="hub-elm__mark" />
+              <span className="hub-elm__text">Want video lessons and timed mock tests? Find them on elmaster, our learning platform.</span>
+            </div>
+          )}
         </div>
       </section>
       <div className="wrap page-hub">

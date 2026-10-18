@@ -54,7 +54,7 @@ export function Header() {
         <Link to="/" className="header__home" aria-label="Elden Academic Press — home"><Logo /></Link>
         <nav className="header__nav" aria-label="Main">{links('header__nav-link')}</nav>
         <div className="header__actions">
-          {config.showElmasterInNav && (
+          {config.showElmasterInNav && config.elmasterUrl && (
             <a href={config.elmasterUrl} target="_blank" rel="noopener" className="header__elm">
               <span className="dot dot--teal" />elmaster ↗
             </a>

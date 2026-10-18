@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formData, submitForm } from '../api';
+import { config } from '../config';
 import { DIST } from '../data';
 import { useSite } from '../site';
 import { Field, Pill, TextField } from '../components/Field';
@@ -8,10 +9,9 @@ import { Field, Pill, TextField } from '../components/Field';
 const ROLES = ['Student', 'Parent', 'Teacher', 'School', 'Distributor', 'Author'];
 const STATES = Object.keys(DIST);
 
-// Placeholder contact details.
 const CONTACT_LINES = [
-  { k: 'Head office', v: 'New Delhi, India' },
-  { k: 'Email', v: 'enquiries@eldenpress.in' },
+  { k: 'Head office', v: config.headOffice },
+  { k: 'Email', v: config.contactEmail },
   { k: 'Hours', v: 'Monday – Saturday, 10:00 – 18:00 IST' },
 ];
 

@@ -144,10 +144,12 @@ export function Home() {
                 <div key={f.t} className="elm__feature"><span className="elm__feature-t">{f.t}</span><span className="elm__feature-d">{f.d}</span></div>
               ))}
             </div>
-            <div className="elm__ctas">
-              <a href={config.elmasterUrl} target="_blank" rel="noopener" className="elm__btn">Go to elmaster ↗</a>
-              <a href={config.elmasterUrl} target="_blank" rel="noopener" className="elm__btn-ghost">elmaster for schools</a>
-            </div>
+            {config.elmasterUrl && (
+              <div className="elm__ctas">
+                <a href={config.elmasterUrl} target="_blank" rel="noopener" className="elm__btn">Go to elmaster ↗</a>
+                <a href={config.elmasterUrl} target="_blank" rel="noopener" className="elm__btn-ghost">elmaster for schools</a>
+              </div>
+            )}
           </div>
           {/* TODO: replace with a real elmaster screenshot */}
           <div className="elm__shot"><span>elmaster screenshot — app or dashboard</span></div>

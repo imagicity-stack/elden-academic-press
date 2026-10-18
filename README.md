@@ -1,6 +1,6 @@
 # Elden Academic Press
 
-Website for Elden Academic Press — textbooks, reference books, study guides, practice papers, workbooks, e-books and journals for Indian classrooms, with link-outs to the separate **elmaster** learning platform.
+Website for Elden Academic Press ([eldenap.in](https://eldenap.in)) — textbooks, reference books, study guides, practice papers, workbooks, e-books and journals for Indian classrooms, alongside the separate **elmaster** learning platform.
 
 Built with React, TypeScript, Vite and React Router from the Claude Design prototype in [`design/`](design/).
 
@@ -28,6 +28,10 @@ On Vercel: **Project → Settings → Environment Variables**, add `VITE_SITE_LI
 
 Locally: copy `.env.example` to `.env.local` and set `VITE_SITE_LIVE=true` to work on the full site.
 
+## Opening animation
+
+On a visitor's first page load of a browser session, a book opens, its pages riffle, three pages stop mid-turn and the shapes morph into the Elden mark; the screen then turns away like a page (`src/components/Intro.tsx`). It plays in both coming-soon and live modes, can be skipped by click, key press or the "Skip intro" button, and never plays for visitors who prefer reduced motion. Turn it off with `showIntro: false` in `src/config.ts`.
+
 ## Pages
 
 | Route | Page |
@@ -43,7 +47,7 @@ There's no checkout. Every title offers **Request a sample**, plus school/bulk, 
 
 ## Project layout
 
-- `src/config.ts` — elmaster URL, announcement bar and header elmaster link toggles
+- `src/config.ts` — site URL, contact email, head office, elmaster URL, intro and header/top-bar toggles
 - `src/data.ts` — catalogue, Study Hub resources, distributors
 - `src/catalogue.ts` — filtering, sorting and URL helpers
 - `src/api.ts` — form submission hook (`submitForm`)
@@ -52,8 +56,8 @@ There's no checkout. Every title offers **Request a sample**, plus school/bulk, 
 
 ## Still placeholder
 
-- **Content:** book titles, authors, prices, ISBNs, distributors, email and office address are sample data in `src/data.ts` / `src/pages/Contact.tsx`.
+- **Content:** book titles, authors, prices, ISBNs and distributors are sample data in `src/data.ts`.
 - **Covers:** typeset colour-block covers (`BookCover`) — swap in real cover images.
 - **Forms:** `submitForm` in `src/api.ts` only logs in dev; connect it to email/CRM/API.
 - **Downloads:** Study Hub buttons mark items as downloaded; link them to the real PDFs.
-- **elmaster:** URL (`https://elmaster.in`), teal colour, text wordmark and the screenshot placeholder on the home page.
+- **elmaster:** no URL yet (`elmasterUrl: ''`), so it's mentioned without links or buttons — set the address in `src/config.ts` to turn them on. The teal colour, text wordmark and home-page screenshot placeholder also need the real branding.

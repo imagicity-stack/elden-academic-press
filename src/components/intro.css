@@ -1,0 +1,48 @@
+/* Opening animation overlay (see Intro.tsx). */
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  cursor: pointer;
+  background-color: #FBF8F2;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .28 0 0 0 0 .18 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  transform-origin: left center;
+  backface-visibility: hidden;
+}
+/* Page-edge shading that deepens as the screen turns away */
+.intro::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(14, 31, 51, 0) 40%, rgba(14, 31, 51, .28)); opacity: 0; }
+
+.intro__stage { width: min(84vw, 58vh, 540px); display: flex; flex-direction: column; align-items: center; }
+.intro__svg { width: 100%; height: auto; display: block; overflow: visible; animation: intro-in .45s ease both; }
+.intro__text { fill: none; stroke: #E4D9C7; stroke-width: 9; stroke-linecap: round; }
+.intro__cover-title { fill: #E2B68A; font: 600 86px var(--serif); letter-spacing: .3em; text-anchor: middle; }
+.intro__cover-sub { fill: #CC955F; font: 500 24px var(--sans); letter-spacing: .42em; text-anchor: middle; }
+
+.intro__word { margin-top: clamp(14px, 2.4vh, 26px); display: flex; flex-direction: column; align-items: center; text-align: center; }
+.intro__name { font: 600 clamp(36px, 5.6vh, 56px)/1 var(--serif); letter-spacing: .32em; margin-right: -.32em; color: #0B0D10; }
+.intro__name span { display: inline-block; opacity: 0; transform: translateY(16px); }
+.intro__sub { margin-top: 12px; margin-right: -.42em; font: 500 clamp(10px, 1.5vh, 13px)/1 var(--sans); letter-spacing: .42em; color: var(--bronze-text); opacity: 0; }
+.intro__url { margin-top: 22px; font: 400 12px/1 var(--mono); letter-spacing: .08em; color: #8A857B; opacity: 0; }
+.intro.is-word .intro__name span { animation: intro-letter .7s cubic-bezier(.2, .7, .2, 1) forwards; animation-delay: calc(var(--i) * 70ms); }
+.intro.is-word .intro__sub { animation: intro-fade .6s ease .45s forwards; }
+.intro.is-word .intro__url { animation: intro-fade .6s ease .8s forwards; }
+
+.intro__skip { position: absolute; right: 16px; bottom: 14px; background: none; border: 0; padding: 10px; font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #8A857B; }
+.intro__skip:hover { color: var(--navy); }
+
+/* Exit: the whole screen turns like a page, revealing the site underneath */
+.intro.is-leaving { pointer-events: none; animation: intro-turn 1s cubic-bezier(.6, 0, .4, 1) forwards; }
+.intro.is-leaving::after { animation: intro-fade .7s ease forwards; }
+
+@keyframes intro-in { from { opacity: 0; transform: scale(.96); } }
+@keyframes intro-fade { to { opacity: 1; } }
+@keyframes intro-letter { to { opacity: 1; transform: none; } }
+@keyframes intro-turn {
+  0% { transform: perspective(2600px) rotateY(0); }
+  100% { transform: perspective(2600px) rotateY(-96deg); }
+}
