@@ -18,6 +18,12 @@ const AdminApp = lazy(() => import('./admin/AdminApp'));
 // The admin works whether or not the store is live, so products can be set up before launch.
 const isAdmin = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/');
 
+// Before launch, staff signed in to /admin in this browser see the full site,
+// to check it and place test orders. Signing out of the admin ends the preview.
+const staffPreview = !live && (() => {
+  try { return Boolean(localStorage.getItem('elden-admin-auth')); } catch { return false; }
+})();
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isAdmin ? (
@@ -26,9 +32,14 @@ createRoot(document.getElementById('root')!).render(
       </BrowserRouter>
     ) : (
       <WithIntro>
-        {live ? (
+        {live || staffPreview ? (
           <BrowserRouter>
             <Suspense fallback={null}><App /></Suspense>
+            {staffPreview && (
+              <div className="preview-bar" role="status">
+                Preview: visitors still see the coming-soon page. <a href="/admin">Admin</a>
+              </div>
+            )}
           </BrowserRouter>
         ) : (
           <ComingSoon />
