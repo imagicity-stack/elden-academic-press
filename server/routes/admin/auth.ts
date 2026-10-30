@@ -3,10 +3,10 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { eq, sql } from 'drizzle-orm';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
-import type { AppEnv } from '../../app';
-import { adminUsers, auditLog } from '../../db/schema';
-import { HttpError } from '../../lib/http';
-import { getSettings } from '../../services/catalog';
+import type { AppEnv } from '../../app.js';
+import { adminUsers, auditLog } from '../../db/schema.js';
+import { HttpError } from '../../lib/http.js';
+import { getSettings } from '../../services/catalog.js';
 
 export type Role = 'owner' | 'manager' | 'staff';
 export interface AdminSession { userId: string; email: string; name: string; role: Role; aal: string; mfaRequired: boolean }

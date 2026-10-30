@@ -1,11 +1,11 @@
 // Transactional emails. Plain, table-based HTML that renders in every mail app.
-import type { Deps } from '../deps';
-import type { enquiries, orderItems, orders } from '../db/schema';
-import { esc, inr, istDate } from '../lib/format';
-import { sendSafely } from '../lib/mail';
-import { stateName } from '../lib/states';
-import type { Settings } from './catalog';
-import { orderLink } from './orders';
+import type { Deps } from '../deps.js';
+import type { enquiries, orderItems, orders } from '../db/schema.js';
+import { esc, inr, istDate } from '../lib/format.js';
+import { sendSafely } from '../lib/mail.js';
+import { stateName } from '../lib/states.js';
+import type { Settings } from './catalog.js';
+import { orderLink } from './orders.js';
 
 type Order = typeof orders.$inferSelect;
 type Item = typeof orderItems.$inferSelect;

@@ -1,6 +1,6 @@
 // Razorpay: server-side order creation, payment checks, captures and refunds.
 // https://razorpay.com/docs/api/
-import { hmacHex, randomToken, safeEqual } from './crypto';
+import { hmacHex, randomToken, safeEqual } from './crypto.js';
 
 export interface RzpOrder { id: string; amount: number; currency: string; status: string; receipt?: string }
 export interface RzpPayment {

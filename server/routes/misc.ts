@@ -3,15 +3,15 @@ import { Hono } from 'hono';
 import { readFile } from 'node:fs/promises';
 import { join, normalize } from 'node:path';
 import { z } from 'zod';
-import type { AppEnv } from '../app';
-import { enquiries, orders } from '../db/schema';
-import { safeEqual } from '../lib/crypto';
-import { body, HttpError, notFound, rateLimit, zEmail, zName, zText } from '../lib/http';
-import type { localStorage } from '../lib/storage';
+import type { AppEnv } from '../app.js';
+import { enquiries, orders } from '../db/schema.js';
+import { safeEqual } from '../lib/crypto.js';
+import { body, HttpError, notFound, rateLimit, zEmail, zName, zText } from '../lib/http.js';
+import type { localStorage } from '../lib/storage.js';
 import { eq } from 'drizzle-orm';
-import { getSettings } from '../services/catalog';
-import { sendEnquiryNotice } from '../services/emails';
-import { expireOrders } from '../services/orders';
+import { getSettings } from '../services/catalog.js';
+import { sendEnquiryNotice } from '../services/emails.js';
+import { expireOrders } from '../services/orders.js';
 
 /* ---------------- Enquiry forms ---------------- */
 

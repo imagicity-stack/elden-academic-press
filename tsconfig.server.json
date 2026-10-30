@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["server", "api", "tests", "src/data.ts", "drizzle.config.ts"]
+  "include": ["server", "api", "tests", "scripts", "src/data.ts", "drizzle.config.ts"]
 }

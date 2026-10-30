@@ -4,7 +4,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { hmacHex, safeEqual } from './crypto';
+import { hmacHex, safeEqual } from './crypto.js';
 
 export type Bucket = 'covers' | 'ebooks' | 'resources';
 export const PUBLIC_BUCKETS: Bucket[] = ['covers', 'resources'];

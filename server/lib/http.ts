@@ -1,8 +1,8 @@
 import type { Context } from 'hono';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import type { Q } from '../db/client';
-import { rateLimits } from '../db/schema';
+import type { Q } from '../db/client.js';
+import { rateLimits } from '../db/schema.js';
 
 export class HttpError extends Error {
   constructor(readonly status: 400 | 401 | 402 | 403 | 404 | 409 | 410 | 422 | 429 | 500 | 502 | 503, message: string, readonly code?: string, readonly details?: unknown) {

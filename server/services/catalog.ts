@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
-import type { Q } from '../db/client';
-import { categories, coupons, productVariants, products, settings } from '../db/schema';
-import type { CouponRow, Kind, ProductRow } from '../lib/pricing';
-import type { Storage } from '../lib/storage';
+import type { Q } from '../db/client.js';
+import { categories, coupons, productVariants, products, settings } from '../db/schema.js';
+import type { CouponRow, Kind, ProductRow } from '../lib/pricing.js';
+import type { Storage } from '../lib/storage.js';
 
 export type Settings = typeof settings.$inferSelect;
 export type Product = typeof products.$inferSelect;

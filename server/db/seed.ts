@@ -1,8 +1,8 @@
 // Starter data: categories always; demo products, coupons and Study Hub files
 // (from the design's sample catalogue) only when asked for.
-import { BOOKS, RES, TYPES, contentsFor, highlightsFor, specsFor } from '../../src/data';
-import type { Q } from './client';
-import { categories, coupons, productVariants, products, resources } from './schema';
+import { BOOKS, RES, TYPES, contentsFor, highlightsFor, specsFor } from '../../src/data.js';
+import type { Q } from './client.js';
+import { categories, coupons, productVariants, products, resources } from './schema.js';
 
 const CATEGORY_NAMES: Record<string, string> = {
   Textbook: 'Textbooks', Reference: 'Reference books', 'Study Guide': 'Study guides',

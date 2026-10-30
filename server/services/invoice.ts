@@ -1,8 +1,8 @@
 // Printable GST invoice / packing slip (HTML; the browser's Print → Save as PDF makes the file).
-import type { orderItems, orders } from '../db/schema';
-import { esc, inr, istDate } from '../lib/format';
-import { stateName } from '../lib/states';
-import type { Settings } from './catalog';
+import type { orderItems, orders } from '../db/schema.js';
+import { esc, inr, istDate } from '../lib/format.js';
+import { stateName } from '../lib/states.js';
+import type { Settings } from './catalog.js';
 
 type Order = typeof orders.$inferSelect;
 type Item = typeof orderItems.$inferSelect;

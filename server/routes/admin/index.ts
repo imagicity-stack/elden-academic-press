@@ -3,18 +3,18 @@ import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from 'drizzle-or
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import type { AppEnv } from '../../app';
-import { adminUsers, auditLog, enquiries, orderItems, orders, productVariants, products, settings } from '../../db/schema';
-import { body, HttpError, notFound, query, zText } from '../../lib/http';
-import { isStateCode } from '../../lib/states';
-import { getSettings } from '../../services/catalog';
-import { orderStatusLabel } from '../orders';
-import { audit, requireAdmin, requireRole } from './auth';
-import { adminOrders } from './orders';
-import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people';
-import { adminCategories, adminInventory, adminProducts, adminUploads } from './products';
+import type { AppEnv } from '../../app.js';
+import { adminUsers, auditLog, enquiries, orderItems, orders, productVariants, products, settings } from '../../db/schema.js';
+import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
+import { isStateCode } from '../../lib/states.js';
+import { getSettings } from '../../services/catalog.js';
+import { orderStatusLabel } from '../orders.js';
+import { audit, requireAdmin, requireRole } from './auth.js';
+import { adminOrders } from './orders.js';
+import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
+import { adminCategories, adminInventory, adminProducts, adminUploads } from './products.js';
 
-export type { AdminSession } from './auth';
+export type { AdminSession } from './auth.js';
 
 export const admin = new Hono<AppEnv>();
 

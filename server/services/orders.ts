@@ -1,15 +1,15 @@
 import { and, eq, inArray, lt, sql } from 'drizzle-orm';
-import type { Deps } from '../deps';
-import type { Q, Tx } from '../db/client';
+import type { Deps } from '../deps.js';
+import type { Q, Tx } from '../db/client.js';
 import {
   customers, coupons, inventoryMovements, invoiceCounters, orderEvents, orderItems, orders, payments, productVariants, refunds,
-} from '../db/schema';
-import { hmacHex, safeEqual } from '../lib/crypto';
-import { HttpError } from '../lib/http';
-import { priceCart, type CartLineInput, type Quote } from '../lib/pricing';
-import type { RzpPayment } from '../lib/razorpay';
-import { findCoupon, getSettings, loadPricingProducts, type Settings } from './catalog';
-import { sendOrderConfirmation, sendStoreNewOrder } from './emails';
+} from '../db/schema.js';
+import { hmacHex, safeEqual } from '../lib/crypto.js';
+import { HttpError } from '../lib/http.js';
+import { priceCart, type CartLineInput, type Quote } from '../lib/pricing.js';
+import type { RzpPayment } from '../lib/razorpay.js';
+import { findCoupon, getSettings, loadPricingProducts, type Settings } from './catalog.js';
+import { sendOrderConfirmation, sendStoreNewOrder } from './emails.js';
 
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;

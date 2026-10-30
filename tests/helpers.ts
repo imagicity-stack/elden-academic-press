@@ -1,16 +1,16 @@
 import { SignJWT } from 'jose';
-import { createApp } from '../server/app';
+import { createApp } from '../server/app.js';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
-import { MIGRATIONS_DIR, type DB } from '../server/db/client';
-import * as schema from '../server/db/schema';
-import { seedDemo } from '../server/db/seed';
-import type { Deps } from '../server/deps';
-import { loadEnv } from '../server/env';
-import { memoryMailer } from '../server/lib/mail';
-import { razorpaySimulator } from '../server/lib/razorpay';
-import type { Storage } from '../server/lib/storage';
+import { MIGRATIONS_DIR, type DB } from '../server/db/client.js';
+import * as schema from '../server/db/schema.js';
+import { seedDemo } from '../server/db/seed.js';
+import type { Deps } from '../server/deps.js';
+import { loadEnv } from '../server/env.js';
+import { memoryMailer } from '../server/lib/mail.js';
+import { razorpaySimulator } from '../server/lib/razorpay.js';
+import type { Storage } from '../server/lib/storage.js';
 
 export const JWT_SECRET = 'test-jwt-secret-that-is-long-enough-123456';
 export const SUPABASE_URL = 'https://test.supabase.co';

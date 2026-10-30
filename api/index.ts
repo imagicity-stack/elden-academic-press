@@ -1,6 +1,6 @@
 // Vercel Function entry: every /api/* request is rewritten here (see vercel.json).
-import { createApp } from '../server/app';
-import { getDeps } from '../server/deps';
+import { createApp } from '../server/app.js';
+import { getDeps } from '../server/deps.js';
 
 const app = createApp(getDeps);
 const handle = (req: Request) => app.fetch(req);

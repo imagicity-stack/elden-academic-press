@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { hmacHex } from '../server/lib/crypto';
-import { inventoryMovements, orders, productVariants, products } from '../server/db/schema';
-import { address, contact, setup, WEBHOOK_SECRET } from './helpers';
+import { hmacHex } from '../server/lib/crypto.js';
+import { inventoryMovements, orders, productVariants, products } from '../server/db/schema.js';
+import { address, contact, setup, WEBHOOK_SECRET } from './helpers.js';
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
 let t: Ctx;

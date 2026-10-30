@@ -2,13 +2,13 @@
 import { Hono, type Context } from 'hono';
 import { and, asc, eq, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import type { AppEnv } from '../app';
-import { orderEvents, orderItems, orders, productVariants } from '../db/schema';
-import { body, HttpError, notFound, rateLimit } from '../lib/http';
-import { getSettings } from '../services/catalog';
-import { sendOrderLink } from '../services/emails';
-import { renderInvoice } from '../services/invoice';
-import { checkOrderToken, type Order } from '../services/orders';
+import type { AppEnv } from '../app.js';
+import { orderEvents, orderItems, orders, productVariants } from '../db/schema.js';
+import { body, HttpError, notFound, rateLimit } from '../lib/http.js';
+import { getSettings } from '../services/catalog.js';
+import { sendOrderLink } from '../services/emails.js';
+import { renderInvoice } from '../services/invoice.js';
+import { checkOrderToken, type Order } from '../services/orders.js';
 
 export const customerOrders = new Hono<AppEnv>();
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apportion, priceCart, splitInclusive, type CouponRow, type ProductRow, type VariantRow } from '../server/lib/pricing';
+import { apportion, priceCart, splitInclusive, type CouponRow, type ProductRow, type VariantRow } from '../server/lib/pricing.js';
 
 const v = (kind: VariantRow['kind'], price: number, extra: Partial<VariantRow> = {}): VariantRow => ({
   kind, price, compareAtPrice: null, sku: kind, stock: 10, trackStock: true, weightGrams: 400, taxRate: kind === 'digital' ? 18 : 0, active: true, hasFile: true, ...extra,

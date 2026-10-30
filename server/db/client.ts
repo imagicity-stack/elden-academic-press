@@ -2,8 +2,8 @@ import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { drizzle as drizzlePostgres, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import type { Env } from '../env';
-import * as schema from './schema';
+import type { Env } from '../env.js';
+import * as schema from './schema.js';
 
 export type DB = PostgresJsDatabase<typeof schema>;
 /** A database handle or an open transaction — both run the same queries. */

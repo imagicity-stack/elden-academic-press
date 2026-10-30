@@ -15,6 +15,13 @@
       "when": 1793363978922,
       "tag": "0001_security",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793366707702,
+      "tag": "0002_supabase_storage",
+      "breakpoints": true
     }
   ]
 }

@@ -2,12 +2,12 @@
 // closes the browser before the success page loads.
 import { Hono } from 'hono';
 import { eq, sql } from 'drizzle-orm';
-import type { AppEnv } from '../app';
-import { orders, refunds, webhookEvents } from '../db/schema';
-import { sha256 } from '../lib/crypto';
-import { HttpError } from '../lib/http';
-import { verifyWebhookSignature, type RzpPayment } from '../lib/razorpay';
-import { logEvent, markPaid } from '../services/orders';
+import type { AppEnv } from '../app.js';
+import { orders, refunds, webhookEvents } from '../db/schema.js';
+import { sha256 } from '../lib/crypto.js';
+import { HttpError } from '../lib/http.js';
+import { verifyWebhookSignature, type RzpPayment } from '../lib/razorpay.js';
+import { logEvent, markPaid } from '../services/orders.js';
 
 export const webhooks = new Hono<AppEnv>();
 

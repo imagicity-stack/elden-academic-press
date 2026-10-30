@@ -1,14 +1,14 @@
 // The store API (mounted at /api). Runs as one Vercel function in production
 // and inside Vite's dev server locally.
 import { Hono } from 'hono';
-import type { Deps } from './deps';
-import { clientIp, HttpError } from './lib/http';
-import { RazorpayError } from './lib/razorpay';
-import { admin, type AdminSession } from './routes/admin';
-import { cron, dev, forms } from './routes/misc';
-import { customerOrders } from './routes/orders';
-import { store } from './routes/store';
-import { webhooks } from './routes/webhooks';
+import type { Deps } from './deps.js';
+import { clientIp, HttpError } from './lib/http.js';
+import { RazorpayError } from './lib/razorpay.js';
+import { admin, type AdminSession } from './routes/admin/index.js';
+import { cron, dev, forms } from './routes/misc.js';
+import { customerOrders } from './routes/orders.js';
+import { store } from './routes/store.js';
+import { webhooks } from './routes/webhooks.js';
 
 export type AppEnv = { Variables: { deps: Deps; ip: string; admin: AdminSession } };
 

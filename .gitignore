@@ -4,5 +4,6 @@ dist
 .env
 .env.local
 .data
-.env.local
 coverage
+.vercel-check
+.vercel

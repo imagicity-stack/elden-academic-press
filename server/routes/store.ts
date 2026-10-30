@@ -2,13 +2,13 @@
 import { Hono } from 'hono';
 import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import type { AppEnv } from '../app';
-import { orders, resources } from '../db/schema';
-import { body, HttpError, notFound, rateLimit, zEmail, zName, zPhone, zPincode, zText } from '../lib/http';
-import { MAX_QTY } from '../lib/pricing';
-import { STATES, isStateCode } from '../lib/states';
-import { getSettings, loadCatalog } from '../services/catalog';
-import { confirmRazorpayPayment, createOrder, logEvent, orderToken, quote } from '../services/orders';
+import type { AppEnv } from '../app.js';
+import { orders, resources } from '../db/schema.js';
+import { body, HttpError, notFound, rateLimit, zEmail, zName, zPhone, zPincode, zText } from '../lib/http.js';
+import { MAX_QTY } from '../lib/pricing.js';
+import { STATES, isStateCode } from '../lib/states.js';
+import { getSettings, loadCatalog } from '../services/catalog.js';
+import { confirmRazorpayPayment, createOrder, logEvent, orderToken, quote } from '../services/orders.js';
 
 const zState = z.string().refine(isStateCode, 'Choose a state');
 const zItems = z.array(z.object({

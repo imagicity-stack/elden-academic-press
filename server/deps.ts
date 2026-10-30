@@ -1,13 +1,13 @@
 import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { count } from 'drizzle-orm';
-import { getDb, type DB } from './db/client';
-import { products, productVariants, resources } from './db/schema';
-import { samplePdf, seedDemo } from './db/seed';
-import { loadEnv, type Env } from './env';
-import { consoleMailer, resendMailer, type Mailer } from './lib/mail';
-import { razorpayHttp, razorpaySimulator, type Razorpay } from './lib/razorpay';
-import { localStorage, supabaseStorage, type Storage } from './lib/storage';
+import { getDb, type DB } from './db/client.js';
+import { products, productVariants, resources } from './db/schema.js';
+import { samplePdf, seedDemo } from './db/seed.js';
+import { loadEnv, type Env } from './env.js';
+import { consoleMailer, resendMailer, type Mailer } from './lib/mail.js';
+import { razorpayHttp, razorpaySimulator, type Razorpay } from './lib/razorpay.js';
+import { localStorage, supabaseStorage, type Storage } from './lib/storage.js';
 
 export interface Deps {
   env: Env;

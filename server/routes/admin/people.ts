@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
-import type { AppEnv } from '../../app';
-import { coupons, customers, enquiries, orders, resources } from '../../db/schema';
-import { toCsv } from '../../lib/csv';
-import { body, HttpError, notFound, query, zText } from '../../lib/http';
-import { orderStatusLabel } from '../orders';
-import { audit, requireRole } from './auth';
+import type { AppEnv } from '../../app.js';
+import { coupons, customers, enquiries, orders, resources } from '../../db/schema.js';
+import { toCsv } from '../../lib/csv.js';
+import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
+import { orderStatusLabel } from '../orders.js';
+import { audit, requireRole } from './auth.js';
 
 const likeOf = (q: string) => `%${q.replace(/[%_]/g, '\\$&')}%`;
 const zPage = { page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(200).default(50) };

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { adminUsers, auditLog, productVariants, products } from '../server/db/schema';
-import { address, contact, setup, supabaseToken } from './helpers';
+import { adminUsers, auditLog, productVariants, products } from '../server/db/schema.js';
+import { address, contact, setup, supabaseToken } from './helpers.js';
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
 let t: Ctx;

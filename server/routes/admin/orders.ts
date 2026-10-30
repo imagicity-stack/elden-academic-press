@@ -1,17 +1,17 @@
 import { Hono, type Context } from 'hono';
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
-import type { AppEnv } from '../../app';
-import { customers, orderEvents, orderItems, orders, payments, refunds } from '../../db/schema';
-import { toCsv } from '../../lib/csv';
-import { body, HttpError, notFound, query, zText } from '../../lib/http';
-import { stateName } from '../../lib/states';
-import { getSettings } from '../../services/catalog';
-import { sendOrderConfirmation, sendRefundNotice, sendShipped } from '../../services/emails';
-import { renderInvoice, renderPackingSlip } from '../../services/invoice';
-import { cancelUnpaid, logEvent, orderLink, refundOrder } from '../../services/orders';
-import { orderStatusLabel } from '../orders';
-import { audit, requireRole } from './auth';
+import type { AppEnv } from '../../app.js';
+import { customers, orderEvents, orderItems, orders, payments, refunds } from '../../db/schema.js';
+import { toCsv } from '../../lib/csv.js';
+import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
+import { stateName } from '../../lib/states.js';
+import { getSettings } from '../../services/catalog.js';
+import { sendOrderConfirmation, sendRefundNotice, sendShipped } from '../../services/emails.js';
+import { renderInvoice, renderPackingSlip } from '../../services/invoice.js';
+import { cancelUnpaid, logEvent, orderLink, refundOrder } from '../../services/orders.js';
+import { orderStatusLabel } from '../orders.js';
+import { audit, requireRole } from './auth.js';
 
 export const adminOrders = new Hono<AppEnv>();
 
