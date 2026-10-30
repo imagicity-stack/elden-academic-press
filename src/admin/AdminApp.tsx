@@ -25,7 +25,7 @@ const AdminCtx = createContext<{ me: Me; counts: Counts | null; refreshCounts():
 export const useMe = () => useContext(AdminCtx);
 export const canManage = (me: Me) => me.role !== 'staff';
 
-type Gate = { state: 'checking' } | { state: 'signin' } | { state: 'mfa' } | { state: 'password' } | { state: 'denied'; message: string } | { state: 'ready'; me: Me };
+type Gate = { state: 'checking' } | { state: 'signin' } | { state: 'mfa' } | { state: 'password' } | { state: 'denied'; message: string } | { state: 'error'; message: string } | { state: 'ready'; me: Me };
 
 export default function AdminApp() {
   const [gate, setGate] = useState<Gate>({ state: 'checking' });
@@ -38,7 +38,8 @@ export default function AdminApp() {
       else setGate(me.mfaSatisfied ? { state: 'ready', me } : { state: 'mfa' });
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) setGate({ state: 'denied', message: e.message });
-      else setGate({ state: 'signin' });
+      else if (e instanceof ApiError && e.status === 401) setGate({ state: 'signin' });
+      else setGate({ state: 'error', message: errorMessage(e) });
     }
   }, []);
 
@@ -67,6 +68,13 @@ export default function AdminApp() {
           <p>{gate.message}</p>
           <p>Ask the store owner to add you under Staff.</p>
           <Btn onClick={() => signOut().then(() => setGate({ state: 'signin' }))}>Sign out</Btn>
+        </GateCard>
+      )}
+      {gate.state === 'error' && (
+        <GateCard title="The store’s server isn’t ready">
+          <p>{gate.message}</p>
+          <p>Open the <a href="/api/health" target="_blank" rel="noreferrer">setup check</a> to see what still needs setting up.</p>
+          <Btn onClick={() => { setGate({ state: 'checking' }); check(); }}>Try again</Btn>
         </GateCard>
       )}
       {gate.state === 'ready' && <Shell me={gate.me} />}
