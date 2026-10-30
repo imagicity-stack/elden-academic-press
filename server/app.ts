@@ -9,11 +9,20 @@ import { cron, dev, forms } from './routes/misc.js';
 import { customerOrders } from './routes/orders.js';
 import { store } from './routes/store.js';
 import { webhooks } from './routes/webhooks.js';
+import { healthCheck, type Health } from './services/health.js';
 
 export type AppEnv = { Variables: { deps: Deps; ip: string; admin: AdminSession } };
 
 export function createApp(getDeps: () => Promise<Deps>) {
   const app = new Hono<AppEnv>().basePath('/api');
+
+  // Before the middleware below, so it can report settings that stop the rest from starting.
+  let health: { at: number; result: Promise<Health> } | undefined;
+  app.get('/health', async (c) => {
+    if (!health || Date.now() - health.at > 10_000) health = { at: Date.now(), result: healthCheck(getDeps) };
+    const h = await health.result;
+    return c.json(h, h.ok ? 200 : 503, { 'Cache-Control': 'no-store' });
+  });
 
   app.use('*', async (c, next) => {
     c.set('deps', await getDeps());
@@ -36,11 +45,6 @@ export function createApp(getDeps: () => Promise<Deps>) {
   });
 
   app.notFound((c) => c.json({ error: 'Not found', code: 'not_found' }, 404));
-
-  app.get('/health', async (c) => {
-    const { razorpay, env } = c.get('deps');
-    return c.json({ ok: true, payments: Boolean(razorpay), simulated: razorpay?.simulated ?? false, production: env.isProduction });
-  });
 
   app.route('/', store);
   app.route('/', forms);

@@ -14,10 +14,10 @@ export const slugify = (s: string) =>
 /** Sample e-book file path used for demo products. */
 export const samplePdfPath = (slug: string) => `samples/${slug}.pdf`;
 
+export const STANDARD_CATEGORIES = TYPES.map((t, i) => ({ name: CATEGORY_NAMES[t], slug: slugify(CATEGORY_NAMES[t]), sort: i }));
+
 export async function seedCategories(db: Q) {
-  await db.insert(categories)
-    .values(TYPES.map((t, i) => ({ name: CATEGORY_NAMES[t], slug: slugify(CATEGORY_NAMES[t]), sort: i })))
-    .onConflictDoNothing();
+  await db.insert(categories).values(STANDARD_CATEGORIES).onConflictDoNothing();
   return db.select().from(categories);
 }
 

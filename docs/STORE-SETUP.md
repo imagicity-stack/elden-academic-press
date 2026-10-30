@@ -11,23 +11,43 @@ Keys go into Vercel's settings — never into code, chat or email.
 
 ## 1. Supabase
 
-1. Create a project at [supabase.com](https://supabase.com). Choose region **Mumbai (ap-south-1)** and save the database password somewhere safe.
-2. **Project Settings → API**: copy the **Project URL**, the **anon / publishable key** and the **service_role / secret key**.
-3. **Connect** (top of the dashboard): copy two connection strings —
-   - **Transaction pooler** (port 6543) → this becomes `DATABASE_URL` on Vercel.
-   - **Session pooler** (port 5432) → used once, below, to create the tables.
-4. Create the tables and storage folders from a computer with this repository:
-   ```sh
-   npm install
-   DATABASE_URL="<session pooler string>" npm run db:migrate
-   DATABASE_URL="<session pooler string>" npm run db:seed      # the six standard categories
-   ```
-   This also creates the `covers`, `resources` (public) and `ebooks` (private) storage buckets and locks every table so Supabase's public API keys can't read store data.
-5. **Authentication → Sign In / Providers**: turn **off** “Allow new users to sign up”. Staff accounts are only created by invitation from the admin.
-6. **Authentication → URL Configuration**: Site URL `https://eldenap.in`; add `https://eldenap.in/admin` to Redirect URLs.
-7. **Authentication → Multi-Factor**: make sure **TOTP (authenticator app)** is enabled.
-8. **Authentication → Users → Add user**: create your own account with the email you'll use as owner (e.g. `hello@eldenap.in`) and a strong password; tick *Auto confirm*.
-9. **Authentication → Emails → SMTP settings**: connect Resend's SMTP (step 3) so invitation and password-reset emails come from your domain and aren't rate-limited.
+Everything here is done in the browser at [supabase.com/dashboard](https://supabase.com/dashboard) — no software to install.
+
+**a. Check the region.** Click **Connect** (top of the project). In the connection strings, the address should contain `ap-south-1` (Mumbai). If it shows somewhere far away (e.g. `us-east-1`), delete the project and create a new one in **Mumbai** now, while it's empty — the region can't be changed later, and a distant database makes every page slower.
+
+**b. Create the tables.** Left sidebar → **SQL Editor** → **New query**. Paste the whole of [`docs/supabase-setup.sql`](supabase-setup.sql) and click **Run**. If Supabase shows a warning, choose to run it anyway (the script switches on row-level security itself). You should see *Success. No rows returned*. This creates the store's tables, locks them against Supabase's public keys, creates the `covers`, `resources` and `ebooks` storage buckets, and adds six starting categories. Run it only once.
+
+**c. Sign-in settings** (left sidebar → **Authentication**):
+1. **Sign In / Providers** → turn **off** *Allow new users to sign up* → Save. Staff are added only by invitation from the admin.
+2. **URL Configuration** → *Site URL* `https://eldenap.in` → Save; under *Redirect URLs* → **Add URL** → `https://eldenap.in/admin`.
+3. **Multi-Factor** → check *TOTP (App Authenticator)* is enabled (it is by default).
+4. **Users** → **Add user** → **Create new user** → your email (e.g. `hello@eldenap.in`) and a strong password, tick **Auto Confirm User** → Create. This is the owner login for `/admin`.
+
+**d. Copy the values for Vercel** (keep them private — paste them only into Vercel):
+
+| Vercel variable | Where in Supabase |
+|---|---|
+| `SUPABASE_URL` and `VITE_SUPABASE_URL` | `https://<Project ID>.supabase.co` — the Project ID is in **Project Settings → General** |
+| `VITE_SUPABASE_ANON_KEY` | **Project Settings → API Keys** → *Publishable key* (`sb_publishable_…`), or on the *Legacy API Keys* tab the `anon` key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Same page → *Secret key* (`sb_secret_…`, click Reveal), or the legacy `service_role` key. **Never share this one.** |
+| `DATABASE_URL` | **Connect** → *Connection String* → **Transaction pooler** (port **6543**). Replace `[YOUR-PASSWORD]` with your database password (no brackets). |
+| `SUPABASE_JWT_SECRET` | **Project Settings → JWT Keys** → *Legacy JWT Secret* tab → Reveal. Needed while the project still signs with the legacy secret; harmless otherwise. |
+
+Forgot the database password, or it contains symbols like `@ # / ? %`? **Project Settings → Database → Reset database password** and use one made of letters and numbers only (symbols break the connection string).
+
+> Supabase's **Security Advisor** will list *“RLS enabled, no policy”* for the store tables. That's intended: nothing but the store's server may read them.
+
+<details><summary>Developers: the same from a terminal</summary>
+
+```sh
+npm install
+DATABASE_URL="<session pooler string, port 5432>" npm run db:migrate
+DATABASE_URL="<session pooler string, port 5432>" npm run db:seed
+```
+Use either this or the SQL file, not both. After changing the schema: `npm run db:generate && npm run db:setup-sql`.
+</details>
+
+**e. Emails from Supabase (later, before inviting staff).** **Authentication → Emails → SMTP Settings**: connect Resend's SMTP (step 3) so staff invitations and password resets come from your domain. Supabase's built-in sender only delivers to your own Supabase team members.
 
 ## 2. Razorpay
 
@@ -57,13 +77,14 @@ Keys go into Vercel's settings — never into code, chat or email.
    | `VITE_SUPABASE_ANON_KEY` | Supabase anon / publishable key |
    | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role / secret key |
    | `DATABASE_URL` | Transaction pooler string (port 6543) |
+   | `SUPABASE_JWT_SECRET` | Legacy JWT secret (step 1d) |
    | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Razorpay test keys |
    | `RAZORPAY_WEBHOOK_SECRET` | the webhook secret from step 2 |
    | `RESEND_API_KEY`, `MAIL_FROM` | from step 3 |
-   | `ADMIN_OWNER_EMAIL` | the email of the account you created in 1.8 |
+   | `ADMIN_OWNER_EMAIL` | the email of the user you created in step 1c |
    | `ORDER_LINK_SECRET`, `CRON_SECRET` | two different long random strings (e.g. `openssl rand -base64 48`) |
 
-3. **Redeploy**. Then open `https://eldenap.in/api/health` — it should say `"ok":true,"payments":true`.
+3. **Redeploy** (Deployments → ⋯ on the latest → Redeploy). Then open `https://eldenap.in/api/health`: `"ok": true` means the database and storage are connected, and the `todo` list names anything still missing or wrong (it never shows the values).
 
 ## 5. First sign-in and store setup
 

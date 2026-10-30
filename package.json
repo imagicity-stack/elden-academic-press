@@ -11,7 +11,8 @@
     "typecheck": "tsc -b && tsc -p tsconfig.server.json",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "db:setup-sql": "tsx scripts/supabase-sql.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
