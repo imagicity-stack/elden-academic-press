@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formData, submitForm } from '../api';
+import { useSubmit } from '../store/useSubmit';
 import { config } from '../config';
 import { DIST } from '../data';
 import { useSite } from '../site';
@@ -21,13 +22,7 @@ export function Contact() {
   const roleParam = sp.get('role');
   const [role, setRole] = useState(roleParam && ROLES.includes(roleParam) ? roleParam : 'Teacher');
   const [state, setState] = useState(STATES[0]);
-  const [sent, setSent] = useState(false);
-
-  const submit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    await submitForm('contact', { role, ...formData(e.currentTarget) });
-    setSent(true);
-  };
+  const { busy, error, sent, setSent, submit } = useSubmit((form) => submitForm('contact', { role, ...formData(form) }));
 
   const enquire = () => {
     setRole('Distributor');
@@ -70,7 +65,9 @@ export function Contact() {
                 <Field label="City" name="city" />
               </div>
               <TextField label="Message" name="message" />
-              <div><button type="submit" className="btn btn--navy btn--wide">Send message</button></div>
+              <input type="text" name="website" tabIndex={-1} autoComplete="off" className="hp" aria-hidden="true" />
+              {error && <div className="form-error" role="alert">{error}</div>}
+              <div><button type="submit" className="btn btn--navy btn--wide" disabled={busy}>{busy ? 'Sending…' : 'Send message'}</button></div>
             </form>
           )}
         </div>

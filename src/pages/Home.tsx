@@ -2,34 +2,25 @@ import { useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { catalogueHref } from '../catalogue';
 import { config } from '../config';
-import { BOOKS, RES, TYPES, findBook } from '../data';
+import { useCatalog, useResources } from '../store/catalog';
 import { useSite } from '../site';
 import { BookCard } from '../components/BookCard';
 import { BookCover } from '../components/BookCover';
 import { ElmasterMark } from '../components/Brand';
 import { ResourceRow } from '../components/ResourceRow';
 
-const HERO = [
-  { id: 'm8', x: '4%', y: '14%', r: '-7deg', z: 1 },
-  { id: 'neet', x: '30%', y: '4%', r: '0deg', z: 3 },
-  { id: 'phy11', x: '56%', y: '16%', r: '7deg', z: 2 },
+const HERO_POS = [
+  { x: '4%', y: '14%', r: '-7deg', z: 1 },
+  { x: '30%', y: '4%', r: '0deg', z: 3 },
+  { x: '56%', y: '16%', r: '7deg', z: 2 },
 ];
 
 const QUICK: [string, string][] = [
-  ['Class 10 sample papers', catalogueHref({ type: ['Practice Papers'], level: ['S'] })],
+  ['Class 10 sample papers', catalogueHref({ type: ['practice-papers'], level: ['S'] })],
   ['NEET', catalogueHref({}, 'NEET')],
   ['JEE Main', catalogueHref({}, 'JEE')],
   ['CUET', catalogueHref({}, 'CUET')],
   ['Class 1–5', catalogueHref({ level: ['P'] })],
-];
-
-const TYPE_LINKS = [
-  ...TYPES.map((t) => ({
-    label: t === 'Study Guide' ? 'Study guides' : t === 'Practice Papers' ? 'Practice papers' : t + 's',
-    count: BOOKS.filter((b) => b.ty === t).length,
-    to: catalogueHref({ type: [t] }),
-  })),
-  { label: 'E-books', count: BOOKS.filter((b) => b.eb).length, to: catalogueHref({ format: ['E-book'] }) },
 ];
 
 const ELM_FEATURES = [
@@ -43,6 +34,15 @@ export function Home() {
   const { openModal } = useSite();
   const navigate = useNavigate();
   const [q, setQ] = useState('');
+  const { products, categories } = useCatalog();
+  const { items: resources } = useResources();
+  const featured = products.filter((p) => p.featured);
+  const hero = (featured.length >= 3 ? featured : products).slice(0, 3);
+  const fresh = products.filter((p) => p.isNew && p.category?.slug !== 'journals').slice(0, 5);
+  const typeLinks = [
+    ...categories.map((c) => ({ label: c.name, count: products.filter((p) => p.category?.id === c.id).length, to: catalogueHref({ type: [c.slug] }) })).filter((l) => l.count),
+    { label: 'E-books', count: products.filter((p) => p.formats.digital).length, to: catalogueHref({ format: ['ebook'] }) },
+  ];
 
   const paths = [
     { n: '01', t: 'School, Class 1–12', d: 'Textbooks, workbooks and revision guides for CBSE, ICSE and State Boards.', cta: 'Browse school books', go: () => navigate(catalogueHref({ level: ['P', 'M', 'S', 'SS'] })) },
@@ -70,10 +70,10 @@ export function Home() {
           </div>
           <div className="hero__books">
             <div className="hero__books-bg" />
-            {HERO.map((h) => {
-              const bk = findBook(h.id)!;
+            {hero.map((bk, i) => {
+              const h = HERO_POS[i];
               return (
-                <Link key={h.id} to={'/books/' + h.id} className="hero__book" aria-label={bk.t}
+                <Link key={bk.id} to={'/books/' + bk.slug} className="hero__book" aria-label={bk.title}
                   style={{ left: h.x, top: h.y, transform: `rotate(${h.r})`, zIndex: h.z } as CSSProperties}>
                   <BookCover book={bk} size="hero" />
                 </Link>
@@ -100,7 +100,7 @@ export function Home() {
         </div>
         <div className="type-links">
           <span className="eyebrow eyebrow--11 eyebrow--tight">Browse by type</span>
-          {TYPE_LINKS.map((tl) => (
+          {typeLinks.map((tl) => (
             <Link key={tl.label} to={tl.to} className="type-link">{tl.label}<span>{tl.count}</span></Link>
           ))}
         </div>
@@ -115,7 +115,7 @@ export function Home() {
           <Link to="/catalogue" className="underline-link">View full catalogue →</Link>
         </div>
         <div className="grid-books grid-books--home">
-          {BOOKS.filter((b) => b.nw && b.ty !== 'Journal').slice(0, 5).map((b) => <BookCard key={b.id} book={b} />)}
+          {fresh.map((b) => <BookCard key={b.id} book={b} />)}
         </div>
       </section>
 
@@ -128,7 +128,7 @@ export function Home() {
             <div><Link to="/study-hub" className="btn btn--navy">Open the Study Hub</Link></div>
           </div>
           <div className="hub-promo__list">
-            {RES.slice(0, 5).map((r) => <ResourceRow key={r.id} r={r} compact />)}
+            {resources.slice(0, 5).map((r) => <ResourceRow key={r.id} r={r} compact />)}
           </div>
         </div>
       </section>
@@ -172,7 +172,7 @@ export function Home() {
           <p className="audience__p">We work with teachers, subject experts and researchers on textbooks, reference works and peer-reviewed articles.</p>
           <div className="audience__ctas">
             <Link to="/about" className="btn btn--navy btn--md">Submit a proposal</Link>
-            <Link to={catalogueHref({ type: ['Journal'] })} className="btn btn--outline btn--md">Browse journals</Link>
+            <Link to={catalogueHref({ type: ['journals'] })} className="btn btn--outline btn--md">Browse journals</Link>
           </div>
         </div>
       </section>

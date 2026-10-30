@@ -3,3 +3,7 @@ dist
 *.tsbuildinfo
 .env
 .env.local
+.data
+coverage
+.vercel-check
+.vercel

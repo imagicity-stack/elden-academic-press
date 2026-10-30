@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { formData, submitForm } from '../api';
-import { BOOKS, bookPrice, PAL } from '../data';
+import { useSubmit } from '../store/useSubmit';
+import { PAL } from '../data';
+import { inr } from '../store/api';
+import { fromPrice, useCatalog } from '../store/catalog';
 import { Field, SelectField, TextField } from '../components/Field';
 
 const PILLARS = [
@@ -18,15 +20,11 @@ const STEPS = [
   { n: '04', t: 'Publication', d: 'Print, e-book and elmaster companion, distributed across India.' },
 ];
 
-const JOURNALS = BOOKS.filter((b) => b.ty === 'Journal');
 
 export function About() {
-  const [sent, setSent] = useState(false);
-  const submit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    await submitForm('proposal', formData(e.currentTarget));
-    setSent(true);
-  };
+  const { products } = useCatalog();
+  const journals = products.filter((p) => p.category?.slug === 'journals');
+  const { busy, error, sent, setSent, submit } = useSubmit((form) => submitForm('proposal', formData(form)));
 
   return (
     <div>
@@ -81,8 +79,10 @@ export function About() {
                 <Field label="Class / level" name="level" />
               </div>
               <TextField label="Synopsis" name="synopsis" placeholder="What is the book about, who is it for, and how is it different?" />
+              <input type="text" name="website" tabIndex={-1} autoComplete="off" className="hp" aria-hidden="true" />
+              {error && <div className="form-error" role="alert">{error}</div>}
               <div className="form-submit-row">
-                <button type="submit" className="btn btn--navy btn--wide">Submit proposal</button>
+                <button type="submit" className="btn btn--navy btn--wide" disabled={busy}>{busy ? 'Sending…' : 'Submit proposal'}</button>
                 <span className="form-note">Sample chapters can follow by email.</span>
               </div>
             </form>
@@ -99,24 +99,28 @@ export function About() {
             </div>
           </div>
           <div className="journals">
-            {JOURNALS.map((j) => (
+            {journals.map((j) => {
+              const c = PAL[j.palette] ?? PAL[0];
+              const price = fromPrice(j);
+              return (
               <div key={j.id} className="journal">
-                <Link to={'/books/' + j.id} className="journal__cover" aria-label={j.t} style={{ background: PAL[j.p].bg, color: PAL[j.p].fg }}>
+                <Link to={'/books/' + j.slug} className="journal__cover" aria-label={j.title} style={j.coverUrl ? { backgroundImage: `url(${j.coverUrl})`, backgroundSize: 'cover' } : { background: c.bg, color: c.fg }}>
                   <span className="journal__spine" />
-                  <span className="journal__kicker" style={{ color: PAL[j.p].ac }}>Journal</span>
-                  <span className="journal__ctitle">{j.t}</span>
+                  {!j.coverUrl && <span className="journal__kicker" style={{ color: c.ac }}>Journal</span>}
+                  {!j.coverUrl && <span className="journal__ctitle">{j.title}</span>}
                 </Link>
                 <div className="journal__body">
-                  <div className="journal__t">{j.t}</div>
-                  <div className="journal__meta">{j.cl} · {bookPrice(j)}</div>
-                  <div className="journal__bl">{j.bl}</div>
+                  <div className="journal__t">{j.title}</div>
+                  <div className="journal__meta">{[j.classLabel, price !== null && 'From ' + inr(price)].filter(Boolean).join(' · ')}</div>
+                  <div className="journal__bl">{j.blurb}</div>
                   <div className="journal__links">
-                    <Link to={'/books/' + j.id} className="journal__link">Current issue</Link>
+                    <Link to={'/books/' + j.slug} className="journal__link">Buy this issue</Link>
                     <Link to="/contact" className="journal__link journal__link--bronze">Submit a manuscript</Link>
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>

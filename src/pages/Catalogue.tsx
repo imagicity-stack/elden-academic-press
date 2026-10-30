@@ -1,35 +1,37 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { EMPTY, FACETS, SORTS, filterAndSort, optLabel, passes, readParams, toParams, valuesOf, type FacetKey, type Filters, type Sort } from '../catalogue';
-import { BOOKS } from '../data';
+import { buildFacets, EMPTY, SORTS, filterAndSort, optLabel, passes, readParams, toParams, valuesOf, type FacetKey, type Filters, type Sort } from '../catalogue';
+import { useCatalog } from '../store/catalog';
 import { BookCard } from '../components/BookCard';
 
 export function Catalogue() {
+  const { products, categories, status, reload } = useCatalog();
   const [sp, setSp] = useSearchParams();
   const { f, q, sort } = readParams(sp);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const facets = useMemo(() => buildFacets(products, categories), [products, categories]);
 
   const update = (nf: Filters, nq: string, ns: Sort) => setSp(toParams(nf, nq, ns), { replace: true });
   const toggle = (k: FacetKey, o: string) =>
     update({ ...f, [k]: f[k].includes(o) ? f[k].filter((x) => x !== o) : [...f[k], o] }, q, sort);
   const clearAll = () => update(EMPTY, '', sort);
 
-  const results = filterAndSort(f, q, sort);
+  const results = filterAndSort(products, f, q, sort);
   const qn = q.trim().toLowerCase();
 
-  const chips = FACETS.flatMap(({ key }) => f[key].map((o) => ({ id: key + o, label: optLabel(key, o), remove: () => toggle(key, o) })));
+  const chips = facets.flatMap(({ key }) => f[key].map((o) => ({ id: key + o, label: optLabel(facets, key, o), remove: () => toggle(key, o) })));
   if (q.trim()) chips.unshift({ id: 'q', label: '“' + q.trim() + '”', remove: () => update(f, '', sort) });
 
   return (
     <div className="wrap page-cat">
-      <div className="crumbs"><Link to="/">Home</Link><span>/</span><span className="crumbs__here">Catalogue</span></div>
+      <div className="crumbs"><Link to="/">Home</Link><span>/</span><span className="crumbs__here">Store</span></div>
       <div className="cat-head">
         <div className="stack-8">
-          <h1 className="h1-page">Catalogue</h1>
-          <div className="cat-head__count">{results.length + (results.length === 1 ? ' title' : ' titles')}</div>
+          <h1 className="h1-page">Store</h1>
+          <div className="cat-head__count">{status === 'ready' ? results.length + (results.length === 1 ? ' title' : ' titles') : status === 'loading' ? 'Loading titles…' : ''}</div>
         </div>
         <div className="cat-head__tools">
-          <input className="cat-search" value={q} onChange={(e) => update(f, e.target.value, sort)} placeholder="Search titles, authors, exams…" aria-label="Search the catalogue" />
+          <input className="cat-search" value={q} onChange={(e) => update(f, e.target.value, sort)} placeholder="Search titles, authors, exams…" aria-label="Search the store" />
           <select className="cat-sort" value={sort} onChange={(e) => update(f, q, e.target.value as Sort)} aria-label="Sort">
             {SORTS.map((s) => <option key={s}>{s}</option>)}
           </select>
@@ -41,16 +43,16 @@ export function Catalogue() {
             {(filtersOpen ? 'Hide filters' : 'Show filters') + (chips.length ? ' (' + chips.length + ')' : '')}
           </button>
           <div className={'cat-facets' + (filtersOpen ? ' is-open' : '')}>
-            {FACETS.map(({ key, label, opts }) => (
+            {facets.map(({ key, label, opts }) => (
               <div key={key} className="facet">
                 <div className="facet__label">{label}</div>
-                {opts.map((o) => {
-                  const on = f[key].includes(o);
-                  const count = BOOKS.filter((b) => passes(b, f, qn, key) && valuesOf(b, key).includes(o)).length;
+                {opts.map(({ value, label: optText }) => {
+                  const on = f[key].includes(value);
+                  const count = products.filter((b) => passes(b, f, qn, key) && valuesOf(b, key).includes(value)).length;
                   return (
-                    <button key={o} type="button" role="checkbox" aria-checked={on} className={'facet__opt' + (on ? ' is-on' : '') + (!count && !on ? ' is-empty' : '')} onClick={() => toggle(key, o)}>
+                    <button key={value} type="button" role="checkbox" aria-checked={on} className={'facet__opt' + (on ? ' is-on' : '') + (!count && !on ? ' is-empty' : '')} onClick={() => toggle(key, value)}>
                       <span className="facet__box">{on ? '✓' : ''}</span>
-                      <span className="facet__name">{optLabel(key, o)}</span>
+                      <span className="facet__name">{optText}</span>
                       <span className="facet__count">{count}</span>
                     </button>
                   );
@@ -68,7 +70,19 @@ export function Catalogue() {
               <button type="button" className="text-link" onClick={clearAll}>Clear all</button>
             </div>
           )}
-          {results.length === 0 && (
+          {status === 'error' && (
+            <div className="empty">
+              <div className="empty__title">We couldn’t load the store</div>
+              <div className="empty__body">Check your connection and try again.</div>
+              <button type="button" className="btn btn--navy btn--compact" onClick={reload}>Try again</button>
+            </div>
+          )}
+          {status === 'loading' && (
+            <div className="grid-books grid-books--cat" aria-busy="true">
+              {Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton-card"><div className="skeleton skeleton--cover" /><div className="skeleton skeleton--line" /><div className="skeleton skeleton--line skeleton--short" /></div>)}
+            </div>
+          )}
+          {status === 'ready' && results.length === 0 && (
             <div className="empty">
               <div className="empty__title">No titles match these filters</div>
               <div className="empty__body">Try removing a filter, or ask us — we may have it in print.</div>
