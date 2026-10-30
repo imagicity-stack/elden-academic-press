@@ -88,6 +88,7 @@ Sample, school/bulk, teacher-access and distributor enquiry forms (`src/componen
 - `scripts/seed.ts` — `npm run db:seed` (categories) or `-- --demo` (sample catalogue)
 - `tests/` — Vitest suites for pricing, checkout/payments and admin
 - `docs/STORE-SETUP.md` — connecting Supabase, Razorpay, Resend and Vercel
+- `docs/supabase-setup.sql` — the database setup to paste into Supabase's SQL Editor (generated from the migrations: `npm run db:setup-sql`)
 - `public/assets/` — logo marks
 
 ## Still placeholder

@@ -19,7 +19,7 @@ const schema = z.object({
   SUPABASE_URL: optional,
   /** Service role / secret key: storage uploads, signed links, staff invites. */
   SUPABASE_SERVICE_ROLE_KEY: optional,
-  /** Only for projects still on the legacy HS256 JWT secret; otherwise JWKS is used. */
+  /** Legacy JWT secret: needed only while the project still signs sign-ins with it (HS256). */
   SUPABASE_JWT_SECRET: optional,
 
   RESEND_API_KEY: optional,

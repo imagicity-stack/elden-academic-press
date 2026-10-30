@@ -2,7 +2,7 @@
 // plus the admin_users allow-list and roles.
 import type { Context, MiddlewareHandler } from 'hono';
 import { eq, sql } from 'drizzle-orm';
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify, type JWTPayload } from 'jose';
 import type { AppEnv } from '../../app.js';
 import { adminUsers, auditLog } from '../../db/schema.js';
 import { HttpError } from '../../lib/http.js';
@@ -16,10 +16,16 @@ const DEV_ADMIN: AdminSession = { userId: '00000000-0000-0000-0000-000000000000'
 
 let jwks: { url: string; set: ReturnType<typeof createRemoteJWKSet> } | undefined;
 
-/** Verify a Supabase access token. HS256 for legacy projects, JWKS otherwise. */
+/**
+ * Verify a Supabase access token. Projects on the legacy JWT secret sign with
+ * HS256; newer signing keys are asymmetric and published as JWKS.
+ */
 export async function verifySupabaseToken(token: string, supabaseUrl: string, legacySecret?: string): Promise<JWTPayload & { email?: string; aal?: string }> {
   const opts = { issuer: `${supabaseUrl.replace(/\/$/, '')}/auth/v1`, audience: 'authenticated' };
-  if (legacySecret) return (await jwtVerify(token, new TextEncoder().encode(legacySecret), { ...opts, algorithms: ['HS256'] })).payload;
+  if (decodeProtectedHeader(token).alg === 'HS256') {
+    if (!legacySecret) throw new Error('This project signs with the legacy JWT secret: set SUPABASE_JWT_SECRET');
+    return (await jwtVerify(token, new TextEncoder().encode(legacySecret), { ...opts, algorithms: ['HS256'] })).payload;
+  }
   const url = `${supabaseUrl.replace(/\/$/, '')}/auth/v1/.well-known/jwks.json`;
   if (jwks?.url !== url) jwks = { url, set: createRemoteJWKSet(new URL(url)) };
   return (await jwtVerify(token, jwks.set, opts)).payload;
@@ -35,7 +41,8 @@ async function authenticate(c: Context<AppEnv>): Promise<AdminSession> {
   let claims;
   try {
     claims = await verifySupabaseToken(token, env.SUPABASE_URL, env.SUPABASE_JWT_SECRET);
-  } catch {
+  } catch (e) {
+    console.warn('[admin] sign-in token rejected:', (e as Error).message);
     throw new HttpError(401, 'Your session has expired. Please sign in again.', 'unauthenticated');
   }
   const userId = String(claims.sub ?? '');
