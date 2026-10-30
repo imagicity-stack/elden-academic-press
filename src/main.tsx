@@ -10,19 +10,30 @@ import './styles.css';
 // coming-soon page on every URL. Vite reads this at build time.
 const live = import.meta.env.VITE_SITE_LIVE === 'true';
 
-// Loaded only when live, so the coming-soon build doesn't ship the whole site.
+// Loaded only when needed, so the coming-soon page doesn't ship the whole site
+// and store visitors never download the admin.
 const App = lazy(() => import('./App').then((m) => ({ default: m.App })));
+const AdminApp = lazy(() => import('./admin/AdminApp'));
+
+// The admin works whether or not the store is live, so products can be set up before launch.
+const isAdmin = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <WithIntro>
-      {live ? (
-        <BrowserRouter>
-          <Suspense fallback={null}><App /></Suspense>
-        </BrowserRouter>
-      ) : (
-        <ComingSoon />
-      )}
-    </WithIntro>
+    {isAdmin ? (
+      <BrowserRouter>
+        <Suspense fallback={null}><AdminApp /></Suspense>
+      </BrowserRouter>
+    ) : (
+      <WithIntro>
+        {live ? (
+          <BrowserRouter>
+            <Suspense fallback={null}><App /></Suspense>
+          </BrowserRouter>
+        ) : (
+          <ComingSoon />
+        )}
+      </WithIntro>
+    )}
   </StrictMode>,
 );
