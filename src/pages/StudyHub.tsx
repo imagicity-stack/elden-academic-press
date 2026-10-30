@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import { config } from '../config';
-import { HUB_KINDS, HUB_LEVELS, LVS, RES } from '../data';
+import { HUB_LEVELS, LVS } from '../data';
+import { useResources } from '../store/catalog';
 import { useSite } from '../site';
 import { ElmasterMark } from '../components/Brand';
 import { Pill } from '../components/Field';
@@ -9,6 +10,8 @@ import { ResourceRow } from '../components/ResourceRow';
 export function StudyHub() {
   const { openModal } = useSite();
   const [sp, setSp] = useSearchParams();
+  const { items, status } = useResources();
+  const HUB_KINDS = ['All', ...new Set(items.map((r) => r.kind))];
   const kindParam = sp.get('kind');
   const levelParam = sp.get('level');
   const kind = kindParam && HUB_KINDS.includes(kindParam) ? kindParam : 'All';
@@ -20,7 +23,7 @@ export function StudyHub() {
     setSp(next, { replace: true });
   };
 
-  const rows = RES.filter((r) => (kind === 'All' || r.k === kind) && (level === 'All' || r.lv === level));
+  const rows = items.filter((r) => (kind === 'All' || r.kind === kind) && (level === 'All' || r.level === level));
 
   return (
     <div>
@@ -60,7 +63,9 @@ export function StudyHub() {
         </div>
         <div className="res-list">
           {rows.map((r) => <ResourceRow key={r.id} r={r} />)}
-          {rows.length === 0 && <div className="res-empty">Nothing here yet for this combination — new material is added through the session.</div>}
+          {status === 'loading' && <div className="res-empty">Loading…</div>}
+          {status === 'error' && <div className="res-empty">We couldn’t load the Study Hub. Please refresh the page.</div>}
+          {status === 'ready' && rows.length === 0 && <div className="res-empty">Nothing here yet for this combination — new material is added through the session.</div>}
         </div>
         <div className="teachers-corner">
           <div className="teachers-corner__text">

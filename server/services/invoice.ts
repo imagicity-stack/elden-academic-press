@@ -65,7 +65,7 @@ export function renderPackingSlip(o: Order, items: Item[], s: Settings) {
   const physical = items.filter((i) => i.requiresShipping);
   const body = header(o, s, 'Packing slip') + parties(o) +
     `<table><thead><tr><th>Item</th><th>SKU</th><th class="r">Qty</th><th class="r">Packed</th></tr></thead><tbody>${physical
-      .map((i) => `<tr><td>${esc(i.title)}<div class="muted">${esc(i.formatLabel === 'Print' ? 'Printed copy' : 'Printed copy (bundle with e-book)')}</div></td><td>${esc(i.sku ?? '')}</td><td class="r">${i.quantity}</td><td class="r">☐</td></tr>`).join('')}</tbody></table>
+      .map((i) => `<tr><td>${esc(i.title)}<div class="muted">${i.variantKind === 'print' ? 'Printed copy' : 'Printed copy (bundle with e-book)'}</div></td><td>${esc(i.sku ?? '')}</td><td class="r">${i.quantity}</td><td class="r">☐</td></tr>`).join('')}</tbody></table>
 ${o.customerNote ? `<p><strong>Customer note:</strong> ${esc(o.customerNote)}</p>` : ''}<div class="foot">Thank you for ordering from ${esc(s.storeName)}.</div>`;
   return page(`Packing slip #${o.number}`, body);
 }

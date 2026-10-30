@@ -39,7 +39,8 @@ async function buildDeps(env: Env): Promise<Deps> {
   if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) storage = supabaseStorage(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
   else if (env.onVercel) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set');
   else {
-    const local = localStorage(join(env.PGLITE_DIR, '..', 'uploads'), env.SITE_URL);
+    // Relative links, so they work on whatever port the dev server uses.
+    const local = localStorage(join(env.PGLITE_DIR, '..', 'uploads'), '');
     storage = local;
     if (!env.DATABASE_URL) await seedLocal(db, local);
   }

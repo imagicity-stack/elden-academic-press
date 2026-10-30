@@ -8,16 +8,17 @@ type FooterLink = [label: string, to: string] | [label: string, modal: { modal: 
 
 const COLS: { t: string; links: FooterLink[] }[] = [
   { t: 'Publications', links: [
-    ['Textbooks', catalogueHref({ type: ['Textbook'] })],
-    ['Reference books', catalogueHref({ type: ['Reference'] })],
-    ['Practice papers', catalogueHref({ type: ['Practice Papers'] })],
-    ['Workbooks', catalogueHref({ type: ['Workbook'] })],
-    ['E-books', catalogueHref({ format: ['E-book'] })],
+    ['Textbooks', catalogueHref({ type: ['textbooks'] })],
+    ['Reference books', catalogueHref({ type: ['reference-books'] })],
+    ['Practice papers', catalogueHref({ type: ['practice-papers'] })],
+    ['Workbooks', catalogueHref({ type: ['workbooks'] })],
+    ['E-books', catalogueHref({ format: ['ebook'] })],
   ] },
   { t: 'Students', links: [
     ['Study Hub', '/study-hub'],
     ['Sample papers', '/study-hub?kind=' + encodeURIComponent('Sample papers')],
     ['Competitive exams', catalogueHref({ level: ['C'] })],
+    ['Track an order', '/track'],
     ...(config.elmasterUrl ? [['elmaster ↗', { href: config.elmasterUrl }] as FooterLink] : []),
   ] },
   { t: 'Schools', links: [
@@ -28,7 +29,7 @@ const COLS: { t: string; links: FooterLink[] }[] = [
   { t: 'Press', links: [
     ['About Elden', '/about'],
     ['For authors', '/about'],
-    ['Journals', catalogueHref({ type: ['Journal'] })],
+    ['Journals', catalogueHref({ type: ['journals'] })],
     ['Contact', '/contact'],
   ] },
 ];

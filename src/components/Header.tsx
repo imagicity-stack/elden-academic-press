@@ -3,13 +3,14 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { catalogueHref } from '../catalogue';
 import { config } from '../config';
 import { useSite } from '../site';
+import { useCart } from '../store/cart';
 import { Logo } from './Brand';
 
 const NAV: { label: string; to: string; match?: (path: string) => boolean }[] = [
   { label: 'Home', to: '/', match: (p) => p === '/' },
-  { label: 'Catalogue', to: '/catalogue', match: (p) => p.startsWith('/catalogue') || p.startsWith('/books/') },
+  { label: 'Store', to: '/catalogue', match: (p) => p.startsWith('/catalogue') || p.startsWith('/books/') },
   { label: 'Study Hub', to: '/study-hub', match: (p) => p.startsWith('/study-hub') },
-  { label: 'Journals', to: catalogueHref({ type: ['Journal'] }) },
+  { label: 'Journals', to: catalogueHref({ type: ['journals'] }) },
   { label: 'For Authors', to: '/about', match: (p) => p.startsWith('/about') },
   { label: 'Contact', to: '/contact', match: (p) => p.startsWith('/contact') },
 ];
@@ -38,6 +39,7 @@ export function Header() {
   const { openModal } = useSite();
   const { pathname, search } = useLocation();
   const [menu, setMenu] = useState(false);
+  const cart = useCart();
 
   useEffect(() => setMenu(false), [pathname, search]);
 
@@ -60,12 +62,17 @@ export function Header() {
             </a>
           )}
           <button type="button" className="btn btn--bronze btn--sm header__cta" onClick={() => openModal('sample')}>Request a sample</button>
+          <button type="button" className="header__cart" onClick={cart.openDrawer} aria-label={`Cart, ${cart.count} item${cart.count === 1 ? '' : 's'}`}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 7Z" /><path d="M9 7V6a3 3 0 0 1 6 0v1" /></svg>
+            {cart.count > 0 && <span className="header__cart-count">{cart.count}</span>}
+          </button>
           <button type="button" className="header__menu-btn" aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? 'Close' : 'Menu'}</button>
         </div>
       </div>
       {menu && (
         <div className="header__drawer">
           {links('header__drawer-link')}
+          <Link to="/track" className="header__drawer-link" onClick={() => setMenu(false)}>Track an order</Link>
           <button type="button" className="btn btn--bronze header__drawer-cta" onClick={() => { setMenu(false); openModal('sample'); }}>Request a sample</button>
         </div>
       )}

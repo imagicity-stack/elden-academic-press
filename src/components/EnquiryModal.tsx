@@ -1,6 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect } from 'react';
 import { submitForm, formData } from '../api';
-import { BOOKS, PAL, findBook } from '../data';
+import { PAL } from '../data';
+import { useCatalog } from '../store/catalog';
+import { useSubmit } from '../store/useSubmit';
 import type { ModalKind } from '../site';
 import { Field, SelectField } from './Field';
 
@@ -11,11 +13,11 @@ const CFG: Record<ModalKind, [title: string, desc: string, cta: string]> = {
   dist: ['Become a distributor', 'Partner with Elden to supply schools and bookstores in your region.', 'Send application'],
 };
 
-const ALL_TITLES = BOOKS.filter((b) => b.ty !== 'Journal').map((b) => b.t + ' — ' + b.cl);
-
 export function EnquiryModal({ kind, bookId, onClose }: { kind: ModalKind; bookId?: string; onClose: () => void }) {
-  const [sent, setSent] = useState(false);
-  const book = findBook(bookId);
+  const { byId, products } = useCatalog();
+  const book = byId(bookId);
+  const titles = products.filter((p) => p.category?.slug !== 'journals').map((p) => p.title + (p.classLabel ? ' — ' + p.classLabel : ''));
+  const { busy, error, sent, submit } = useSubmit((form) => submitForm(kind, { ...(book ? { title: book.title } : {}), ...formData(form) }));
   const [title, desc, cta] = CFG[kind];
 
   useEffect(() => {
@@ -25,12 +27,6 @@ export function EnquiryModal({ kind, bookId, onClose }: { kind: ModalKind; bookI
     window.addEventListener('keydown', onKey);
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [onClose]);
-
-  const submit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    await submitForm(kind, { ...(book ? { title: book.t } : {}), ...formData(e.currentTarget) });
-    setSent(true);
-  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -52,16 +48,16 @@ export function EnquiryModal({ kind, bookId, onClose }: { kind: ModalKind; bookI
           <form className="modal__form" onSubmit={submit}>
             {book && (
               <div className="modal__book">
-                <span className="modal__book-thumb" style={{ background: PAL[book.p].bg }} />
+                <span className="modal__book-thumb" style={{ background: PAL[book.palette]?.bg ?? PAL[0].bg }} />
                 <span className="modal__book-text">
-                  <span className="modal__book-title">{book.t}</span>
-                  <span className="modal__book-meta">{[book.ty, book.cl, book.bd].filter(Boolean).join(' · ')}</span>
+                  <span className="modal__book-title">{book.title}</span>
+                  <span className="modal__book-meta">{[book.category?.name, book.classLabel, book.boards.join(', ')].filter(Boolean).join(' · ')}</span>
                 </span>
               </div>
             )}
             {!book && kind === 'sample' && (
               <SelectField label="Title(s) you'd like to evaluate" name="title">
-                {ALL_TITLES.map((t) => <option key={t}>{t}</option>)}
+                {titles.map((t) => <option key={t}>{t}</option>)}
               </SelectField>
             )}
             <div className="form-grid form-grid--tight">
@@ -77,7 +73,9 @@ export function EnquiryModal({ kind, bookId, onClose }: { kind: ModalKind; bookI
             {(kind === 'bulk' || kind === 'dist') && (
               <Field label="Approx. copies needed" name="copies" type="number" min={1} placeholder="e.g. 120" />
             )}
-            <button type="submit" className="btn btn--bronze btn--lg btn--mt-sm">{cta}</button>
+            <input type="text" name="website" tabIndex={-1} autoComplete="off" className="hp" aria-hidden="true" />
+            {error && <div className="form-error" role="alert">{error}</div>}
+            <button type="submit" className="btn btn--bronze btn--lg btn--mt-sm" disabled={busy}>{busy ? 'Sending…' : cta}</button>
           </form>
         )}
       </div>

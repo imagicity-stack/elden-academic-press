@@ -49,7 +49,7 @@ export interface CouponRow {
 
 export const MAX_QTY: Record<Kind, number> = { print: 50, digital: 1, bundle: 1 };
 
-export const FORMAT_LABEL: Record<Kind, string> = { print: 'Print', digital: 'E-book', bundle: 'E-book + printed copy' };
+export const FORMAT_LABEL: Record<Kind, string> = { print: 'Printed book', digital: 'E-book', bundle: 'E-book + printed copy' };
 
 export type LineIssue =
   | { code: 'unavailable' }
