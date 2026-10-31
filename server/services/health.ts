@@ -105,8 +105,8 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
 
   if ((env.SMTP_USER && env.SMTP_PASS) || env.RESEND_API_KEY) checks.email = 'ok';
   else if (env.onVercel) todo.push('Set SMTP_USER and SMTP_PASS (Google Workspace app password) so order emails are sent');
-  if (env.onVercel && !env.MAIL_TO) todo.push('Set MAIL_TO to the inbox that should receive contact-form messages');
-  if (env.onVercel && env.SMTP_USER && !source.MAIL_FROM) todo.push(`Set MAIL_FROM, e.g. "Elden Academic Press <${env.SMTP_USER}>"`);
+  if (env.onVercel && !env.MAIL_TO) todo.push('Set MAIL_TO to your inbox (e.g. hello@eldenap.in): it gets contact forms and a copy of every customer email');
+  if (env.onVercel && env.SMTP_USER && !source.MAIL_FROM) todo.push('Set MAIL_FROM, e.g. "Elden Academic Press <noreply@eldenap.in>"');
 
   return {
     ok: checks.config === 'ok' && checks.database === 'ok' && checks.storage === 'ok',

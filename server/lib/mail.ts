@@ -4,7 +4,7 @@
 import nodemailer from 'nodemailer';
 
 export interface Attachment { filename: string; content: Uint8Array; contentType?: string }
-export interface Mail { to: string | string[]; subject: string; html: string; text?: string; replyTo?: string; attachments?: Attachment[] }
+export interface Mail { to: string | string[]; bcc?: string[]; subject: string; html: string; text?: string; replyTo?: string; attachments?: Attachment[] }
 export interface Mailer { send(mail: Mail): Promise<void> }
 
 /** A readable plain-text part from our own email HTML, for mail apps that prefer text. */
@@ -35,6 +35,7 @@ export function smtpMailer(opts: { host: string; port: number; user: string; pas
       await transport.sendMail({
         from: opts.from,
         to: mail.to,
+        bcc: mail.bcc?.length ? mail.bcc : undefined,
         subject: mail.subject,
         html: mail.html,
         text: mail.text ?? htmlToText(mail.html),
@@ -52,7 +53,7 @@ export function resendMailer(apiKey: string, from: string, fetchImpl: typeof fet
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from, to: mail.to, subject: mail.subject, html: mail.html, text: mail.text ?? htmlToText(mail.html), reply_to: mail.replyTo,
+          from, to: mail.to, bcc: mail.bcc?.length ? mail.bcc : undefined, subject: mail.subject, html: mail.html, text: mail.text ?? htmlToText(mail.html), reply_to: mail.replyTo,
           attachments: mail.attachments?.map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString('base64'), content_type: a.contentType })),
         }),
         signal: AbortSignal.timeout(20_000),
@@ -66,7 +67,7 @@ export function consoleMailer(): Mailer {
   return {
     async send(m) {
       const files = m.attachments?.map((a) => `${a.filename} (${Math.round(a.content.length / 1024)} KB)`).join(', ');
-      console.info(`[mail] to=${[m.to].flat().join(',')} subject="${m.subject}"${files ? ` attachments=${files}` : ''}`);
+      console.info(`[mail] to=${[m.to].flat().join(',')}${m.bcc?.length ? ` bcc=${m.bcc.join(',')}` : ''} subject="${m.subject}"${files ? ` attachments=${files}` : ''}`);
     },
   };
 }

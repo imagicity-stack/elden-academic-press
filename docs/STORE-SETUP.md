@@ -61,16 +61,20 @@ Use either this or the SQL file, not both. After changing the schema: `npm run d
 
 ## 3. Email (Google Workspace)
 
-Order confirmations (with the PDF invoice and, when small enough, the e-book attached), shipping and refund emails are sent from your Google Workspace mailbox. Contact-form messages arrive in the inbox you choose.
+Customer emails (order confirmation with the PDF invoice and, when small enough, the e-book attached; shipping; refunds) are sent from **noreply@eldenap.in**. Every one of them is also copied, hidden (BCC), to your own inboxes in `MAIL_TO`, which also receive the contact forms and enquiries. When a customer presses Reply, it goes to the support email in **Admin → Settings → Store** (e.g. hello@eldenap.in), not to noreply.
 
-1. Sign in to the Google account that will send the emails (e.g. `hello@eldenap.in`) → [myaccount.google.com](https://myaccount.google.com) → **Security** → turn on **2-Step Verification**.
-2. Same page → **App passwords** (or search “App passwords”) → name it “Elden website” → **Create**. Copy the 16-letter password (spaces don't matter). If the option is missing, a Workspace admin must allow it: **admin.google.com → Security → Less secure apps / App passwords**.
+1. **Create the sender.** Either
+   - make `noreply@eldenap.in` its **own user** in [admin.google.com](https://admin.google.com) → Directory → Users (uses a licence), and sign in as it for the next steps; or
+   - add `noreply@eldenap.in` as an **alternate email (alias)** of an existing user such as hello@ (Users → hello → User information → Alternate emails, free). Then, signed in as hello@, open Gmail → ⚙ Settings → **Accounts → Send mail as → Add another email address** → `noreply@eldenap.in`, untick “Treat as an alias”, and confirm.
+2. Signed in as the sending account → [myaccount.google.com](https://myaccount.google.com) → **Security** → turn on **2-Step Verification**, then search **App passwords** → name it “Elden website” → **Create** and copy the 16-letter password. (If the option is missing, a Workspace admin must allow it in admin.google.com → Security.)
 3. In Vercel set:
-   - `SMTP_USER` = that email address
+   - `MAIL_FROM` = `Elden Academic Press <noreply@eldenap.in>`
+   - `SMTP_USER` = the account that signs in (noreply@eldenap.in, or hello@eldenap.in if noreply is its alias)
    - `SMTP_PASS` = the app password
-   - `MAIL_FROM` = `Elden Academic Press <hello@eldenap.in>` (the same address, or an alias of it added in Gmail → Settings → Accounts → *Send mail as*; otherwise Gmail shows the main address)
-   - `MAIL_TO` = the inbox for contact forms and enquiries (several allowed, comma-separated)
-4. So emails don't land in spam, make sure `eldenap.in` has Google's SPF and DKIM records: **admin.google.com → Apps → Google Workspace → Gmail → Authenticate email** → generate the DKIM key, add the TXT record at your domain registrar, then **Start authentication**. SPF: a TXT record `v=spf1 include:_spf.google.com ~all`.
+   - `MAIL_TO` = `hello@eldenap.in` (add more, comma-separated: `hello@eldenap.in, orders@eldenap.in`)
+4. So emails don't land in spam, turn on DKIM: **admin.google.com → Apps → Google Workspace → Gmail → Authenticate email** → generate the key, add the TXT record at your domain registrar, then **Start authentication**. SPF: a TXT record `v=spf1 include:_spf.google.com ~all`.
+
+Tip: copies are easiest to read when the `MAIL_TO` inbox is not the sending account itself (Gmail files mail you send to yourself under Sent). New-order alerts with an “Open in admin” button go to **Admin → Settings → Order alerts** if you fill that in.
 
 Google Workspace sends up to 2,000 emails a day per account. (Instead of SMTP you can use [Resend](https://resend.com) with `RESEND_API_KEY`; it's used only when `SMTP_USER`/`SMTP_PASS` are empty.)
 

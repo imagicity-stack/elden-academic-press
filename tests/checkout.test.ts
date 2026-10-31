@@ -277,6 +277,25 @@ describe('enquiry forms', () => {
   });
 });
 
+describe('email copies', () => {
+  it('sends customers their email, with a hidden copy to MAIL_TO', async () => {
+    const m = await setup({ env: { MAIL_TO: 'hello@eldenap.in, office@eldenap.in' } });
+    const [p] = await m.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
+    const r = await m.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }], contact, shipping: address } });
+    await m.call('POST', '/checkout/verify', { body: m.razorpay.simulatePayment(r.json.razorpay.orderId, {}) });
+    expect(m.mailer.sent).toHaveLength(1); // no separate alert: MAIL_TO already has the copy
+    expect(m.mailer.sent[0]).toMatchObject({ to: contact.email, bcc: ['hello@eldenap.in', 'office@eldenap.in'], replyTo: 'hello@eldenap.in' });
+  });
+
+  it('still alerts the store when MAIL_TO is not set', async () => {
+    const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
+    const r = await checkout([{ productId: p.id, kind: 'print', quantity: 1 }]);
+    await pay(r.json.razorpay.orderId);
+    expect(t.mailer.sent.map((x) => x.to)).toEqual(expect.arrayContaining([contact.email, ['hello@eldenap.in']]));
+    expect(t.mailer.sent.find((x) => x.to === contact.email)!.bcc).toEqual([]);
+  });
+});
+
 describe('contact form recipients', () => {
   it('sends enquiries to MAIL_TO when it is set', async () => {
     const m = await setup({ env: { MAIL_TO: 'office@eldenap.in, editor@eldenap.in' }, seed: false });

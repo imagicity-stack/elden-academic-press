@@ -24,6 +24,9 @@ const FONT = `-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-s
 /** E-books are attached to the confirmation while their total size stays under this. */
 const ATTACH_LIMIT = 15 * 1024 * 1024;
 
+/** Our own inboxes (MAIL_TO): they get a hidden copy of every email sent to a customer. */
+const copies = (deps: Deps) => addressList(deps.env.MAIL_TO);
+
 const td = (style: string, html: string) => `<tr><td style="${style}">${html}</td></tr>`;
 const section = (html: string, pad = '0 32px 28px') => td(`background:#FFFFFF;padding:${pad}`, html);
 const p = (html: string, style = '') => `<p style="margin:0 0 14px;font:400 15px/1.6 ${FONT};color:${MUTED};${style}">${html}</p>`;
@@ -161,18 +164,24 @@ ${button(link, digital.length ? 'View your order & downloads' : 'Track your orde
       body,
       footerNote: `Keep this email: the links in it are private to your order, ${first}.`,
     }),
-    replyTo: s.supportEmail,
+    replyTo: s.supportEmail, bcc: copies(deps),
     attachments,
   });
 }
 
-/** Internal recipients for new orders: Settings → order alerts, else MAIL_TO, else the support address. */
+/**
+ * New-order alerts go to Settings → order alerts. Without those, MAIL_TO already
+ * gets a copy of each customer's confirmation, so the alert only falls back to
+ * the support address when MAIL_TO is empty too.
+ */
 function staffRecipients(deps: Deps, s: Settings) {
-  const mailTo = addressList(deps.env.MAIL_TO);
-  return s.notifyEmails.length ? s.notifyEmails : mailTo.length ? mailTo : [s.supportEmail];
+  if (s.notifyEmails.length) return s.notifyEmails;
+  return copies(deps).length ? [] : [s.supportEmail];
 }
 
 export async function sendStoreNewOrder(deps: Deps, o: Order, items: Item[], s: Settings) {
+  const to = staffRecipients(deps, s);
+  if (!to.length) return;
   const body = [
     metaStrip([['Order', `#${o.number}`], ['Total', inr(o.total)], ['Fulfil', o.requiresShipping ? 'Ship' : 'Digital only']]),
     section(`${h2('Customer')}${p(`<strong style="color:${INK}">${esc(o.name)}</strong><br>${esc(o.email)} · ${esc(o.phone)}`)}`),
@@ -182,7 +191,7 @@ export async function sendStoreNewOrder(deps: Deps, o: Order, items: Item[], s: 
     section(button(`${deps.env.SITE_URL}/admin/orders/${o.id}`, 'Open in admin', INK), '4px 32px 32px'),
   ].join('');
   await sendSafely(deps.mailer, {
-    to: staffRecipients(deps, s),
+    to,
     subject: `New order #${o.number} · ${inr(o.total)} · ${o.name}`,
     html: layout(deps, s, { preheader: `${o.name} paid ${inr(o.total)}`, kicker: 'New order', title: `Order #${o.number}`, intro: `${esc(o.name)} paid ${inr(o.total)}${o.requiresShipping ? '. Printed books to pack.' : ' for e-books only.'}`, body }),
     replyTo: o.email,
@@ -197,7 +206,7 @@ ${o.trackingUrl ? button(o.trackingUrl, 'Track your parcel', YELLOW, INK) : ''}<
     : '';
   const body = tracking + addressBlock(o) + section(button(orderLink(deps, o), 'View your order', INK), '4px 32px 32px');
   await sendSafely(deps.mailer, {
-    to: o.email, subject: `Your books are on their way · order #${o.number}`, replyTo: s.supportEmail,
+    to: o.email, subject: `Your books are on their way · order #${o.number}`, replyTo: s.supportEmail, bcc: copies(deps),
     html: layout(deps, s, { preheader: o.trackingNumber ? `Tracking number ${o.trackingNumber}` : 'Your order has shipped', kicker: 'Shipped', title: 'Your books are on their way.', intro: `Order <strong style="color:${INK}">#${o.number}</strong> has left our office.`, body }),
   });
 }
@@ -206,7 +215,7 @@ export async function sendRefundNotice(deps: Deps, o: Order, amount: number, s: 
   const body = metaStrip([['Order', `#${o.number}`], ['Refunded', inr(amount)], ['Back in', '5–7 working days']]) +
     section(p('The refund goes back to the payment method you used. Your bank may take a few days to show it.') + button(orderLink(deps, o), 'View your order', INK), '4px 32px 32px');
   await sendSafely(deps.mailer, {
-    to: o.email, subject: `Refund of ${inr(amount)} for order #${o.number}`, replyTo: s.supportEmail,
+    to: o.email, subject: `Refund of ${inr(amount)} for order #${o.number}`, replyTo: s.supportEmail, bcc: copies(deps),
     html: layout(deps, s, { preheader: `We’ve refunded ${inr(amount)}`, kicker: 'Refund issued', title: `We’ve refunded ${inr(amount)}.`, intro: `For order <strong style="color:${INK}">#${o.number}</strong>.`, body }),
   });
 }
@@ -214,7 +223,7 @@ export async function sendRefundNotice(deps: Deps, o: Order, amount: number, s: 
 export async function sendOrderLink(deps: Deps, o: Order, s: Settings) {
   const body = section(button(orderLink(deps, o), 'Open your order'), '4px 32px 32px');
   await sendSafely(deps.mailer, {
-    to: o.email, subject: `Your order #${o.number}`, replyTo: s.supportEmail,
+    to: o.email, subject: `Your order #${o.number}`, replyTo: s.supportEmail, bcc: copies(deps),
     html: layout(deps, s, { preheader: 'The private link to your order', kicker: 'Your order', title: `Order #${o.number}`, intro: `Here’s the private link to your order, placed on ${istDate(o.createdAt)}. It shows delivery status, your invoice and any e-book downloads.`, body }),
   });
 }
