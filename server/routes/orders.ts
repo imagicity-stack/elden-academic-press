@@ -9,11 +9,24 @@ import { getSettings } from '../services/catalog.js';
 import { sendOrderLink } from '../services/emails.js';
 import { invoiceFileName, renderInvoicePdf } from '../services/invoicePdf.js';
 import { stateName } from '../lib/states.js';
+import { paymentMethodLabel } from '../lib/format.js';
 import { checkOrderToken, type Order } from '../services/orders.js';
 
 export const customerOrders = new Hono<AppEnv>();
 
 const PUBLIC_EVENTS = new Set(['created', 'paid', 'packed', 'shipped', 'delivered', 'cancelled', 'refund', 'expired']);
+
+/** What the customer sees for each history entry (staff notes and reasons stay in the admin). */
+function publicMessage(e: { type: string; message: string }, o: Order): string {
+  switch (e.type) {
+    case 'created': return 'Order placed';
+    case 'paid': return `Payment received${o.paymentMethod ? ` · ${paymentMethodLabel(o.paymentMethod)}` : ''}`;
+    case 'expired': return 'Checkout expired without payment';
+    case 'cancelled': return 'Order cancelled';
+    case 'refund': return e.message.split(' — ')[0];
+    default: return e.message;
+  }
+}
 
 export function orderStatusLabel(o: Pick<Order, 'paymentStatus' | 'fulfillmentStatus' | 'cancelledAt'>): string {
   if (o.paymentStatus === 'refunded') return 'Refunded';
@@ -66,7 +79,7 @@ customerOrders.get('/:number', async (c) => {
     address: o.shipLine1 ? { name: o.shipName, line1: o.shipLine1, line2: o.shipLine2, city: o.shipCity, state: stateName(o.shipState ?? ''), pincode: o.shipPincode } : null,
     tracking: o.shippedAt ? { courier: o.courier, number: o.trackingNumber, url: o.trackingUrl, shippedAt: o.shippedAt, deliveredAt: o.deliveredAt } : null,
     invoice: isPaid(o) || o.paymentStatus === 'refunded' ? o.invoiceNumber : null,
-    timeline: events.filter((e) => PUBLIC_EVENTS.has(e.type)).map((e) => ({ type: e.type, message: e.message, at: e.createdAt })),
+    timeline: events.filter((e) => PUBLIC_EVENTS.has(e.type)).map((e) => ({ type: e.type, message: publicMessage(e, o), at: e.createdAt })),
   });
 });
 

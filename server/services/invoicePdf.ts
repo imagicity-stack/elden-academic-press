@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';
 import type { orderItems, orders } from '../db/schema.js';
-import { inr, istDate } from '../lib/format.js';
+import { inr, istDate, paymentMethodLabel } from '../lib/format.js';
 import { stateName } from '../lib/states.js';
 import type { Settings } from './catalog.js';
 
@@ -32,8 +32,7 @@ const loadAssets = () => (assets ??= Promise.all([
 export const invoiceTitle = (s: Settings, items: Item[]) =>
   s.gstin ? (items.every((i) => i.variantKind === 'print') ? 'Bill of Supply' : 'Tax Invoice') : 'Invoice';
 
-const PAY_METHOD: Record<string, string> = { upi: 'UPI', card: 'Card', netbanking: 'Net banking', wallet: 'Wallet', emi: 'EMI', paylater: 'Pay later', free: 'No payment due' };
-const payMethod = (o: Order) => (o.paymentMethod ? PAY_METHOD[o.paymentMethod] ?? o.paymentMethod : o.total ? 'Online' : 'No payment due');
+const payMethod = (o: Order) => paymentMethodLabel(o.paymentMethod) || (o.total ? 'Online' : 'No payment due');
 
 export const invoiceFileName = (o: Order) => `Elden-invoice-${(o.invoiceNumber ?? `order-${o.number}`).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`;
 

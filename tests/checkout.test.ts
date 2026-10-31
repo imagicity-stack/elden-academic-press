@@ -221,7 +221,7 @@ describe('after purchase', () => {
     expect(r.status).toBe(200);
     expect(r.json.status).toBe('Confirmed');
     expect(r.json.items[0].canDownload).toBe(true);
-    expect(r.json.timeline.map((e: any) => e.type)).toEqual(['created', 'paid']);
+    expect(r.json.timeline.map((e: any) => [e.type, e.message])).toEqual([['created', 'Order placed'], ['paid', 'Payment received · UPI']]);
   });
 
   it('serves e-books through short-lived links, with a download limit', async () => {

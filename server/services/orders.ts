@@ -9,6 +9,7 @@ import { HttpError } from '../lib/http.js';
 import { priceCart, type CartLineInput, type Quote } from '../lib/pricing.js';
 import type { RzpPayment } from '../lib/razorpay.js';
 import { findCoupon, getSettings, loadPricingProducts, type Settings } from './catalog.js';
+import { paymentMethodLabel } from '../lib/format.js';
 import { sendOrderConfirmation, sendStoreNewOrder } from './emails.js';
 
 export type Order = typeof orders.$inferSelect;
@@ -157,7 +158,7 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
     if (!(await reserveStock(tx, o.id, wanted, 'order', 'checkout'))) {
       throw new HttpError(409, 'Sorry — one of the printed books just sold out. Please review your cart.', 'out_of_stock');
     }
-    await logEvent(tx, o.id, 'created', 'Order placed, awaiting payment', 'customer');
+    await logEvent(tx, o.id, 'created', 'Order placed', 'customer');
     return o;
   });
 
@@ -295,7 +296,7 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
       attentionReason: attention ?? o.attentionReason,
       updatedAt: sql`now()`,
     }).where(eq(orders.id, o.id)).returning();
-    await logEvent(tx, o.id, 'paid', `Payment received${payment.method ? ` (${payment.method})` : ''}`, actor, { paymentId: payment.id });
+    await logEvent(tx, o.id, 'paid', `Payment received${payment.method ? ` · ${paymentMethodLabel(payment.method)}` : ''}`, actor, { paymentId: payment.id });
     if (attention) await logEvent(tx, o.id, 'attention', attention, 'system');
     return { order: paid, newlyPaid: true };
   });
