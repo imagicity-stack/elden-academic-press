@@ -33,7 +33,7 @@ Locally: copy `.env.example` to `.env.local` and set `VITE_SITE_LIVE=true` to wo
 
 ## Analytics
 
-Google Tag Manager (container `GTM-P38DZ6G5`) loads from an inline script at the top of `index.html`, on every page except `/admin` and local development. Configure tags in GTM; GA4's enhanced measurement already counts page changes in this single-page site. The script first moves a private order link's token out of the address bar (into the tab's storage) so it never reaches analytics. If you change that script, update its SHA-256 hash in `vercel.json`'s CSP (a test checks this). If you add advertising or remarketing tags, update the privacy policy (`src/pages/Legal.tsx`).
+Google Tag Manager (container `GTM-P38DZ6G5`) and Google Analytics 4 (`G-0TR5TFH9KP`, loaded directly with gtag.js) load from an inline script at the top of `index.html`, on every page except `/admin` and local development. Don't also add a GA4 tag for the same property inside GTM, or visits are counted twice. GA4's enhanced measurement counts page changes in this single-page site. The script first moves a private order link's token out of the address bar (into the tab's storage) so it never reaches analytics. If you change that script, update its SHA-256 hash in `vercel.json`'s CSP (a test checks this). If you add advertising or remarketing tags, update the privacy policy (`src/pages/Legal.tsx`).
 
 ## Opening animation
 

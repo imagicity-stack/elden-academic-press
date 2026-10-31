@@ -27,7 +27,7 @@
         { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'; base-uri 'self'; object-src 'none'" },
         {
           "key": "Content-Security-Policy-Report-Only",
-          "value": "default-src 'self'; script-src 'self' 'sha256-+PkFJPmiIWsSMiz1vE2XuaUg+ipMH5HngVjs+upTdSE=' https://checkout.razorpay.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.razorpay.com https://*.google-analytics.com https://*.googletagmanager.com; connect-src 'self' https://*.supabase.co https://*.razorpay.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-src https://api.razorpay.com https://checkout.razorpay.com https://www.googletagmanager.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+          "value": "default-src 'self'; script-src 'self' 'sha256-9q3iuZzdkHAy9vg+y0hHAxdg6iT4jakAMjC7Z5tUBMs=' https://checkout.razorpay.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.razorpay.com https://*.google-analytics.com https://*.googletagmanager.com; connect-src 'self' https://*.supabase.co https://*.razorpay.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com; frame-src https://api.razorpay.com https://checkout.razorpay.com https://www.googletagmanager.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
         }
       ]
     },
