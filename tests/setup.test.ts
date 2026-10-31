@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
@@ -77,5 +78,15 @@ describe('/sitemap.xml', () => {
     } finally {
       process.env.VITE_SITE_LIVE = before;
     }
+  });
+});
+
+describe('index.html', () => {
+  it('has its inline script allowed by hash in the CSP (update vercel.json when the script changes)', () => {
+    const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    const csp = readFileSync(new URL('../vercel.json', import.meta.url), 'utf8');
+    expect(scripts).toHaveLength(1);
+    expect(csp).toContain(`'sha256-${createHash('sha256').update(scripts[0]).digest('base64')}'`);
   });
 });

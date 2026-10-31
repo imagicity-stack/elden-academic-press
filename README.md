@@ -31,6 +31,10 @@ On Vercel: **Project → Settings → Environment Variables**, add `VITE_SITE_LI
 
 Locally: copy `.env.example` to `.env.local` and set `VITE_SITE_LIVE=true` to work on the full site.
 
+## Analytics
+
+Google Tag Manager (container `GTM-P38DZ6G5`) loads from an inline script at the top of `index.html`, on every page except `/admin` and local development. Configure tags in GTM; GA4's enhanced measurement already counts page changes in this single-page site. The script first moves a private order link's token out of the address bar (into the tab's storage) so it never reaches analytics. If you change that script, update its SHA-256 hash in `vercel.json`'s CSP (a test checks this). If you add advertising or remarketing tags, update the privacy policy (`src/pages/Legal.tsx`).
+
 ## Opening animation
 
 On a visitor's first page load of a browser session, a book opens, its pages riffle, three pages stop mid-turn and the shapes morph into the Elden mark; the screen then turns away like a page (`src/components/Intro.tsx`). It plays in both coming-soon and live modes, can be skipped by click, key press or the "Skip intro" button, and never plays for visitors who prefer reduced motion. Turn it off with `showIntro: false` in `src/config.ts`.

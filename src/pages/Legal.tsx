@@ -114,7 +114,8 @@ function Privacy() {
           <li><strong>When you order:</strong> your name, email, phone number, delivery address (for printed books), state (for GST), what you bought and paid, any discount code, and the payment reference from Razorpay. We do not receive your card or UPI details.</li>
           <li><strong>When you send a form</strong> (sample request, school order, enquiry or proposal): your name, contact details, institution, city, role and message.</li>
           <li><strong>Technical data:</strong> your IP address and browser details in our server logs, used for security and to prevent abuse.</li>
-          <li><strong>In your browser:</strong> your cart and a few preferences (such as whether you have seen the opening animation) are kept in your browser’s storage. We do not use advertising or tracking cookies or third-party analytics. Fonts are loaded from Google Fonts, and Razorpay sets its own cookies when you pay.</li>
+          <li><strong>Website analytics:</strong> we use Google Tag Manager and Google Analytics to understand how the website is used: pages visited, links clicked, device and browser, approximate location and how you found us. They set cookies to recognise repeat visits. We do not send them your name, contact details, address, order details or payment information.</li>
+          <li><strong>In your browser:</strong> your cart and a few preferences (such as whether you have seen the opening animation) are kept in your browser’s storage. Fonts are loaded from Google Fonts, and Razorpay sets its own cookies when you pay. You can block or delete cookies in your browser settings, or turn off Google Analytics with Google’s <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener noreferrer">opt-out add-on</a>.</li>
         </ul>
       </Section>
 
@@ -123,7 +124,8 @@ function Privacy() {
           <li>to process, deliver and support your order, including emails about it (confirmation, dispatch, downloads, refunds);</li>
           <li>to issue invoices and keep the records that tax and accounting laws require;</li>
           <li>to reply to your enquiries;</li>
-          <li>to keep the website secure and prevent fraud.</li>
+          <li>to keep the website secure and prevent fraud;</li>
+          <li>to measure and improve how the website works.</li>
         </ul>
         <p>We use your data with your consent, given when you place an order or send a form, and where the law allows or requires it. We do not sell your data, and we do not send marketing emails unless you ask for them.</p>
       </Section>
@@ -136,6 +138,7 @@ function Privacy() {
           <li><strong>Supabase</strong>: our database and file storage;</li>
           <li><strong>Vercel</strong>: website hosting;</li>
           <li><strong>Resend</strong>: sending our emails;</li>
+          <li><strong>Google</strong>: website analytics (Google Tag Manager and Google Analytics);</li>
           <li><strong>authorities</strong>, when the law requires it.</li>
         </ul>
         <p>Some of these providers may process data outside India, under their own security and confidentiality obligations.</p>
@@ -283,7 +286,8 @@ export function CompanyLine({ className = '' }: { className?: string }) {
 export function LegalStandalone() {
   const { pathname } = useLocation();
   const doc = legalDocFor(pathname) ?? 'terms';
-  useEffect(() => window.scrollTo(0, 0), [pathname]);
+  // A block body: in newer browsers scrollTo returns a Promise, which React would take for a clean-up function.
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   return (
     <div className="site legal-shell">
       <header className="legal-shell__head">

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ApiError, api, fieldError, inr } from '../store/api';
 import { FORMAT_LABEL, useCatalog, useStoreConfig } from '../store/catalog';
 import { useCart, useQuote } from '../store/cart';
+import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { CouponField, issueText } from '../components/CartDrawer';
 
@@ -69,7 +70,7 @@ export function Checkout() {
       const r = await api<{ number: number; token: string }>('/checkout/verify', { body: result });
       pending.current = null;
       cart.clear();
-      navigate(`/order/${r.number}?t=${r.token}&new=1`, { replace: true });
+      navigate(orderPath(r.number, r.token, 'new=1'), { replace: true });
     } catch (e) {
       setErr(e);
       setBusy(false);
@@ -119,7 +120,7 @@ export function Checkout() {
       }
       if (res.paid) {
         cart.clear();
-        navigate(`/order/${res.number}?t=${res.token}&new=1`, { replace: true });
+        navigate(orderPath(res.number, res.token, 'new=1'), { replace: true });
         return;
       }
       await openPayment(res);

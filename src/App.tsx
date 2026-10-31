@@ -24,7 +24,8 @@ import { StudyHub } from './pages/StudyHub';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
-  useEffect(() => window.scrollTo(0, 0), [pathname]);
+  // A block body: in newer browsers scrollTo returns a Promise, which React would take for a clean-up function.
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   return null;
 }
 
