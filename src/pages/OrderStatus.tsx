@@ -50,7 +50,7 @@ export function OrderStatus() {
       <div className="wrap page-narrow">
         <h1 className="h1-page">Order not found</h1>
         <p className="body body--15">This link may be incomplete. Use the link from your confirmation email, or find your order below.</p>
-        <div><Link to="/track" className="btn btn--navy">Track an order</Link></div>
+        <div><Link to="/track" className="btn btn--ink">Track an order</Link></div>
       </div>
     );
   }
@@ -99,7 +99,7 @@ export function OrderStatus() {
                   <li key={i.id}>
                     <div><strong>{i.title}</strong><span>{i.format} · {i.downloadsLeft} download{i.downloadsLeft === 1 ? '' : 's'} left</span></div>
                     {i.canDownload
-                      ? <a className="btn btn--navy btn--md" href={`/api/orders/${order.number}/download/${i.id}${q}`}>Download PDF</a>
+                      ? <a className="btn btn--ink btn--md" href={`/api/orders/${order.number}/download/${i.id}${q}`}>Download PDF</a>
                       : <span className="dl-list__off">Not available — <a href={`mailto:${cfg?.supportEmail ?? 'hello@eldenap.in'}`}>contact us</a></span>}
                   </li>
                 ))}
@@ -193,7 +193,7 @@ export function Track() {
       <form className="track-form" onSubmit={submit}>
         <label className="field">Order number<input className="input input--white" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="e.g. 100234" inputMode="numeric" required /></label>
         <label className="field">Email or mobile<input className="input input--white" value={contact} onChange={(e) => setContact(e.target.value)} required autoComplete="email" /></label>
-        <button type="submit" className="btn btn--navy" disabled={busy}>{busy ? 'Looking…' : 'Find order'}</button>
+        <button type="submit" className="btn btn--ink" disabled={busy}>{busy ? 'Looking…' : 'Find order'}</button>
       </form>
       {err && <div className="form-error" role="alert">{err}</div>}
       {result && (

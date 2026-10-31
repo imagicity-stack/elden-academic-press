@@ -3,13 +3,14 @@
 
 export interface Palette { bg: string; fg: string; ac: string }
 
+/** Cover colours for titles without an uploaded cover (picked per product in the admin). */
 export const PAL: Palette[] = [
-  { bg: '#0E1F33', fg: '#F6F0E6', ac: '#CC955F' },
-  { bg: '#6B3A0A', fg: '#FBF1E3', ac: '#E7BE92' },
-  { bg: '#E8DAC3', fg: '#0E1F33', ac: '#87561F' },
-  { bg: '#9C6A2F', fg: '#FFF8EE', ac: '#0E1F33' },
-  { bg: '#1E3A57', fg: '#F6F0E6', ac: '#E2B68A' },
-  { bg: '#F3EDE3', fg: '#6B3A0A', ac: '#0E1F33' },
+  { bg: '#0B1220', fg: '#FFFFFF', ac: '#FF5A1F' },
+  { bg: '#FF5A1F', fg: '#0B1220', ac: '#FFD84D' },
+  { bg: '#FFD84D', fg: '#0B1220', ac: '#FF5A1F' },
+  { bg: '#2F5BEA', fg: '#FFFFFF', ac: '#FFD84D' },
+  { bg: '#0F6B5C', fg: '#F2FFF8', ac: '#9BE7C4' },
+  { bg: '#F1EEE7', fg: '#0B1220', ac: '#2F5BEA' },
 ];
 
 export type LevelKey = 'P' | 'M' | 'S' | 'SS' | 'C' | 'H';

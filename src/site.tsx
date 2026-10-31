@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { EnquiryModal } from './components/EnquiryModal';
 
 export type ModalKind = 'sample' | 'bulk' | 'teacher' | 'dist';
@@ -23,7 +24,7 @@ export function SiteProvider({ children }: { children: ReactNode }) {
   return (
     <SiteContext.Provider value={value}>
       {children}
-      {modal && <EnquiryModal kind={modal.kind} bookId={modal.bookId} onClose={closeModal} />}
+      <AnimatePresence>{modal && <EnquiryModal key={modal.kind} kind={modal.kind} bookId={modal.bookId} onClose={closeModal} />}</AnimatePresence>
     </SiteContext.Provider>
   );
 }

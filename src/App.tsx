@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
 import { Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { MotionConfig } from 'motion/react';
+import './fonts';
+import './interior.css';
 import { config } from './config';
 import { SiteProvider } from './site';
 import { CartProvider } from './store/cart';
@@ -26,20 +29,23 @@ function ScrollToTop() {
 }
 
 function Layout() {
+  const { pathname } = useLocation();
   return (
-    <div className="shell">
+    <>
       <ScrollToTop />
       {config.showTopBar && <TopBar />}
       <Header />
-      <main className="main"><Outlet /></main>
+      <main className="main"><div key={pathname} className="page-enter"><Outlet /></div></main>
       <Footer />
       <CartDrawer />
-    </div>
+    </>
   );
 }
 
 export function App() {
   return (
+    <MotionConfig reducedMotion="user">
+    <div className="site">
     <CatalogProvider>
     <CartProvider>
     <SiteProvider>
@@ -62,5 +68,7 @@ export function App() {
     </SiteProvider>
     </CartProvider>
     </CatalogProvider>
+    </div>
+    </MotionConfig>
   );
 }

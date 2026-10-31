@@ -1,6 +1,8 @@
 import { useEffect, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Logo } from '../components/Brand';
+import '../fonts';
+import '../interior.css';
 import { config } from '../config';
 import { LEGAL, legalDocFor, type LegalDoc } from '../legal';
 import { inr } from '../store/api';
@@ -283,7 +285,7 @@ export function LegalStandalone() {
   const doc = legalDocFor(pathname) ?? 'terms';
   useEffect(() => window.scrollTo(0, 0), [pathname]);
   return (
-    <div className="legal-shell">
+    <div className="site legal-shell">
       <header className="legal-shell__head">
         <div className="wrap"><a href="/" aria-label="Elden Academic Press home"><Logo /></a></div>
       </header>

@@ -133,9 +133,9 @@ export function Checkout() {
   if (!cart.lines.length) {
     return (
       <div className="wrap page-narrow">
-        <h1 className="h1-page">Checkout</h1>
-        <p className="body body--15">Your cart is empty.</p>
-        <div><Link to="/catalogue" className="btn btn--navy">Browse the store</Link></div>
+        <h1 className="t-h1">Checkout</h1>
+        <p className="t-lead">Your cart is empty.</p>
+        <div><Link to="/catalogue" className="btn btn--ink">Browse the store</Link></div>
       </div>
     );
   }
@@ -216,7 +216,7 @@ export function Checkout() {
             {generalError && <div className="form-error" role="alert">{generalError}</div>}
             {notice && <div className="form-notice" role="status">{notice}</div>}
             {cfg && !cfg.payments && <div className="form-notice">Online payment isn’t switched on yet. Please <Link to="/contact">contact us</Link> to order.</div>}
-            <button type="submit" className="btn btn--bronze btn--lg btn--block" disabled={busy || loading || !quote || hasIssues || !cfg?.payments}>
+            <button type="submit" className="btn btn--accent btn--lg btn--block" disabled={busy || loading || !quote || hasIssues || !cfg?.payments}>
               {busy ? 'Please wait…' : quote ? `Pay ${inr(quote.total)}` : 'Pay'}
             </button>
             <div className="co-secure">
@@ -287,7 +287,7 @@ function SimulatedPayment({ res, onPaid, onClose }: { res: CheckoutResponse; onP
           <div className="sim-pay__amount">{inr(res.razorpay!.amount)}</div>
           <div className="sim-pay__order">Order #{res.number}</div>
           {msg && <div className="form-error">{msg}</div>}
-          <button type="button" className="btn btn--navy btn--lg btn--block" disabled={busy} onClick={() => go(false)}>Pay with test UPI</button>
+          <button type="button" className="btn btn--ink btn--lg btn--block" disabled={busy} onClick={() => go(false)}>Pay with test UPI</button>
           <button type="button" className="btn btn--outline btn--block" disabled={busy} onClick={() => go(true)}>Simulate a failed payment</button>
         </div>
       </div>

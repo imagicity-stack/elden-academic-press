@@ -77,7 +77,7 @@ Sample, school/bulk, teacher-access and distributor enquiry forms (`src/componen
   - `catalogue.ts` — filtering, sorting and URL helpers
   - `admin/` — the back office (loaded only at `/admin`)
   - `data.ts` — cover palettes, level names, distributors, and the sample catalogue used for local/demo data
-  - `styles.css` — all site styles; design tokens on `:root`
+  - `interior.css` — the website’s design (fonts in `fonts.ts`, animation helpers in `components/motion.tsx`); `styles.css` holds the base shared with the coming-soon page
 - `api/index.ts` — Vercel entry for the API
 - `server/` — the API (Hono)
   - `app.ts` — routes, error handling; `env.ts`, `deps.ts` — configuration and services

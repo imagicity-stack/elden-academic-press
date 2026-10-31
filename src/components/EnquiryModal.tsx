@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { motion } from 'motion/react';
 import { submitForm, formData } from '../api';
 import { PAL } from '../data';
 import { useCatalog } from '../store/catalog';
@@ -29,8 +30,9 @@ export function EnquiryModal({ kind, bookId, onClose }: { kind: ModalKind; bookI
   }, [onClose]);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={(e) => e.stopPropagation()}>
+    <motion.div className="modal-backdrop" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={(e) => e.stopPropagation()}
+        initial={{ opacity: 0, y: 40, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.98 }} transition={{ type: 'spring', stiffness: 320, damping: 30 }}>
         <div className="modal__head">
           <div className="modal__head-text">
             <div id="modal-title" className="modal__title">{title}</div>
@@ -42,7 +44,7 @@ export function EnquiryModal({ kind, bookId, onClose }: { kind: ModalKind; bookI
           <div className="modal__done">
             <div className="h-card">Request received.</div>
             <div className="body-sm">Our team will contact you shortly to confirm details.</div>
-            <button type="button" className="btn btn--navy btn--mt" onClick={onClose}>Done</button>
+            <button type="button" className="btn btn--ink btn--md btn--mt" onClick={onClose}>Done</button>
           </div>
         ) : (
           <form className="modal__form" onSubmit={submit}>
@@ -75,10 +77,10 @@ export function EnquiryModal({ kind, bookId, onClose }: { kind: ModalKind; bookI
             )}
             <input type="text" name="website" tabIndex={-1} autoComplete="off" className="hp" aria-hidden="true" />
             {error && <div className="form-error" role="alert">{error}</div>}
-            <button type="submit" className="btn btn--bronze btn--lg btn--mt-sm" disabled={busy}>{busy ? 'Sending…' : cta}</button>
+            <button type="submit" className="btn btn--accent btn--lg btn--mt-sm" disabled={busy}>{busy ? 'Sending…' : cta}</button>
           </form>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
