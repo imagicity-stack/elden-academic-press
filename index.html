@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- Google Tag Manager (GTM-P38DZ6G5). Not loaded on the admin or the local dev server.
+    <!-- Google Tag Manager (GTM-P38DZ6G5) and Google Analytics (G-0TR5TFH9KP). Not loaded on the admin or the local dev server.
          A private order link's token (/order/123?t=…) is moved out of the address bar first,
          so it never reaches analytics. vercel.json's CSP lists this script's SHA-256 hash. -->
     <script>
@@ -16,10 +16,13 @@
         w.dataLayer = w.dataLayer || [];
         w.gtag = function () { w.dataLayer.push(arguments); };
         w.gtag('js', new Date());
-        var s = d.createElement('script');
-        s.async = true;
-        s.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-P38DZ6G5';
-        d.head.appendChild(s);
+        w.gtag('config', 'G-0TR5TFH9KP');
+        ['gtm.js?id=GTM-P38DZ6G5', 'gtag/js?id=G-0TR5TFH9KP'].forEach(function (src) {
+          var s = d.createElement('script');
+          s.async = true;
+          s.src = 'https://www.googletagmanager.com/' + src;
+          d.head.appendChild(s);
+        });
       })(window, document, location);
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
