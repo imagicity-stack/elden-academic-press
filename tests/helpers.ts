@@ -22,6 +22,7 @@ export function memoryStorage(): Storage {
     signedDownloadUrl: async (b, p, s) => `https://files.test/signed/${b}/${p}?expires=${s}`,
     signedUploadUrl: async (b, p) => ({ url: `https://files.test/upload/${b}/${p}`, token: 'tok', path: p }),
     remove: async () => {},
+    read: async () => new TextEncoder().encode('%PDF-1.4 sample e-book'),
   };
 }
 

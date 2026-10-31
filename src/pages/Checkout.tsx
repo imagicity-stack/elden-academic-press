@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type InputHTMLAttributes } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ApiError, api, fieldError, inr } from '../store/api';
+import { ApiError, api, inr } from '../store/api';
 import { FORMAT_LABEL, useCatalog, useStoreConfig } from '../store/catalog';
 import { useCart, useQuote } from '../store/cart';
 import { orderPath } from '../store/orderToken';
@@ -59,10 +59,9 @@ export function Checkout() {
     items: cart.lines,
     couponCode: cart.coupon || null,
     contact: { name: d.name, email: d.email, phone: d.phone },
-    shipping: needsAddress ? { name: d.name, line1: d.line1, line2: d.line2, city: d.city, state: d.state, pincode: d.pincode } : null,
-    billingState: d.state,
+    shipping: { name: d.name, line1: d.line1, line2: d.line2, city: d.city, state: d.state, pincode: d.pincode },
     note: d.note || undefined,
-  }), [cart.lines, cart.coupon, d, needsAddress]);
+  }), [cart.lines, cart.coupon, d]);
 
   async function finish(result: PaymentResult) {
     setBusy(true);
@@ -141,7 +140,6 @@ export function Checkout() {
     );
   }
 
-  const fe = (...p: string[]) => fieldError(err, ...p);
   const generalError = err instanceof ApiError && err.code === 'invalid' && err.details && typeof err.details === 'object'
     ? [...new Set(Object.values(err.details as Record<string, string[]>).flat())].join(' · ')
     : err instanceof Error ? err.message : null;
@@ -162,24 +160,17 @@ export function Checkout() {
             <Input label="Email" value={d.email} onChange={set('email')} type="email" autoComplete="email" required hint="Your order confirmation and e-book links are sent here." />
           </fieldset>
 
-          {needsAddress ? (
-            <fieldset className="co-section">
-              <legend>Delivery address</legend>
-              <Input label="House / flat, street" value={d.line1} onChange={set('line1')} autoComplete="address-line1" required />
-              <Input label="Area, landmark (optional)" value={d.line2} onChange={set('line2')} autoComplete="address-line2" />
-              <div className="form-grid form-grid--3">
-                <Input label="City / town" value={d.city} onChange={set('city')} autoComplete="address-level2" required />
-                <StateSelect value={d.state} onChange={set('state')} states={cfg?.states} />
-                <Input label="PIN code" value={d.pincode} onChange={set('pincode')} autoComplete="postal-code" inputMode="numeric" maxLength={6} required />
-              </div>
-            </fieldset>
-          ) : (
-            <fieldset className="co-section">
-              <legend>Your state</legend>
-              <p className="co-hint">E-books are delivered by email and on your order page — no address needed. We use your state for the GST invoice.</p>
-              <StateSelect value={d.state} onChange={set('state')} states={cfg?.states} error={fe('billingState')} />
-            </fieldset>
-          )}
+          <fieldset className="co-section">
+            <legend>{needsAddress ? 'Delivery address' : 'Billing address'}</legend>
+            {!needsAddress && <p className="co-hint">E-books arrive by email and on your order page. Your address goes on the GST invoice.</p>}
+            <Input label="House / flat, street" value={d.line1} onChange={set('line1')} autoComplete="address-line1" required />
+            <Input label="Area, landmark (optional)" value={d.line2} onChange={set('line2')} autoComplete="address-line2" />
+            <div className="form-grid form-grid--3">
+              <Input label="City / town" value={d.city} onChange={set('city')} autoComplete="address-level2" required />
+              <StateSelect value={d.state} onChange={set('state')} states={cfg?.states} />
+              <Input label="PIN code" value={d.pincode} onChange={set('pincode')} autoComplete="postal-code" inputMode="numeric" maxLength={6} required />
+            </div>
+          </fieldset>
 
           <fieldset className="co-section">
             <legend>Note (optional)</legend>

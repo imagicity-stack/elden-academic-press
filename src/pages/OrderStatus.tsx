@@ -142,8 +142,8 @@ export function OrderStatus() {
         <div className="stack-18">
           {order.address && (
             <section className="order-card">
-              <h2 className="order-card__title">Delivering to</h2>
-              <p className="body body--15">{order.address.name}<br />{order.address.line1}{order.address.line2 && <><br />{order.address.line2}</>}<br />{order.address.city} – {order.address.pincode}</p>
+              <h2 className="order-card__title">{order.requiresShipping ? 'Delivering to' : 'Billing address'}</h2>
+              <p className="body">{order.address.name}<br />{order.address.line1}{order.address.line2 && <><br />{order.address.line2}</>}<br />{order.address.city}, {order.address.state} {order.address.pincode}</p>
             </section>
           )}
           <section className="order-card">

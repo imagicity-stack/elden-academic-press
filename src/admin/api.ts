@@ -61,9 +61,9 @@ export async function downloadFile(path: string, fileName: string) {
 export async function openPrintable(path: string) {
   const win = window.open('', '_blank');
   const res = await authed(path);
-  const html = await res.text();
+  const data = await res.arrayBuffer();
   if (!res.ok) { win?.close(); throw new ApiError(res.status, 'Could not open the document'); }
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  const url = URL.createObjectURL(new Blob([data], { type: res.headers.get('content-type') ?? 'text/html' }));
   if (win) win.location.href = url; else window.location.href = url;
 }
 

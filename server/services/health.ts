@@ -103,8 +103,10 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
     }
   } else todo.push('Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to take payments');
 
-  if (env.RESEND_API_KEY) checks.email = 'ok';
-  else if (env.onVercel) todo.push('Set RESEND_API_KEY so order emails are sent');
+  if ((env.SMTP_USER && env.SMTP_PASS) || env.RESEND_API_KEY) checks.email = 'ok';
+  else if (env.onVercel) todo.push('Set SMTP_USER and SMTP_PASS (Google Workspace app password) so order emails are sent');
+  if (env.onVercel && !env.MAIL_TO) todo.push('Set MAIL_TO to the inbox that should receive contact-form messages');
+  if (env.onVercel && env.SMTP_USER && !source.MAIL_FROM) todo.push(`Set MAIL_FROM, e.g. "Elden Academic Press <${env.SMTP_USER}>"`);
 
   return {
     ok: checks.config === 'ok' && checks.database === 'ok' && checks.storage === 'ok',

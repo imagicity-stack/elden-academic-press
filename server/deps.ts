@@ -5,7 +5,8 @@ import { getDb, type DB } from './db/client.js';
 import { products, productVariants, resources } from './db/schema.js';
 import { samplePdf, seedDemo } from './db/seed.js';
 import { loadEnv, type Env } from './env.js';
-import { consoleMailer, resendMailer, type Mailer } from './lib/mail.js';
+import { waitUntil } from '@vercel/functions';
+import { consoleMailer, resendMailer, smtpMailer, type Mailer } from './lib/mail.js';
 import { razorpayHttp, razorpaySimulator, type Razorpay } from './lib/razorpay.js';
 import { localStorage, supabaseStorage, type Storage } from './lib/storage.js';
 
@@ -17,6 +18,8 @@ export interface Deps {
   mailer: Mailer;
   storage: Storage;
   now(): Date;
+  /** Run work after the response is sent (emails). Unset = the caller waits for it. */
+  defer?(task: Promise<unknown>): void;
 }
 
 // Kept on globalThis so the dev server's hot reloads reuse one database.
@@ -33,7 +36,9 @@ async function buildDeps(env: Env): Promise<Deps> {
   const razorpay = env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET
     ? razorpayHttp(env.RAZORPAY_KEY_ID, env.RAZORPAY_KEY_SECRET)
     : env.paymentSimulator ? razorpaySimulator() : null;
-  const mailer = env.RESEND_API_KEY ? resendMailer(env.RESEND_API_KEY, env.MAIL_FROM) : consoleMailer();
+  const mailer = env.SMTP_USER && env.SMTP_PASS
+    ? smtpMailer({ host: env.SMTP_HOST, port: env.SMTP_PORT, user: env.SMTP_USER, pass: env.SMTP_PASS, from: env.MAIL_FROM })
+    : env.RESEND_API_KEY ? resendMailer(env.RESEND_API_KEY, env.MAIL_FROM) : consoleMailer();
 
   let storage: Storage;
   if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) storage = supabaseStorage(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
@@ -45,7 +50,8 @@ async function buildDeps(env: Env): Promise<Deps> {
     if (!env.DATABASE_URL) await seedLocal(db, local);
   }
 
-  return { env, db, razorpay, mailer, storage, now: () => new Date() };
+  // On Vercel, emails (with their PDFs) go out after the response, so paying customers aren't kept waiting.
+  return { env, db, razorpay, mailer, storage, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task) : undefined };
 }
 
 /** First local run: fill the embedded database with the demo catalogue and sample files. */

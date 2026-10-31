@@ -4,7 +4,7 @@ This is the one-time checklist to connect the store to real services. Do it in
 **test mode** first; nothing here charges real money until step 7.
 
 You will create four accounts: **Supabase** (database, admin sign-in, files),
-**Razorpay** (payments), **Resend** (emails) and **Vercel Pro** (hosting).
+**Razorpay** (payments), **Google Workspace** (emails) and **Vercel Pro** (hosting).
 Keys go into Vercel's settings — never into code, chat or email.
 
 ---
@@ -47,7 +47,7 @@ DATABASE_URL="<session pooler string, port 5432>" npm run db:seed
 Use either this or the SQL file, not both. After changing the schema: `npm run db:generate && npm run db:setup-sql`.
 </details>
 
-**e. Emails from Supabase (later, before inviting staff).** **Authentication → Emails → SMTP Settings**: connect Resend's SMTP (step 3) so staff invitations and password resets come from your domain. Supabase's built-in sender only delivers to your own Supabase team members.
+**e. Emails from Supabase (later, before inviting staff).** **Authentication → Emails → SMTP Settings**: enter Google Workspace SMTP (host `smtp.gmail.com`, port `465`, the same user and app password as step 3) so staff invitations and password resets come from your domain. Supabase's built-in sender only delivers to your own Supabase team members.
 
 ## 2. Razorpay
 
@@ -59,10 +59,20 @@ Use either this or the SQL file, not both. After changing the schema: `npm run d
    - Events: `payment.authorized`, `payment.captured`, `payment.failed`, `order.paid`, `refund.processed`, `refund.failed`
 4. Payment capture can stay automatic; the store also captures authorised payments itself.
 
-## 3. Resend (emails)
+## 3. Email (Google Workspace)
 
-1. Sign up at [resend.com](https://resend.com) → **Domains → Add domain** `eldenap.in` and add the DNS records it shows at your domain registrar.
-2. **API Keys → Create** → that's `RESEND_API_KEY`. Emails are sent from `orders@eldenap.in` (change with `MAIL_FROM`).
+Order confirmations (with the PDF invoice and, when small enough, the e-book attached), shipping and refund emails are sent from your Google Workspace mailbox. Contact-form messages arrive in the inbox you choose.
+
+1. Sign in to the Google account that will send the emails (e.g. `hello@eldenap.in`) → [myaccount.google.com](https://myaccount.google.com) → **Security** → turn on **2-Step Verification**.
+2. Same page → **App passwords** (or search “App passwords”) → name it “Elden website” → **Create**. Copy the 16-letter password (spaces don't matter). If the option is missing, a Workspace admin must allow it: **admin.google.com → Security → Less secure apps / App passwords**.
+3. In Vercel set:
+   - `SMTP_USER` = that email address
+   - `SMTP_PASS` = the app password
+   - `MAIL_FROM` = `Elden Academic Press <hello@eldenap.in>` (the same address, or an alias of it added in Gmail → Settings → Accounts → *Send mail as*; otherwise Gmail shows the main address)
+   - `MAIL_TO` = the inbox for contact forms and enquiries (several allowed, comma-separated)
+4. So emails don't land in spam, make sure `eldenap.in` has Google's SPF and DKIM records: **admin.google.com → Apps → Google Workspace → Gmail → Authenticate email** → generate the DKIM key, add the TXT record at your domain registrar, then **Start authentication**. SPF: a TXT record `v=spf1 include:_spf.google.com ~all`.
+
+Google Workspace sends up to 2,000 emails a day per account. (Instead of SMTP you can use [Resend](https://resend.com) with `RESEND_API_KEY`; it's used only when `SMTP_USER`/`SMTP_PASS` are empty.)
 
 ## 4. Vercel
 
@@ -80,7 +90,7 @@ Use either this or the SQL file, not both. After changing the schema: `npm run d
    | `SUPABASE_JWT_SECRET` | Legacy JWT secret (step 1d) |
    | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Razorpay test keys |
    | `RAZORPAY_WEBHOOK_SECRET` | the webhook secret from step 2 |
-   | `RESEND_API_KEY`, `MAIL_FROM` | from step 3 |
+   | `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `MAIL_TO` | from step 3 |
    | `ADMIN_OWNER_EMAIL` | the email of the user you created in step 1c |
    | `ORDER_LINK_SECRET`, `CRON_SECRET` | two different long random strings (e.g. `openssl rand -base64 48`) |
 
@@ -117,7 +127,7 @@ Use either this or the SQL file, not both. After changing the schema: `npm run d
 | Supabase Pro | ~$25/month (daily backups, no pausing) |
 | Vercel Pro | $20/month |
 | Razorpay | No monthly fee; a percentage per payment |
-| Resend | Free up to its monthly email allowance |
+| Google Workspace | Your existing plan (up to 2,000 emails a day per account) |
 
 ## Good to know
 

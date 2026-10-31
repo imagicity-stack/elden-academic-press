@@ -7,7 +7,8 @@ import { orderEvents, orderItems, orders, productVariants } from '../db/schema.j
 import { body, HttpError, notFound, rateLimit } from '../lib/http.js';
 import { getSettings } from '../services/catalog.js';
 import { sendOrderLink } from '../services/emails.js';
-import { renderInvoice } from '../services/invoice.js';
+import { invoiceFileName, renderInvoicePdf } from '../services/invoicePdf.js';
+import { stateName } from '../lib/states.js';
 import { checkOrderToken, type Order } from '../services/orders.js';
 
 export const customerOrders = new Hono<AppEnv>();
@@ -62,7 +63,7 @@ customerOrders.get('/:number', async (c) => {
     subtotal: o.subtotal, discount: o.discount, couponCode: o.couponCode, shipping: o.shipping, tax: o.tax, total: o.total,
     refundedAmount: o.refundedAmount,
     requiresShipping: o.requiresShipping,
-    address: o.requiresShipping ? { name: o.shipName, line1: o.shipLine1, line2: o.shipLine2, city: o.shipCity, state: o.shipState, pincode: o.shipPincode } : null,
+    address: o.shipLine1 ? { name: o.shipName, line1: o.shipLine1, line2: o.shipLine2, city: o.shipCity, state: stateName(o.shipState ?? ''), pincode: o.shipPincode } : null,
     tracking: o.shippedAt ? { courier: o.courier, number: o.trackingNumber, url: o.trackingUrl, shippedAt: o.shippedAt, deliveredAt: o.deliveredAt } : null,
     invoice: isPaid(o) || o.paymentStatus === 'refunded' ? o.invoiceNumber : null,
     timeline: events.filter((e) => PUBLIC_EVENTS.has(e.type)).map((e) => ({ type: e.type, message: e.message, at: e.createdAt })),
@@ -74,8 +75,11 @@ customerOrders.get('/:number/invoice', async (c) => {
   const o = await loadByToken(c, c.req.param('number'), c.req.query('t'));
   if (!o.invoiceNumber) throw notFound('No invoice for this order yet');
   const [items, s] = await Promise.all([deps.db.select().from(orderItems).where(eq(orderItems.orderId, o.id)), getSettings(deps.db)]);
-  c.header('Cache-Control', 'no-store');
-  return c.html(renderInvoice(o, items, s));
+  return c.body(await renderInvoicePdf(o, items, s), 200, {
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `inline; filename="${invoiceFileName(o)}"`,
+    'Cache-Control': 'no-store',
+  });
 });
 
 customerOrders.get('/:number/download/:itemId', async (c) => {

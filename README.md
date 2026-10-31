@@ -16,7 +16,7 @@ npm run build      # type-check + production build to dist/
 
 `npm run dev` needs no accounts or keys. It starts an embedded Postgres (PGlite, kept in `.data/`) filled with the sample catalogue and Study Hub PDFs, a **payment simulator** in place of Razorpay, and a developer sign-in for the admin at [`/admin`](http://localhost:5173/admin). Delete `.data/` to start fresh. None of these shortcuts exist on Vercel.
 
-Connecting the real services (Supabase, Razorpay, Resend, Vercel) is a one-time checklist: **[docs/STORE-SETUP.md](docs/STORE-SETUP.md)**.
+Connecting the real services (Supabase, Razorpay, Google Workspace email, Vercel) is a one-time checklist: **[docs/STORE-SETUP.md](docs/STORE-SETUP.md)**.
 
 ## Launch switch: `VITE_SITE_LIVE`
 
@@ -47,7 +47,7 @@ A self-hosted store and back office, run as one Vercel function (`api/index.ts`)
 |---|---|
 | Database, admin sign-in (password + authenticator app), file storage | Supabase (Postgres, Auth, Storage) |
 | Payments (UPI, cards, net banking, wallets) | Razorpay |
-| Order, shipping and staff emails | Resend |
+| Order, shipping and staff emails (PDF invoice attached) | Google Workspace via SMTP (or Resend) |
 | Hosting, scheduled jobs | Vercel Pro (`vercel.json`) |
 
 **Shopping:** each title can be sold as a printed book, an e-book, or both, with an optional **bundle price** for "e-book + printed copy" (the "Also send me the printed copy" box). Guest checkout; flat-rate shipping that's free above a set amount; discount codes; prices include GST, with GST invoices numbered per financial year. Every order gets a private link for status, tracking, invoice and e-book downloads, and customers can find it again at `/track` with their email.
@@ -91,7 +91,7 @@ Sample, school/bulk, teacher-access and distributor enquiry forms (`src/componen
   - `lib/` — pricing and GST, Razorpay, storage, email, CSV, validation
 - `scripts/seed.ts` — `npm run db:seed` (categories) or `-- --demo` (sample catalogue)
 - `tests/` — Vitest suites for pricing, checkout/payments and admin
-- `docs/STORE-SETUP.md` — connecting Supabase, Razorpay, Resend and Vercel
+- `docs/STORE-SETUP.md` — connecting Supabase, Razorpay, Google Workspace email and Vercel
 - `docs/supabase-setup.sql` — the database setup to paste into Supabase's SQL Editor (generated from the migrations: `npm run db:setup-sql`)
 - `public/assets/` — logo marks
 

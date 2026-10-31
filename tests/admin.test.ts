@@ -13,7 +13,7 @@ async function as(who: { sub: string; email: string; aal?: string }) {
 }
 async function paidOrder(kind: 'print' | 'bundle' = 'print', quantity = 1) {
   const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
-  const r = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind, quantity }], contact, shipping: address, billingState: '20' } });
+  const r = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind, quantity }], contact, shipping: address } });
   const payload = t.razorpay.simulatePayment(r.json.razorpay.orderId);
   await t.call('POST', '/checkout/verify', { body: payload });
   return { id: r.json.orderId as string, number: r.json.number as number, productId: p.id, total: r.json.total as number };
@@ -93,7 +93,7 @@ describe('orders', () => {
     expect(r.status).toBe(200);
     expect(r.json.order.fulfillmentStatus).toBe('shipped');
     const mail = t.mailer.sent.at(-1)!;
-    expect(mail.subject).toBe(`Order #${o.number} has shipped`);
+    expect(mail.subject).toBe(`Your books are on their way · order #${o.number}`);
     expect(mail.html).toContain('EK123456789IN');
     const detail = await t.call('GET', `/admin/orders/${o.id}`, { headers: h });
     expect(detail.json.events.map((e: any) => e.type)).toEqual(['created', 'paid', 'packed', 'shipped']);

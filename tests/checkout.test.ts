@@ -17,8 +17,7 @@ async function printStock(productId: string) {
   return (all.find((x) => x.kind === 'print') ?? v).stock;
 }
 async function checkout(items: { productId: string; kind: string; quantity: number }[], extra: Record<string, unknown> = {}) {
-  const needsAddress = items.some((i) => i.kind !== 'digital');
-  return t.call('POST', '/checkout', { body: { items, contact, shipping: needsAddress ? address : null, billingState: '20', ...extra } });
+  return t.call('POST', '/checkout', { body: { items, contact, shipping: address, ...extra } });
 }
 async function pay(rzpOrderId: string, opts: { fail?: boolean } = {}) {
   const payload = t.razorpay.simulatePayment(rzpOrderId, opts);
@@ -75,7 +74,11 @@ describe('checkout and payment', () => {
     expect(o.invoiceNumber).toMatch(/^EAP\/\d\d-\d\d\/00001$/);
     expect(o.customerId).toBeTruthy();
     expect(o.phone).toBe('9876543210');
-    expect(t.mailer.sent.map((m) => m.subject)).toEqual(expect.arrayContaining([`Order #${o.number} confirmed`, expect.stringContaining('New order')]));
+    expect(t.mailer.sent.map((m) => m.subject)).toEqual(expect.arrayContaining([`Order #${o.number} confirmed: your e-books are ready`, expect.stringContaining('New order')]));
+    const confirmation = t.mailer.sent.find((m) => m.to === contact.email)!;
+    expect(confirmation.html).toContain(`/api/orders/${o.number}/download/`);
+    expect(confirmation.attachments!.map((a) => a.filename)).toEqual([expect.stringMatching(/^Elden-invoice-EAP-\d\d-\d\d-00001\.pdf$/), 'mathematics-today.pdf']);
+    expect(new TextDecoder().decode(confirmation.attachments![0].content.slice(0, 5))).toBe('%PDF-');
 
     // Second confirmation (e.g. webhook after the browser) changes nothing
     const again = await t.call('POST', '/checkout/verify', { body: payload });
@@ -112,14 +115,27 @@ describe('checkout and payment', () => {
     expect(await printStock(p.id)).toBe(1);
   });
 
-  it('requires an address for printed books and validates input', async () => {
+  it('requires a full address, for e-books too, and validates input', async () => {
     const p = await productBySlug('mathematics-today');
-    const r = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }], contact, billingState: '20' } });
-    expect(r.status).toBe(400);
-    expect(r.json.code).toBe('address_required');
-    const bad = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }], contact: { ...contact, phone: '123' }, billingState: '99' } });
+    for (const kind of ['print', 'digital']) {
+      const r = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind, quantity: 1 }], contact } });
+      expect(r.status).toBe(400);
+      expect(Object.keys(r.json.details)).toContain('shipping');
+    }
+    const bad = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }], contact: { ...contact, phone: '123' }, shipping: { ...address, state: '99' } } });
     expect(bad.status).toBe(400);
-    expect(Object.keys(bad.json.details)).toEqual(expect.arrayContaining(['contact', 'billingState']));
+    expect(Object.keys(bad.json.details)).toEqual(expect.arrayContaining(['contact', 'shipping']));
+  });
+
+  it('keeps the billing address of an e-book order and uses its state for GST', async () => {
+    const p = await productBySlug('mathematics-today');
+    const r = await checkout([{ productId: p.id, kind: 'digital', quantity: 1 }], { shipping: { ...address, state: '27', city: 'Pune', pincode: '411001' } });
+    expect(r.status).toBe(201);
+    const [o] = await t.db.select().from(orders).where(eq(orders.id, r.json.orderId));
+    expect(o).toMatchObject({ requiresShipping: false, fulfillmentStatus: 'not_required', shipLine1: address.line1, shipCity: 'Pune', billingState: '27' });
+    await pay(r.json.razorpay.orderId);
+    const view = await t.call('GET', `/orders/${o.number}?t=${r.json.token}`);
+    expect(view.json.address).toMatchObject({ city: 'Pune', state: 'Maharashtra' });
   });
 
   it('releases stock when a checkout expires, and re-takes it if paid late', async () => {
@@ -220,12 +236,13 @@ describe('after purchase', () => {
     expect(over.status).toBe(403);
   });
 
-  it('renders an invoice', async () => {
+  it('serves the invoice as a PDF', async () => {
     const o = await paidOrder();
-    const r = await t.call('GET', `/orders/${o.number}/invoice?t=${o.token}`);
-    expect(r.status).toBe(200);
-    expect(r.text).toContain('EAP/');
-    expect(r.text).toContain('Mathematics Today');
+    const res = await t.app.request(`/api/orders/${o.number}/invoice?t=${o.token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/pdf');
+    expect(res.headers.get('content-disposition')).toMatch(/Elden-invoice-EAP-/);
+    expect(new TextDecoder().decode((await res.arrayBuffer()).slice(0, 5))).toBe('%PDF-');
   });
 
   it('finds an order by number and email or phone, and re-sends the link', async () => {
@@ -251,10 +268,19 @@ describe('enquiry forms', () => {
   it('stores the enquiry and emails the store', async () => {
     const r = await t.call('POST', '/enquiries', { body: { kind: 'sample', name: 'R. Sharma', email: 'r@school.in', institution: 'DAV Hazaribagh', title: 'Mathematics Today — Class 8' } });
     expect(r.status).toBe(201);
-    expect(t.mailer.sent[0].subject).toBe('Sample copy request — R. Sharma');
+    expect(t.mailer.sent[0].subject).toBe('Sample copy request: R. Sharma, DAV Hazaribagh');
+    expect(t.mailer.sent[0].replyTo).toBe('r@school.in');
   });
   it('rejects bots and empty contact details', async () => {
     expect((await t.call('POST', '/enquiries', { body: { kind: 'contact', name: 'Bot', email: 'a@b.co', website: 'spam' } })).status).toBe(400);
     expect((await t.call('POST', '/enquiries', { body: { kind: 'contact', name: 'No Contact' } })).status).toBe(400);
+  });
+});
+
+describe('contact form recipients', () => {
+  it('sends enquiries to MAIL_TO when it is set', async () => {
+    const m = await setup({ env: { MAIL_TO: 'office@eldenap.in, editor@eldenap.in' }, seed: false });
+    await m.call('POST', '/enquiries', { body: { kind: 'contact', name: 'Priya', email: 'priya@example.com', message: 'Hello' } });
+    expect(m.mailer.sent[0].to).toEqual(['office@eldenap.in', 'editor@eldenap.in']);
   });
 });
