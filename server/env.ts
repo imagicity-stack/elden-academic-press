@@ -22,8 +22,16 @@ const schema = z.object({
   /** Legacy JWT secret: needed only while the project still signs sign-ins with it (HS256). */
   SUPABASE_JWT_SECRET: optional,
 
+  /** Sender of every email, e.g. "Elden Academic Press <noreply@eldenap.in>". Replies go to the support email. */
+  MAIL_FROM: z.string().default('Elden Academic Press <noreply@eldenap.in>'),
+  /** Our inboxes (comma-separated): they receive contact forms and a copy of every customer email. */
+  MAIL_TO: optional,
+  /** Google Workspace (or other SMTP) sending; takes priority over Resend when user and password are set. */
+  SMTP_HOST: z.string().default('smtp.gmail.com'),
+  SMTP_PORT: z.coerce.number().int().default(465),
+  SMTP_USER: optional,
+  SMTP_PASS: optional,
   RESEND_API_KEY: optional,
-  MAIL_FROM: z.string().default('Elden Academic Press <orders@eldenap.in>'),
 
   /** The first person to sign in with this email becomes the store owner. */
   ADMIN_OWNER_EMAIL: optional,

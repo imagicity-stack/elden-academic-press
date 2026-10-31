@@ -4,6 +4,7 @@
   "functions": {
     "api/index.ts": {
       "maxDuration": 30,
+      "includeFiles": "server/assets/**",
       "excludeFiles": "{node_modules/@electric-sql/**,.data/**,tests/**,design/**}"
     }
   },

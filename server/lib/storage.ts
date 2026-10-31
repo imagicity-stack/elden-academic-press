@@ -1,7 +1,7 @@
 // File storage: Supabase Storage in production; a local folder in development.
 // Buckets: `covers` and `resources` are public; `ebooks` is private and only
 // ever served through short-lived signed links.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { hmacHex, safeEqual } from './crypto.js';
@@ -16,6 +16,8 @@ export interface Storage {
   /** A one-time URL the admin's browser uploads a file to directly. */
   signedUploadUrl(bucket: Bucket, path: string): Promise<{ url: string; token: string; path: string }>;
   remove(bucket: Bucket, path: string): Promise<void>;
+  /** The file's bytes (used to attach e-books to emails). */
+  read(bucket: Bucket, path: string): Promise<Uint8Array>;
 }
 
 export function supabaseStorage(url: string, serviceKey: string): Storage {
@@ -34,6 +36,11 @@ export function supabaseStorage(url: string, serviceKey: string): Storage {
     },
     async remove(bucket, path) {
       await client.storage.from(bucket).remove([path]);
+    },
+    async read(bucket, path) {
+      const { data, error } = await client.storage.from(bucket).download(path);
+      if (error || !data) throw new Error(error?.message ?? 'Could not read file');
+      return new Uint8Array(await data.arrayBuffer());
     },
   };
 }
@@ -62,6 +69,7 @@ export function localStorage(root: string, baseUrl: string, secret = 'local-stor
       return { url: `${baseUrl}/api/dev/files/${bucket}/${path}?upload=${token}`, token, path };
     },
     async remove() { /* keep local files */ },
+    async read(bucket, path) { return new Uint8Array(await readFile(file(bucket, path))); },
     verify(bucket, path, exp, sig) {
       return Number(exp) > Date.now() && safeEqual(sign(bucket, path, exp), sig);
     },

@@ -84,8 +84,9 @@ export interface CheckoutInput {
   items: CartLineInput[];
   couponCode?: string | null;
   contact: { name: string; email: string; phone: string };
-  shipping?: { name: string; line1: string; line2?: string; city: string; state: string; pincode: string } | null;
-  billingState: string;
+  /** The buyer's address: delivery address for printed books, billing address for e-books. */
+  shipping: { name: string; line1: string; line2?: string; city: string; state: string; pincode: string };
+  billingState?: string;
   note?: string;
 }
 
@@ -93,10 +94,9 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
   const { db, razorpay, env } = deps;
   if (!razorpay) throw new HttpError(503, 'Online payments are not available right now. Please contact us to order.', 'payments_unavailable');
 
-  const placeOfSupply = input.shipping?.state ?? input.billingState;
+  const placeOfSupply = input.shipping.state;
   const { quote: q, settings: s } = await quote(db, { items: input.items, couponCode: input.couponCode, placeOfSupply }, deps.now());
   if (!q.ok) throw new HttpError(409, q.couponError ?? 'Some items in your cart need attention.', 'cart_changed', q);
-  if (q.requiresShipping && !input.shipping) throw new HttpError(400, 'A delivery address is needed for printed books.', 'address_required');
 
   if (q.coupon) {
     const [c] = await db.select().from(coupons).where(eq(coupons.code, q.coupon.code));
@@ -110,17 +110,17 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
 
   const expiresAt = new Date(deps.now().getTime() + s.orderExpiryMinutes * 60_000);
   const order = await db.transaction(async (tx) => {
-    const ship = q.requiresShipping ? input.shipping! : null;
+    const ship = input.shipping;
     const [o] = await tx.insert(orders).values({
       name: input.contact.name,
       email: input.contact.email,
       phone: input.contact.phone,
-      shipName: ship?.name ?? null,
-      shipLine1: ship?.line1 ?? null,
-      shipLine2: ship?.line2 || null,
-      shipCity: ship?.city ?? null,
-      shipState: ship?.state ?? null,
-      shipPincode: ship?.pincode ?? null,
+      shipName: ship.name,
+      shipLine1: ship.line1,
+      shipLine2: ship.line2 || null,
+      shipCity: ship.city,
+      shipState: ship.state,
+      shipPincode: ship.pincode,
       billingState: placeOfSupply,
       requiresShipping: q.requiresShipping,
       subtotal: q.subtotal,
@@ -303,10 +303,11 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
   if (result.newlyPaid) {
     const items = await deps.db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
     const s = await getSettings(deps.db);
-    await Promise.all([
+    const emails = Promise.all([
       sendOrderConfirmation(deps, result.order, items, s),
       sendStoreNewOrder(deps, result.order, items, s),
-    ]);
+    ]).catch((e) => console.error('[mail] order emails failed', (e as Error).message));
+    if (deps.defer) deps.defer(emails); else await emails;
   }
   return result;
 }

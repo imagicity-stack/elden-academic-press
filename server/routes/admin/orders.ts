@@ -8,7 +8,8 @@ import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
 import { stateName } from '../../lib/states.js';
 import { getSettings } from '../../services/catalog.js';
 import { sendOrderConfirmation, sendRefundNotice, sendShipped } from '../../services/emails.js';
-import { renderInvoice, renderPackingSlip } from '../../services/invoice.js';
+import { renderPackingSlip } from '../../services/invoice.js';
+import { invoiceFileName, renderInvoicePdf } from '../../services/invoicePdf.js';
 import { cancelUnpaid, logEvent, orderLink, refundOrder } from '../../services/orders.js';
 import { orderStatusLabel } from '../orders.js';
 import { audit, requireRole } from './auth.js';
@@ -191,7 +192,9 @@ adminOrders.get('/:id/invoice', async (c) => {
   const o = await loadOrder(c);
   if (!o.invoiceNumber) throw notFound('No invoice yet');
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, o.id));
-  return c.html(renderInvoice(o, items, await getSettings(db)));
+  return c.body(await renderInvoicePdf(o, items, await getSettings(db)), 200, {
+    'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${invoiceFileName(o)}"`, 'Cache-Control': 'no-store',
+  });
 });
 
 adminOrders.get('/:id/packing-slip', async (c) => {

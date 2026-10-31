@@ -4,7 +4,7 @@ This is the one-time checklist to connect the store to real services. Do it in
 **test mode** first; nothing here charges real money until step 7.
 
 You will create four accounts: **Supabase** (database, admin sign-in, files),
-**Razorpay** (payments), **Resend** (emails) and **Vercel Pro** (hosting).
+**Razorpay** (payments), **Google Workspace** (emails) and **Vercel Pro** (hosting).
 Keys go into Vercel's settings — never into code, chat or email.
 
 ---
@@ -47,7 +47,7 @@ DATABASE_URL="<session pooler string, port 5432>" npm run db:seed
 Use either this or the SQL file, not both. After changing the schema: `npm run db:generate && npm run db:setup-sql`.
 </details>
 
-**e. Emails from Supabase (later, before inviting staff).** **Authentication → Emails → SMTP Settings**: connect Resend's SMTP (step 3) so staff invitations and password resets come from your domain. Supabase's built-in sender only delivers to your own Supabase team members.
+**e. Emails from Supabase (later, before inviting staff).** **Authentication → Emails → SMTP Settings**: enter Google Workspace SMTP (host `smtp.gmail.com`, port `465`, the same user and app password as step 3) so staff invitations and password resets come from your domain. Supabase's built-in sender only delivers to your own Supabase team members.
 
 ## 2. Razorpay
 
@@ -59,10 +59,24 @@ Use either this or the SQL file, not both. After changing the schema: `npm run d
    - Events: `payment.authorized`, `payment.captured`, `payment.failed`, `order.paid`, `refund.processed`, `refund.failed`
 4. Payment capture can stay automatic; the store also captures authorised payments itself.
 
-## 3. Resend (emails)
+## 3. Email (Google Workspace)
 
-1. Sign up at [resend.com](https://resend.com) → **Domains → Add domain** `eldenap.in` and add the DNS records it shows at your domain registrar.
-2. **API Keys → Create** → that's `RESEND_API_KEY`. Emails are sent from `orders@eldenap.in` (change with `MAIL_FROM`).
+Customer emails (order confirmation with the PDF invoice and, when small enough, the e-book attached; shipping; refunds) are sent from **noreply@eldenap.in**. Every one of them is also copied, hidden (BCC), to your own inboxes in `MAIL_TO`, which also receive the contact forms and enquiries. When a customer presses Reply, it goes to the support email in **Admin → Settings → Store** (e.g. hello@eldenap.in), not to noreply.
+
+1. **Create the sender.** Either
+   - make `noreply@eldenap.in` its **own user** in [admin.google.com](https://admin.google.com) → Directory → Users (uses a licence), and sign in as it for the next steps; or
+   - add `noreply@eldenap.in` as an **alternate email (alias)** of an existing user such as hello@ (Users → hello → User information → Alternate emails, free). Then, signed in as hello@, open Gmail → ⚙ Settings → **Accounts → Send mail as → Add another email address** → `noreply@eldenap.in`, untick “Treat as an alias”, and confirm.
+2. Signed in as the sending account → [myaccount.google.com](https://myaccount.google.com) → **Security** → turn on **2-Step Verification**, then search **App passwords** → name it “Elden website” → **Create** and copy the 16-letter password. (If the option is missing, a Workspace admin must allow it in admin.google.com → Security.)
+3. In Vercel set:
+   - `MAIL_FROM` = `Elden Academic Press <noreply@eldenap.in>`
+   - `SMTP_USER` = the account that signs in (noreply@eldenap.in, or hello@eldenap.in if noreply is its alias)
+   - `SMTP_PASS` = the app password
+   - `MAIL_TO` = `hello@eldenap.in` (add more, comma-separated: `hello@eldenap.in, orders@eldenap.in`)
+4. So emails don't land in spam, turn on DKIM: **admin.google.com → Apps → Google Workspace → Gmail → Authenticate email** → generate the key, add the TXT record at your domain registrar, then **Start authentication**. SPF: a TXT record `v=spf1 include:_spf.google.com ~all`.
+
+Tip: copies are easiest to read when the `MAIL_TO` inbox is not the sending account itself (Gmail files mail you send to yourself under Sent). New-order alerts with an “Open in admin” button go to **Admin → Settings → Order alerts** if you fill that in.
+
+Google Workspace sends up to 2,000 emails a day per account. (Instead of SMTP you can use [Resend](https://resend.com) with `RESEND_API_KEY`; it's used only when `SMTP_USER`/`SMTP_PASS` are empty.)
 
 ## 4. Vercel
 
@@ -80,7 +94,7 @@ Use either this or the SQL file, not both. After changing the schema: `npm run d
    | `SUPABASE_JWT_SECRET` | Legacy JWT secret (step 1d) |
    | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Razorpay test keys |
    | `RAZORPAY_WEBHOOK_SECRET` | the webhook secret from step 2 |
-   | `RESEND_API_KEY`, `MAIL_FROM` | from step 3 |
+   | `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `MAIL_TO` | from step 3 |
    | `ADMIN_OWNER_EMAIL` | the email of the user you created in step 1c |
    | `ORDER_LINK_SECRET`, `CRON_SECRET` | two different long random strings (e.g. `openssl rand -base64 48`) |
 
@@ -117,7 +131,7 @@ Use either this or the SQL file, not both. After changing the schema: `npm run d
 | Supabase Pro | ~$25/month (daily backups, no pausing) |
 | Vercel Pro | $20/month |
 | Razorpay | No monthly fee; a percentage per payment |
-| Resend | Free up to its monthly email allowance |
+| Google Workspace | Your existing plan (up to 2,000 emails a day per account) |
 
 ## Good to know
 

@@ -150,7 +150,12 @@ export default function OrderDetail() {
               {o.trackingNumber && <p className="ad-mt"><b>{o.courier}</b> · {o.trackingNumber}{o.trackingUrl && <> · <a href={o.trackingUrl} target="_blank" rel="noopener noreferrer">track ↗</a></>}</p>}
             </Card>
           ) : (
-            <Card title="Delivery"><p className="ad-muted">E-books only — delivered by download. Place of supply: {o.billingStateName}.</p></Card>
+            <Card title="Billing address">
+              {o.shipLine1
+                ? <p className="ad-address">{o.shipName}<br />{o.shipLine1}{o.shipLine2 && <><br />{o.shipLine2}</>}<br />{o.shipCity}, {o.shipStateName} – {o.shipPincode}</p>
+                : <p className="ad-muted">Place of supply: {o.billingStateName}.</p>}
+              <p className="ad-muted ad-mt">E-books only, delivered by download.</p>
+            </Card>
           )}
           {o.customerNote && <Card title="Customer note"><p className="ad-pre">{o.customerNote}</p></Card>}
           <Card title="Internal note">

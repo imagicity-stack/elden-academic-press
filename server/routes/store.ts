@@ -65,6 +65,7 @@ const zCheckout = z.object({
   items: zItems,
   couponCode: zCoupon,
   contact: z.object({ name: zName, email: zEmail, phone: zPhone }),
+  /** Delivery address for printed books; billing address for e-book-only orders. Always required. */
   shipping: z.object({
     name: zName,
     line1: z.string().trim().min(3, 'Enter the house / street').max(200),
@@ -72,8 +73,9 @@ const zCheckout = z.object({
     city: z.string().trim().min(2, 'Enter the city').max(80),
     state: zState,
     pincode: zPincode,
-  }).optional().nullable(),
-  billingState: zState,
+  }, { error: 'Enter your address' }),
+  /** Older clients sent the state separately; the address's state is used now. */
+  billingState: zState.optional(),
   note: zText(500).optional(),
   /** Honeypot: real people never fill this in. */
   website: z.string().max(0).optional(),
