@@ -10,3 +10,7 @@ export const esc = (s: unknown) =>
 
 export const istDate = (d: Date | string | null | undefined) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '';
+
+const PAY_METHOD: Record<string, string> = { upi: 'UPI', card: 'Card', netbanking: 'Net banking', wallet: 'Wallet', emi: 'EMI', paylater: 'Pay later', free: 'No payment due' };
+/** "UPI", "Card"… for a Razorpay payment method. */
+export const paymentMethodLabel = (method: string | null | undefined) => (method ? PAY_METHOD[method] ?? method : '');
