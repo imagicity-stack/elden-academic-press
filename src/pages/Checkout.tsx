@@ -222,6 +222,9 @@ export function Checkout() {
             <div className="co-secure">
               <span aria-hidden="true">🔒</span> Payments are processed securely by Razorpay. We never see or store your card or UPI details.
             </div>
+            <p className="co-terms">
+              By paying you agree to our <a href="/terms" target="_blank" rel="noopener">terms</a>, <a href="/refunds" target="_blank" rel="noopener">refund policy</a> and <a href="/privacy" target="_blank" rel="noopener">privacy policy</a>.
+            </p>
           </div>
         </aside>
       </form>

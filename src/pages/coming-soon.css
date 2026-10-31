@@ -182,3 +182,5 @@ html[data-intro='playing'] .cs-stamp { animation-play-state: paused; }
   .cs-erratum { padding: 24px 20px 22px; }
   .cs-erratum__body { flex-direction: column; gap: 8px; }
 }
+.cs-colophon__policies { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px !important; }
+.cs-colophon__policies a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }

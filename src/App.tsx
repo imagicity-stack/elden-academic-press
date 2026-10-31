@@ -13,6 +13,8 @@ import { Catalogue } from './pages/Catalogue';
 import { Checkout } from './pages/Checkout';
 import { Contact } from './pages/Contact';
 import { Home } from './pages/Home';
+import { LegalPage } from './pages/Legal';
+import { LEGAL } from './legal';
 import { NotFound } from './pages/NotFound';
 import { OrderStatus, Track } from './pages/OrderStatus';
 import { StudyHub } from './pages/StudyHub';
@@ -53,6 +55,7 @@ export function App() {
           <Route path="study-hub" element={<StudyHub />} />
           <Route path="about" element={<About />} />
           <Route path="contact" element={<Contact />} />
+          {LEGAL.map((d) => <Route key={d.key} path={d.path.slice(1)} element={<LegalPage doc={d.key} />} />)}
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

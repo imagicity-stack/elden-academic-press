@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { WithIntro } from './components/Intro';
+import { legalDocFor } from './legal';
 import { ComingSoon } from './pages/ComingSoon';
 import './styles.css';
 
@@ -30,6 +31,7 @@ window.addEventListener('vite:preloadError', (event) => {
 // and store visitors never download the admin.
 const App = lazy(() => import('./App').then((m) => ({ default: m.App })));
 const AdminApp = lazy(() => import('./admin/AdminApp'));
+const LegalStandalone = lazy(() => import('./pages/Legal').then((m) => ({ default: m.LegalStandalone })));
 
 // The admin works whether or not the store is live, so products can be set up before launch.
 const isAdmin = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/');
@@ -40,12 +42,19 @@ const staffPreview = !live && (() => {
   try { return Boolean(localStorage.getItem('elden-admin-auth')); } catch { return false; }
 })();
 
+// The policies are public before launch too (payment providers check them).
+const prelaunchPolicy = !live && !staffPreview && Boolean(legalDocFor(window.location.pathname));
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       {isAdmin ? (
         <BrowserRouter>
           <Suspense fallback={null}><AdminApp /></Suspense>
+        </BrowserRouter>
+      ) : prelaunchPolicy ? (
+        <BrowserRouter>
+          <Suspense fallback={null}><LegalStandalone /></Suspense>
         </BrowserRouter>
       ) : (
         <WithIntro>

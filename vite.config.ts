@@ -14,7 +14,7 @@ function storeApi(): Plugin {
       process.env.ALLOW_DEV_ADMIN ??= 'true';
       process.env.ALLOW_PAYMENT_SIMULATOR ??= 'true';
       server.middlewares.use(async (req, res, next) => {
-        if (!req.url?.startsWith('/api/')) return next();
+        if (!req.url?.startsWith('/api/') && req.url !== '/sitemap.xml') return next();
         try {
           const { createApp } = await server.ssrLoadModule('/server/app.ts');
           const { getDeps } = await server.ssrLoadModule('/server/deps.ts');

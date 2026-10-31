@@ -14,6 +14,7 @@ const CONTACT_LINES = [
   { k: 'Head office', v: config.headOffice },
   { k: 'Email', v: config.contactEmail },
   { k: 'Hours', v: 'Monday – Saturday, 10:00 – 18:00 IST' },
+  { k: 'Registered office', v: `${config.company.legalName}, ${config.company.address}` },
 ];
 
 export function Contact() {

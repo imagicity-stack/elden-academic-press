@@ -658,3 +658,31 @@ a.hub-elm:hover { border-color: var(--teal); color: #C9D3DC; }
 .crash button { background: var(--navy); color: var(--paper); border: 0; border-radius: 2px; padding: 11px 22px; font: 600 13px var(--sans); cursor: pointer; }
 .crash button:hover { background: var(--navy-hover); }
 
+
+/* Policies (pages/Legal.tsx) */
+.legal { max-width: 860px; padding-top: clamp(28px, 4vw, 48px); padding-bottom: clamp(56px, 8vw, 96px); }
+.legal__title { margin-top: 10px; }
+.legal__updated { margin: 12px 0 0; font: 500 13px var(--sans); color: #6E695F; }
+.legal__tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 28px 0 8px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+.legal__tab { padding: 8px 14px; border: 1px solid var(--input-line); border-radius: 999px; font: 600 12.5px var(--sans); color: var(--navy); }
+.legal__tab.active { background: var(--navy); border-color: var(--navy); color: var(--paper); }
+.legal__body { font: 400 15.5px/1.75 var(--sans); color: #2C2F35; }
+.legal__body a { color: var(--bronze-text); text-decoration: underline; text-underline-offset: 3px; }
+.legal__lead { margin: 24px 0 0; font-size: 17px; }
+.legal__section { margin-top: 36px; }
+.legal__section h2 { margin: 0 0 10px; font: 600 26px/1.2 var(--serif); color: var(--navy); }
+.legal__section p, .legal__section ul { margin: 0 0 12px; }
+.legal__section ul { padding-left: 20px; }
+.legal__section li { margin-bottom: 8px; }
+.legal__card { display: grid; gap: 2px; margin-top: 14px; padding: 18px 20px; background: var(--sand); border-left: 3px solid var(--bronze); font-style: normal; font-size: 14.5px; line-height: 1.6; }
+.legal-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--paper); }
+.legal-shell__head { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.legal-shell main { flex: 1; }
+.legal-shell__foot { padding: 28px 0; background: var(--night); color: #8E99A6; font: 500 12.5px/1.6 var(--sans); }
+.legal-shell__foot p { margin: 0 0 6px; }
+.legal-shell__foot a { color: #C8CED6; }
+.footer__legal a { color: #8E99A6; }
+.footer__legal a:hover { color: #FFFFFF; }
+.footer__company { margin: 14px 0 0; font: 400 12px/1.6 var(--sans); color: #6F7C8A; }
+.co-terms { margin: 10px 0 0; font: 400 12.5px/1.5 var(--sans); color: #6E695F; }
+.co-terms a { color: inherit; text-decoration: underline; }

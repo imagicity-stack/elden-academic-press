@@ -1,7 +1,9 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { catalogueHref } from '../catalogue';
 import { config } from '../config';
 import { useSite, type ModalKind } from '../site';
+import { LEGAL } from '../legal';
+import { CompanyLine } from '../pages/Legal';
 import { Logo } from './Brand';
 
 type FooterLink = [label: string, to: string] | [label: string, modal: { modal: ModalKind }] | [label: string, ext: { href: string }];
@@ -61,8 +63,11 @@ export function Footer() {
         </div>
         <div className="footer__bottom">
           <span>© 2026 Elden Academic Press</span>
-          <span className="footer__legal"><span>Privacy</span><span>Terms</span><span>Shipping &amp; returns</span></span>
+          <nav className="footer__legal" aria-label="Policies">
+            {LEGAL.map((d) => <Link key={d.key} to={d.path}>{d.short}</Link>)}
+          </nav>
         </div>
+        <CompanyLine className="footer__company" />
       </div>
     </footer>
   );
