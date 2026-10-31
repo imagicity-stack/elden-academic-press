@@ -283,7 +283,8 @@ export function CompanyLine({ className = '' }: { className?: string }) {
 export function LegalStandalone() {
   const { pathname } = useLocation();
   const doc = legalDocFor(pathname) ?? 'terms';
-  useEffect(() => window.scrollTo(0, 0), [pathname]);
+  // A block body: in newer browsers scrollTo returns a Promise, which React would take for a clean-up function.
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   return (
     <div className="site legal-shell">
       <header className="legal-shell__head">
