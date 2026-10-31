@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { config } from '../config';
+import { LEGAL } from '../legal';
 import './coming-soon.css';
 
 // The pre-launch page is styled as a printer's proof of the website's own
@@ -97,6 +98,8 @@ export function ComingSoon() {
             </dl>
             <div className="cs-colophon__legal">
               <p>© 2026 Elden Academic Press. All rights reserved.</p>
+              <p>A publishing imprint of {config.company.legalName}, {config.company.address}.</p>
+              <p className="cs-colophon__policies">{LEGAL.map((d) => <a key={d.key} href={d.path}>{d.title}</a>)}</p>
               <p className="cs-printline" aria-hidden="true">10 9 8 7 6 5 4 3 2 1</p>
             </div>
             <Folio n="iv" />

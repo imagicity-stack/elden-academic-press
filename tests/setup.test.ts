@@ -57,3 +57,25 @@ describe('admin sign-in tokens', () => {
     await expect(verifySupabaseToken(token, SUPABASE_URL, 'some-other-secret-value-0123456789')).rejects.toThrow();
   });
 });
+
+describe('/sitemap.xml', () => {
+  it('lists pages and published titles once live, only home and policies before', async () => {
+    const { app } = await setup();
+    const get = async () => { const res = await app.request('/sitemap.xml'); return { text: await res.text(), headers: res.headers }; };
+    const before = process.env.VITE_SITE_LIVE;
+    try {
+      process.env.VITE_SITE_LIVE = 'false';
+      const early = await get();
+      expect(early.text).toContain('<loc>https://eldenap.in/</loc>');
+      expect(early.text).toContain('<loc>https://eldenap.in/refunds</loc>');
+      expect(early.text).not.toContain('/books/');
+      process.env.VITE_SITE_LIVE = 'true';
+      const live = await get();
+      expect(live.headers.get('content-type')).toMatch(/xml/);
+      expect(live.text).toMatch(/<loc>https:\/\/eldenap\.in\/books\/[a-z0-9-]+<\/loc><lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
+      expect(live.text).toContain('<loc>https://eldenap.in/catalogue</loc>');
+    } finally {
+      process.env.VITE_SITE_LIVE = before;
+    }
+  });
+});

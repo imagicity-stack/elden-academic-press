@@ -15,10 +15,15 @@
     "db:setup-sql": "tsx scripts/supabase-sql.ts"
   },
   "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "5.3.0",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "@fontsource-variable/newsreader": "5.3.0",
     "@supabase/supabase-js": "^2.118.0",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.14",
     "jose": "^6.2.14",
+    "motion": "12.43.0",
     "postgres": "^3.4.9",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

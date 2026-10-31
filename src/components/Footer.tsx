@@ -1,13 +1,16 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { catalogueHref } from '../catalogue';
 import { config } from '../config';
+import { LEGAL } from '../legal';
+import { CompanyLine } from '../pages/Legal';
 import { useSite, type ModalKind } from '../site';
 import { Logo } from './Brand';
+import { Arrow, Reveal } from './motion';
 
 type FooterLink = [label: string, to: string] | [label: string, modal: { modal: ModalKind }] | [label: string, ext: { href: string }];
 
 const COLS: { t: string; links: FooterLink[] }[] = [
-  { t: 'Publications', links: [
+  { t: 'Books', links: [
     ['Textbooks', catalogueHref({ type: ['textbooks'] })],
     ['Reference books', catalogueHref({ type: ['reference-books'] })],
     ['Practice papers', catalogueHref({ type: ['practice-papers'] })],
@@ -24,11 +27,12 @@ const COLS: { t: string; links: FooterLink[] }[] = [
   { t: 'Schools', links: [
     ['Request a sample', { modal: 'sample' }],
     ['Teacher resources', { modal: 'teacher' }],
+    ['Bulk orders', { modal: 'bulk' }],
     ['Find a distributor', '/contact'],
   ] },
   { t: 'Press', links: [
     ['About Elden', '/about'],
-    ['For authors', '/about'],
+    ['Publish with us', '/about'],
     ['Journals', catalogueHref({ type: ['journals'] })],
     ['Contact', '/contact'],
   ] },
@@ -44,11 +48,18 @@ export function Footer() {
   };
   return (
     <footer className="footer">
-      <div className="wrap footer__inner">
+      <div className="wrap">
+        <Reveal className="footer__cta">
+          <h2 className="footer__cta-title">Choosing books for next session?</h2>
+          <div className="footer__cta-actions">
+            <button type="button" className="btn btn--yellow btn--lg" onClick={() => openModal('sample')}>Request inspection copies <Arrow /></button>
+            <Link to="/catalogue" className="btn btn--ghost-light btn--lg">Browse the store</Link>
+          </div>
+        </Reveal>
         <div className="footer__top">
           <div className="footer__brand">
             <Logo light />
-            <p className="footer__blurb">Textbooks, reference, practice and research publishing for Indian classrooms.</p>
+            <p className="footer__blurb">Textbooks, reference, practice and research publishing for Indian classrooms, from Hazaribagh.</p>
           </div>
           {COLS.map((c) => (
             <div key={c.t} className="footer__col">
@@ -60,10 +71,14 @@ export function Footer() {
           ))}
         </div>
         <div className="footer__bottom">
-          <span>© 2026 Elden Academic Press</span>
-          <span className="footer__legal"><span>Privacy</span><span>Terms</span><span>Shipping &amp; returns</span></span>
+          <span>© 2026 Elden Academic Press · <a href={`mailto:${config.contactEmail}`}>{config.contactEmail}</a></span>
+          <nav className="footer__legal" aria-label="Policies">
+            {LEGAL.map((d) => <Link key={d.key} to={d.path}>{d.short}</Link>)}
+          </nav>
         </div>
+        <CompanyLine className="footer__company" />
       </div>
+      <p className="footer__giant" aria-hidden="true">Elden</p>
     </footer>
   );
 }

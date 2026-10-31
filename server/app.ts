@@ -8,13 +8,21 @@ import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
 import { customerOrders } from './routes/orders.js';
 import { store } from './routes/store.js';
+import { sitemapXml } from './routes/sitemap.js';
 import { webhooks } from './routes/webhooks.js';
 import { healthCheck, type Health } from './services/health.js';
 
 export type AppEnv = { Variables: { deps: Deps; ip: string; admin: AdminSession } };
 
 export function createApp(getDeps: () => Promise<Deps>) {
-  const app = new Hono<AppEnv>().basePath('/api');
+  const root = new Hono<AppEnv>();
+  const app = root.basePath('/api');
+
+  // Outside /api (vercel.json rewrites /sitemap.xml here); both share one router.
+  root.get('/sitemap.xml', async (c) => {
+    const xml = await sitemapXml(await getDeps(), process.env.VITE_SITE_LIVE === 'true');
+    return c.body(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' });
+  });
 
   // Before the middleware below, so it can report settings that stop the rest from starting.
   let health: { at: number; result: Promise<Health> } | undefined;
