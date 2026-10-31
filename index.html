@@ -2,6 +2,26 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!-- Google Tag Manager (GTM-P38DZ6G5). Not loaded on the admin or the local dev server.
+         A private order link's token (/order/123?t=…) is moved out of the address bar first,
+         so it never reaches analytics. vercel.json's CSP lists this script's SHA-256 hash. -->
+    <script>
+      (function (w, d, l) {
+        var p = l.pathname, m = /[?&]t=([^&#]+)/.exec(l.search);
+        if (/^\/order\/\d+/.test(p) && m) {
+          try { sessionStorage.setItem('elden-order-token:' + p.split('/')[2], decodeURIComponent(m[1])); } catch (e) { return; }
+          history.replaceState(history.state, '', p + l.search.replace(/([?&])t=[^&#]*&?/, '$1').replace(/[?&]$/, '') + l.hash);
+        }
+        if (/^\/admin(\/|$)/.test(p) || /^(localhost|127\.0\.0\.1)$/.test(l.hostname)) return;
+        w.dataLayer = w.dataLayer || [];
+        w.gtag = function () { w.dataLayer.push(arguments); };
+        w.gtag('js', new Date());
+        var s = d.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtm.js?id=GTM-P38DZ6G5';
+        d.head.appendChild(s);
+      })(window, document, location);
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Elden Academic Press</title>
     <meta name="description" content="Textbooks, reference books, practice papers and journals for classrooms across India." />

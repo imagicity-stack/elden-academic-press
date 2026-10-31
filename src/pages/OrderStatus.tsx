@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError, api, inr } from '../store/api';
 import { useStoreConfig } from '../store/catalog';
+import { orderToken } from '../store/orderToken';
 
 interface OrderView {
   number: number;
@@ -34,7 +35,7 @@ const STEPS = [
 export function OrderStatus() {
   const { number } = useParams();
   const [sp] = useSearchParams();
-  const token = sp.get('t') ?? '';
+  const token = orderToken(number, sp.get('t'));
   const isNew = sp.get('new') === '1';
   const cfg = useStoreConfig();
   const [order, setOrder] = useState<OrderView | null>(null);
@@ -68,7 +69,7 @@ export function OrderStatus() {
           <div className="order-thanks__tick" aria-hidden="true">✓</div>
           <div>
             <div className="order-thanks__title">Thank you, {order.name.split(' ')[0]}!</div>
-            <div className="order-thanks__text">Your payment was successful. A confirmation is on its way to {order.email}. Bookmark this page — it’s your private link to this order.</div>
+            <div className="order-thanks__text">Your payment was successful. A confirmation is on its way to {order.email}. Your private link to this page is in that email.</div>
           </div>
         </div>
       )}
