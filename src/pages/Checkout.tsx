@@ -6,6 +6,7 @@ import { useCart, useQuote } from '../store/cart';
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { CouponField, issueText } from '../components/CartDrawer';
+import { track } from '../meta';
 
 interface CheckoutResponse {
   orderId: string;
@@ -113,6 +114,14 @@ export function Checkout() {
     setNotice(null);
     setBusy(true);
     try { localStorage.setItem(DETAILS_KEY, JSON.stringify({ ...d, note: '' })); } catch { /* ignore */ }
+    if (quote) {
+      track('InitiateCheckout', {
+        value: quote.total / 100, currency: 'INR', content_type: 'product',
+        content_ids: [...new Set(quote.lines.map((l) => l.productId))],
+        contents: quote.lines.map((l) => ({ id: l.productId, quantity: l.quantity })),
+        num_items: quote.lines.reduce((n, l) => n + l.quantity, 0),
+      });
+    }
     const key = JSON.stringify(payload);
     try {
       let res = pending.current?.key === key ? pending.current.res : null;

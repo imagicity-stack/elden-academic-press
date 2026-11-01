@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { eq } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
-import { adminUsers, settings, subscribers } from '../db/schema.js';
+import { adminUsers, orders, settings, subscribers } from '../db/schema.js';
 
 type Check = 'ok' | 'missing' | 'error';
 export interface Health {
@@ -55,15 +55,23 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
     const [row] = await db.select({ id: settings.id }).from(settings).where(eq(settings.id, 1));
     if (!row) throw Object.assign(new Error('settings row missing'), { code: '42P01' });
     hasOwner = (await db.select({ id: adminUsers.userId }).from(adminUsers).where(eq(adminUsers.role, 'owner')).limit(1)).length > 0;
-    // Databases set up before the newsletter need its update (new tables and columns).
-    try {
-      await db.select({ n: settings.newsletterDailyLimit }).from(settings).limit(1);
-      await db.select({ id: subscribers.id }).from(subscribers).limit(1);
-      checks.database = 'ok';
-    } catch (e) {
-      if (!['42P01', '42703'].includes(pgCode(e) ?? '')) throw e;
-      checks.database = 'missing';
-      todo.push('The database needs an update: run docs/supabase-updates/0003_newsletter.sql in Supabase → SQL Editor');
+    // Databases set up before an update need its file from docs/supabase-updates/ (oldest first).
+    const updates: [string, () => Promise<unknown>][] = [
+      ['0003_newsletter', async () => {
+        await db.select({ n: settings.newsletterDailyLimit }).from(settings).limit(1);
+        await db.select({ id: subscribers.id }).from(subscribers).limit(1);
+      }],
+      ['0004_meta_tracking', () => db.select({ v: orders.adConsent }).from(orders).limit(1)],
+    ];
+    checks.database = 'ok';
+    for (const [file, probe] of updates) {
+      try {
+        await probe();
+      } catch (e) {
+        if (!['42P01', '42703'].includes(pgCode(e) ?? '')) throw e;
+        checks.database = 'missing';
+        todo.push(`The database needs an update: run docs/supabase-updates/${file}.sql in Supabase → SQL Editor`);
+      }
     }
   } catch (e) {
     const code = pgCode(e);
@@ -117,6 +125,9 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
   if ((env.SMTP_USER && env.SMTP_PASS) || env.RESEND_API_KEY) checks.email = 'ok';
   else if (env.onVercel) todo.push('Set SMTP_USER and SMTP_PASS (Google Workspace app password) so order emails are sent');
   if (env.onVercel && !env.MAIL_TO) todo.push('Set MAIL_TO to your inbox (e.g. hello@eldenap.in): it gets contact forms and a copy of every customer email');
+  if (env.VITE_META_PIXEL_ID && !env.META_CAPI_TOKEN) todo.push('Set META_CAPI_TOKEN (Events Manager → dataset → Settings → Conversions API → Generate access token) so purchases reach Meta from the server');
+  if (env.META_CAPI_TOKEN && !env.VITE_META_PIXEL_ID) todo.push('Set VITE_META_PIXEL_ID (your dataset ID in Events Manager), then redeploy');
+  if (env.META_TEST_EVENT_CODE && env.isProduction) todo.push('META_TEST_EVENT_CODE is set: events go to Test events only. Remove it once testing is done, then redeploy');
   if (env.onVercel && env.SMTP_USER && !source.MAIL_FROM) todo.push('Set MAIL_FROM, e.g. "Elden Academic Press <noreply@eldenap.in>"');
 
   return {

@@ -68,7 +68,7 @@ customerOrders.get('/:number', async (c) => {
     name: o.name,
     email: o.email,
     items: items.map((i) => ({
-      id: i.id, title: i.title, format: i.formatLabel, kind: i.variantKind, quantity: i.quantity, lineTotal: i.lineTotal, isDigital: i.isDigital,
+      id: i.id, productId: i.productId, title: i.title, format: i.formatLabel, kind: i.variantKind, quantity: i.quantity, lineTotal: i.lineTotal, isDigital: i.isDigital,
       downloadsLeft: i.isDigital ? Math.max(s.maxDownloads - i.downloadsUsed, 0) : null,
       canDownload: i.isDigital && downloadsOpen && i.downloadsUsed < s.maxDownloads,
     })),

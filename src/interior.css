@@ -937,3 +937,12 @@ select.input { appearance: none; padding-right: 42px; background: #FFFFFF url("d
   .acct-order__arrow { display: none; }
 }
 .acct-gsi { min-height: 44px; width: min(100%, 360px); }
+
+/* Cookie choice */
+.cookie { position: fixed; right: 16px; bottom: 16px; z-index: 65; width: min(520px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 14px; padding: 20px 22px; background: var(--ink); color: rgba(255, 255, 255, .78); box-shadow: 0 24px 60px -24px rgba(11, 18, 32, .6); }
+.cookie__text { margin: 0; font: 400 14px/1.55 var(--f-text); }
+.cookie__text a { color: #FFFFFF; text-decoration: underline; text-decoration-color: var(--hl); text-underline-offset: 3px; }
+.cookie__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 640px) { .cookie { right: 12px; bottom: 12px; width: calc(100vw - 24px); padding: 16px; } .cookie__actions .btn { flex: 1 1 auto; } }
+.footer__legal button { padding: 0; border: 0; background: none; font: inherit; color: rgba(255, 255, 255, .65); cursor: pointer; }
+.footer__legal button:hover { color: #FFFFFF; }

@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError, api, inr } from '../store/api';
 import { useStoreConfig } from '../store/catalog';
 import { orderToken } from '../store/orderToken';
+import { track } from '../meta';
 
 interface OrderView {
   number: number;
@@ -13,7 +14,7 @@ interface OrderView {
   paidAt: string | null;
   name: string;
   email: string;
-  items: { id: string; title: string; format: string; kind: string; quantity: number; lineTotal: number; isDigital: boolean; downloadsLeft: number | null; canDownload: boolean }[];
+  items: { id: string; productId: string | null; title: string; format: string; kind: string; quantity: number; lineTotal: number; isDigital: boolean; downloadsLeft: number | null; canDownload: boolean }[];
   downloadsExpireAt: string | null;
   subtotal: number; discount: number; couponCode: string | null; shipping: number; tax: number; total: number; refundedAmount: number;
   requiresShipping: boolean;
@@ -45,6 +46,21 @@ export function OrderStatus() {
     document.title = `Order #${number} — Elden Academic Press`;
     api<OrderView>(`/orders/${number}?t=${encodeURIComponent(token)}`).then(setOrder, setError);
   }, [number, token]);
+
+  // Meta Purchase, once, right after checkout. The server reports the same purchase with
+  // the same id when the payment is confirmed, so Meta counts it once.
+  useEffect(() => {
+    if (!order || !isNew || !['paid', 'partially_refunded'].includes(order.paymentStatus)) return;
+    const key = `elden-purchase-tracked:${order.number}`;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* ignore */ }
+    const ids = order.items.map((i) => i.productId ?? i.id);
+    track('Purchase', {
+      value: order.total / 100, currency: 'INR', order_id: String(order.number), content_type: 'product',
+      content_ids: [...new Set(ids)],
+      contents: order.items.map((i, k) => ({ id: ids[k], quantity: i.quantity, item_price: i.lineTotal / 100 / i.quantity })),
+      num_items: order.items.reduce((n, i) => n + i.quantity, 0),
+    }, { eventId: `purchase-${order.number}` });
+  }, [order, isNew]);
 
   if (error) {
     return (

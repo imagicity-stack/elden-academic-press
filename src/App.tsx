@@ -8,6 +8,8 @@ import { SiteProvider } from './site';
 import { CartProvider } from './store/cart';
 import { CatalogProvider } from './store/catalog';
 import { CartDrawer } from './components/CartDrawer';
+import { CookieBanner } from './components/CookieBanner';
+import { track } from './meta';
 import { Footer } from './components/Footer';
 import { Header, TopBar } from './components/Header';
 import { About } from './pages/About';
@@ -28,6 +30,8 @@ function ScrollToTop() {
   const { pathname } = useLocation();
   // A block body: in newer browsers scrollTo returns a Promise, which React would take for a clean-up function.
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  // Meta page view (only after the visitor accepted cookies).
+  useEffect(() => { track('PageView'); }, [pathname]);
   return null;
 }
 
@@ -41,6 +45,7 @@ function Layout() {
       <main className="main"><div key={pathname} className="page-enter"><Outlet /></div></main>
       <Footer />
       <CartDrawer />
+      <CookieBanner />
     </>
   );
 }

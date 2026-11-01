@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { body, HttpError, rateLimit, zEmail, zPhone, zText } from '../lib/http.js';
 import { checkNewsletterToken, confirmSubscription, subscribe, unsubscribe } from '../services/newsletter.js';
+import { report, visitOf } from '../services/tracking.js';
 
 export const newsletter = new Hono<AppEnv>();
 
@@ -28,6 +29,11 @@ newsletter.post('/confirm', async (c) => {
   if (!(await confirmSubscription(deps, input.email, input.token, c.get('ip')))) {
     throw new HttpError(400, 'This confirmation link isn’t valid any more. Please subscribe again.', 'invalid_link');
   }
+  const visit = visitOf(c);
+  await report(deps, visit.consent, {
+    name: 'Subscribe', eventId: `subscribe-${input.token.slice(0, 24)}`, time: deps.now(), url: `${deps.env.SITE_URL}/newsletter`,
+    user: { ...visit, email: input.email }, custom: { content_name: 'Newsletter' },
+  });
   return c.json({ ok: true });
 });
 

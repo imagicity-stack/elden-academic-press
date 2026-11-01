@@ -488,6 +488,13 @@ ALTER TABLE "subscribers" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "campaigns" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "campaign_sends" ENABLE ROW LEVEL SECURITY;
 
+-- ===== 0004_meta_tracking =====
+
+ALTER TABLE "orders" ADD COLUMN "ad_consent" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "fbp" text;--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "fbc" text;--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "user_agent" text;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -496,7 +503,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('120bc1ac5284b0f9abe3b85b591a6974e5fee6b2ac0cd9ab0665f6c6dc581f48', 1793363978141),
   ('2bf8e3ce6609203484f15a30fe4d28ea0d4096507fca5e1fda37aa97a2fcb9e0', 1793363978922),
   ('d551b96228e1cc509431a668ea8d88e5672d50239ed161f6d083b684cba35dbe', 1793366707702),
-  ('a7c6aec2b7878ee57a12e1ff29aedca10c3defc0567e6aafee03cdfebcd7c937', 1793529577196);
+  ('a7c6aec2b7878ee57a12e1ff29aedca10c3defc0567e6aafee03cdfebcd7c937', 1793529577196),
+  ('06e1e45bcfba4da04c42b09a0220e67611794880049f6b37c61e753680fe072f', 1793535992306);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

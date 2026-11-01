@@ -187,6 +187,11 @@ export const orders = pgTable('orders', {
   customerNote: text('customer_note').notNull().default(''),
   /** Ticked "email me about new books and offers" at checkout; subscribed once paid. */
   newsletterOptIn: boolean('newsletter_opt_in').notNull().default(false),
+  /** Accepted ad cookies when ordering: the purchase may be reported to Meta, with these browser details. */
+  adConsent: boolean('ad_consent').notNull().default(false),
+  fbp: text('fbp'),
+  fbc: text('fbc'),
+  userAgent: text('user_agent'),
   internalNote: text('internal_note').notNull().default(''),
   needsAttention: boolean('needs_attention').notNull().default(false),
   attentionReason: text('attention_reason'),
