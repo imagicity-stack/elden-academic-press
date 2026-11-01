@@ -95,10 +95,13 @@ Customers can sign in at **eldenap.in/account** with Google to read their e-book
 **In Supabase:**
 4. **Authentication → Sign In / Providers → Google** → turn on, paste the Client ID and Client secret → **Save**.
 5. Same page → turn **on** *Allow new users to sign up* (a first-time Google user needs an account). This is safe: the admin only lets in people listed under **Admin → Settings → Staff**, with two-step verification. Keep *Confirm email* on.
-6. **Authentication → URL Configuration → Redirect URLs** → add `https://eldenap.in/account` (and `https://www.eldenap.in/account` if the site also opens on www).
-7. Open `https://eldenap.in/account` → **Continue with Google**.
+6. **Authentication → URL Configuration**: set **Site URL** to `https://eldenap.in` (Supabase's default is a localhost address; left as it is, sign-in ends on “localhost refused to connect”), and under **Redirect URLs** add `https://eldenap.in/account` and `https://www.eldenap.in/account`.
 
-Google's sign-in screen names `…supabase.co` as the site being signed into; to show `eldenap.in` instead, add Supabase's *Custom domain* add-on (optional, paid).
+**In Vercel:**
+7. Add `VITE_GOOGLE_CLIENT_ID` = the Client ID from step 3 (it's public, not a secret) and redeploy. The account page then shows Google's own *Sign in with Google* button: the sign-in happens on eldenap.in, so Google names **eldenap.in** rather than the Supabase address. Without this variable the page falls back to a redirect through Supabase, which Google labels with `…supabase.co`.
+8. Open `https://eldenap.in/account` → **Continue with Google**.
+
+**Optional: your name and logo on Google's screen.** Google shows the app name and logo once it has verified your branding: Google Cloud → **Google Auth Platform → Branding** → app name, logo (120 × 120 px), home page `https://eldenap.in`, privacy policy `https://eldenap.in/privacy`, terms `https://eldenap.in/terms` → **Submit for verification**. Google asks you to prove you own `eldenap.in` through Google Search Console; it usually takes a few working days.
 
 ## 4. Vercel
 

@@ -1,10 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { catalogueHref } from '../catalogue';
 import { inr } from '../store/api';
 import { useCatalog } from '../store/catalog';
-import { accountApi, accountsDevMode, accountsEnabled, devSignIn, signInWithGoogle, signOut, useAccount, type AccountData, type LibraryItem } from '../store/account';
+import { accountApi, accountsDevMode, accountsEnabled, devSignIn, googleButtonAvailable, renderGoogleButton, signInWithGoogle, signOut, useAccount, type AccountData, type LibraryItem } from '../store/account';
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem } from '../components/motion';
@@ -47,7 +47,17 @@ function SignIn({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [devEmail, setDevEmail] = useState('');
+  const [fallback, setFallback] = useState(!googleButtonAvailable);
+  const googleSlot = useRef<HTMLDivElement>(null);
   const shelf = products.filter((p) => p.formats.digital).slice(0, 3);
+
+  // Google's own button: the sign-in happens on eldenap.in, so Google names this site.
+  useEffect(() => {
+    if (!googleButtonAvailable || !googleSlot.current) return;
+    let current = true;
+    renderGoogleButton(googleSlot.current, onDone, setErr, () => current).catch(() => current && setFallback(true));
+    return () => { current = false; };
+  }, [onDone]);
 
   const google = async () => {
     setBusy(true); setErr(null);
@@ -62,7 +72,8 @@ function SignIn({ onDone }: { onDone: () => void }) {
         <h1 className="t-display acct-in__title"><SplitWords text="Your shelf," /> <span className="serif-i">in one place.</span></h1>
         <Reveal delay={0.3}><p className="t-lead">Read your e-books and journals online, download them again, and see every order. No password to remember.</p></Reveal>
         <Reveal delay={0.4} className="acct-in__actions">
-          {accountsEnabled && (
+          {googleButtonAvailable && !fallback && <div ref={googleSlot} className="acct-gsi" />}
+          {accountsEnabled && fallback && (
             <button type="button" className="btn btn--outline btn--lg acct-google" onClick={google} disabled={busy}>
               <GoogleG /> {busy ? 'Opening Google…' : 'Continue with Google'}
             </button>

@@ -10,8 +10,18 @@ const STORAGE_KEY = 'elden-auth';
 /** Local development without Supabase: sign in as any email (the API accepts this only off Vercel). */
 const DEV_KEY = 'elden-dev-customer';
 
+/** Google's "Sign in with Google" button (then Google names eldenap.in, not the Supabase address). */
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
 export const accountsEnabled = Boolean(url && anonKey);
 export const accountsDevMode = !accountsEnabled && import.meta.env.DEV;
+export const googleButtonAvailable = accountsEnabled && Boolean(googleClientId);
+
+interface GoogleId {
+  initialize(options: Record<string, unknown>): void;
+  renderButton(el: HTMLElement, options: Record<string, unknown>): void;
+}
+declare global { interface Window { google?: { accounts?: { id?: GoogleId } } } }
 
 export interface LibraryItem {
   itemId: string; productId: string | null; title: string; format: string; orderNumber: number;
@@ -50,10 +60,51 @@ export async function accountToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
+/** Fallback when Google's button can't load: Supabase's redirect sign-in (Google then names the Supabase address). */
 export async function signInWithGoogle() {
   const sb = await authClient();
   const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}/account` } });
   if (error) throw error;
+}
+
+let gis: Promise<GoogleId> | undefined;
+function loadGoogle(): Promise<GoogleId> {
+  gis ??= new Promise<GoogleId>((resolve, reject) => {
+    if (window.google?.accounts?.id) return resolve(window.google.accounts.id);
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true;
+    s.onload = () => (window.google?.accounts?.id ? resolve(window.google.accounts.id) : reject(new Error('Google sign-in did not load')));
+    s.onerror = () => reject(new Error('Google sign-in did not load'));
+    document.head.appendChild(s);
+  }).catch((e) => { gis = undefined; throw e; });
+  return gis;
+}
+
+/** A random nonce for Supabase and its SHA-256 (hex) for Google, so a captured token can't be replayed. */
+async function nonces() {
+  const raw = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join('');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  return { raw, hashed: Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('') };
+}
+
+/** Draws Google's own sign-in button into `el`; the signed-in Google account is then handed to Supabase. */
+export async function renderGoogleButton(el: HTMLElement, onSignedIn: () => void, onError: (message: string) => void, isCurrent: () => boolean = () => true) {
+  const [google, { raw, hashed }, sb] = await Promise.all([loadGoogle(), nonces(), authClient()]);
+  if (!isCurrent()) return;
+  el.replaceChildren();
+  google.initialize({
+    client_id: googleClientId,
+    nonce: hashed,
+    ux_mode: 'popup',
+    context: 'signin',
+    itp_support: true,
+    callback: async ({ credential }: { credential: string }) => {
+      const { error } = await sb.auth.signInWithIdToken({ provider: 'google', token: credential, nonce: raw });
+      if (error) onError(error.message); else onSignedIn();
+    },
+  });
+  google.renderButton(el, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular', logo_alignment: 'left', width: Math.min(360, el.clientWidth || 360) });
 }
 
 export function devSignIn(email: string) { localStorage.setItem(DEV_KEY, email.trim().toLowerCase()); }
