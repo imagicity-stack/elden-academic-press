@@ -10,7 +10,7 @@ import type { AppEnv } from '../app.js';
 import { accounts, orderItems, orders, productVariants, subscribers } from '../db/schema.js';
 import { body, HttpError, notFound, rateLimit, zPhone } from '../lib/http.js';
 import { getSettings } from '../services/catalog.js';
-import { subscribe, unsubscribe } from '../services/newsletter.js';
+import { subscribe, subscribeNewAccount, unsubscribe } from '../services/newsletter.js';
 import { orderToken } from '../services/orders.js';
 import { verifySupabaseToken } from './admin/auth.js';
 import { orderStatusLabel } from './orders.js';
@@ -59,12 +59,16 @@ const OWNED = ['paid', 'partially_refunded', 'refunded'] as const;
 
 /** Everything for the account page: profile, orders and the e-book / journal library. */
 account.get('/', async (c) => {
-  const { db, env, now } = c.get('deps');
+  const deps = c.get('deps');
+  const { db, env, now } = deps;
   const me = c.get('customer');
   // Remember everyone who signs in (with the mobile number they add below).
+  const [known] = await db.select({ userId: accounts.userId }).from(accounts).where(eq(accounts.userId, me.userId));
   const [profile] = await db.insert(accounts).values({ userId: me.userId, email: me.email, name: me.name, avatarUrl: me.avatar })
     .onConflictDoUpdate({ target: accounts.userId, set: { email: me.email, name: me.name, avatarUrl: me.avatar, lastSeenAt: now() } })
     .returning();
+  // First sign-in: a new account also joins the newsletter (the sign-in page says so).
+  if (!known) await subscribeNewAccount(deps, me, c.get('ip'));
   const [sub] = await db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, me.email));
   const s = await getSettings(db);
   const mine = await db.select().from(orders).where(and(eq(orders.email, me.email), inArray(orders.paymentStatus, OWNED)))

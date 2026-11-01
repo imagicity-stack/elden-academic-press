@@ -324,3 +324,4 @@
 .ad-nl-progress { height: 8px; background: var(--ad-line2); border-radius: 4px; overflow: hidden; }
 .ad-nl-progress span { display: block; height: 100%; background: var(--ad-green); transition: width .4s; }
 @media (max-width: 1100px) { .ad-nl-editor { grid-template-columns: 1fr; } .ad-nl-preview { position: static; } }
+.ad-nl-note { margin: 0; padding: 12px 18px; border-top: 1px solid var(--ad-line2); font-size: 12.5px; }

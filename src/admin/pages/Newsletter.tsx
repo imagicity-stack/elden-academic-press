@@ -20,7 +20,7 @@ const CAMPAIGN_BADGE: Record<CampaignStatus, [string, Tone]> = {
 };
 const SUB_BADGE: Record<SubStatus, [string, Tone]> = { subscribed: ['Subscribed', 'green'], pending: ['Not confirmed', 'amber'], unsubscribed: ['Unsubscribed', 'grey'] };
 const SOURCE: Record<string, string> = {
-  footer: 'Website footer', 'newsletter-page': 'Newsletter page', home: 'Home page', account: 'Account page', checkout: 'Checkout', admin: 'Added by staff', import: 'Imported',
+  footer: 'Website footer', 'newsletter-page': 'Newsletter page', home: 'Home page', signup: 'Account sign-up', account: 'Account page', checkout: 'Checkout', admin: 'Added by staff', import: 'Imported',
 };
 const n = (x: number) => x.toLocaleString('en-IN');
 
@@ -515,7 +515,7 @@ function Accounts() {
         <Btn size="sm" busy={busy === 'csv'} onClick={() => run('csv', () => downloadFile('/newsletter/accounts/export.csv', 'accounts.csv'))}>Export CSV</Btn>
       </form>
       {error ? <ErrorBox error={error} retry={reload} /> : !data ? <Loading /> : data.items.length === 0 ? (
-        <Empty title={query ? 'Nobody matches.' : 'No accounts yet.'}>{!query && <p className="ad-muted">Customers appear here after they sign in with Google on the website.</p>}</Empty>
+        <Empty title={query ? 'Nobody matches.' : 'No accounts yet.'}>{!query && <p className="ad-muted">Customers appear here once they sign in with Google on the website. Staff logins aren’t listed.</p>}</Empty>
       ) : (
         <div className="ad-table-wrap">
           <table className="ad-table">
@@ -535,6 +535,7 @@ function Accounts() {
         </div>
       )}
       {data && <Pagination page={data.page} total={data.total} limit={data.limit} onPage={setPage} />}
+      <p className="ad-muted ad-nl-note">Everyone who signed in with Google on the website (staff logins aren’t listed). New accounts join the newsletter automatically, as the sign-in page tells them; accounts from before that only join if they turn it on.</p>
     </Card>
   );
 }

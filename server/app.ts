@@ -12,7 +12,7 @@ import { customerOrders } from './routes/orders.js';
 import { store } from './routes/store.js';
 import { sitemapXml } from './routes/sitemap.js';
 import { webhooks } from './routes/webhooks.js';
-import { healthCheck, type Health } from './services/health.js';
+import { healthCheck, pgCode, type Health } from './services/health.js';
 
 export type AppEnv = { Variables: { deps: Deps; ip: string; admin: AdminSession; customer: Customer } };
 
@@ -51,6 +51,13 @@ export function createApp(getDeps: () => Promise<Deps>) {
       return c.json({ error: 'The payment service returned an error. Please try again.', code: 'gateway_error' }, 502);
     }
     console.error('[api]', c.req.method, c.req.path, err);
+    // A missing table or column: the code is newer than the database.
+    if (['42P01', '42703'].includes(pgCode(err) ?? '')) {
+      return c.json({
+        error: 'The database needs an update. Open /api/health to see which file to run in Supabase → SQL Editor.',
+        code: 'database_update_needed',
+      }, 503);
+    }
     return c.json({ error: 'Something went wrong on our side. Please try again.', code: 'server_error' }, 500);
   });
 

@@ -19,7 +19,7 @@ const REQUIRED = ['DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', '
 const SETUP_SQL = 'run docs/supabase-setup.sql in Supabase → SQL Editor';
 const timeout = () => AbortSignal.timeout(5000);
 
-const pgCode = (e: unknown): string | undefined => {
+export const pgCode = (e: unknown): string | undefined => {
   const err = e as { code?: string; cause?: { code?: string } };
   return err.code ?? err.cause?.code;
 };

@@ -82,28 +82,52 @@ describe('newsletter sign-up', () => {
 });
 
 describe('accounts and checkout', () => {
-  it('remembers signed-in customers with their mobile and newsletter choice', async () => {
+  it('signs new accounts up for the newsletter, with a welcome email, and remembers their choices', async () => {
     const h = await customer();
     const first = await t.call('GET', '/account', { headers: h });
-    expect(first.json).toMatchObject({ profile: { phone: '' }, newsletter: null });
-    expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '12345' } })).status).toBe(400);
-    expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '098765 43210' } })).json).toEqual({ phone: '9876543210' });
-
-    const on = await t.call('PUT', '/account/newsletter', { headers: h, body: { subscribed: true } });
-    expect(on.json.newsletter).toBe('subscribed');
-    const [sub] = await t.db.select().from(subscribers).where(eq(subscribers.email, contact.email));
-    expect(sub).toMatchObject({ status: 'subscribed', source: 'account', phone: '9876543210' });
+    expect(first.json).toMatchObject({ profile: { phone: '' }, newsletter: 'subscribed' });
+    const [joined] = await t.db.select().from(subscribers).where(eq(subscribers.email, contact.email));
+    expect(joined).toMatchObject({ status: 'subscribed', source: 'signup', name: 'Asha Verma' });
+    const welcome = t.mailer.sent.filter((m) => m.to === contact.email && /Welcome/.test(m.subject));
+    expect(welcome).toHaveLength(1);
+    expect(welcome[0].headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
+    expect(linkParams(welcome[0].html, 'unsubscribe')?.email).toBe(contact.email);
     expect(t.mailer.sent.some((m) => /confirm/i.test(m.subject))).toBe(false);
 
-    const again = await t.call('GET', '/account', { headers: h });
-    expect(again.json).toMatchObject({ profile: { phone: '9876543210' }, newsletter: 'subscribed' });
+    // Coming back is not a new sign-up.
+    await t.call('GET', '/account', { headers: h });
+    expect(t.mailer.sent.filter((m) => /Welcome/.test(m.subject))).toHaveLength(1);
+
+    expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '12345' } })).status).toBe(400);
+    expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '098765 43210' } })).json).toEqual({ phone: '9876543210' });
+    expect((await t.db.select().from(subscribers).where(eq(subscribers.email, contact.email)))[0].phone).toBe('9876543210');
+
     await t.call('PUT', '/account/newsletter', { headers: h, body: { subscribed: false } });
     expect(await status(contact.email)).toBe('unsubscribed');
+    expect((await t.call('GET', '/account', { headers: h })).json).toMatchObject({ profile: { phone: '9876543210' }, newsletter: 'unsubscribed' });
+    const on = await t.call('PUT', '/account/newsletter', { headers: h, body: { subscribed: true } });
+    expect(on.json.newsletter).toBe('subscribed');
+    expect((await t.db.select().from(subscribers).where(eq(subscribers.email, contact.email)))[0].source).toBe('account');
+    await t.call('PUT', '/account/newsletter', { headers: h, body: { subscribed: false } });
 
     const list = await t.call('GET', '/admin/newsletter/accounts', { headers: await admin() });
     expect(list.json.items).toHaveLength(1);
     expect(list.json.items[0]).toMatchObject({ email: contact.email, phone: '9876543210', newsletter: 'unsubscribed' });
     expect((await t.db.select().from(accounts)).length).toBe(1);
+  });
+
+  it('never re-adds someone who unsubscribed, and leaves older accounts alone', async () => {
+    await addSubscribers([contact.email]);
+    await t.call('POST', '/newsletter/unsubscribe', { body: { email: contact.email, token: newsletterToken(SECRET, contact.email) } });
+    t.mailer.sent.length = 0;
+    expect((await t.call('GET', '/account', { headers: await customer() })).json.newsletter).toBe('unsubscribed');
+    expect(t.mailer.sent).toHaveLength(0);
+
+    // Signed up last month, first visit to the account page today: not a new sign-up.
+    t.deps.authUser = async (id) => ({ id, email: 'old@example.com', name: 'Old Timer', avatar: null, providers: ['google'], createdAt: new Date(Date.now() - 30 * 86400_000), lastSignInAt: null });
+    const old = { authorization: `Bearer ${await supabaseToken({ sub: '66666666-6666-4666-8666-666666666666', email: 'old@example.com', provider: 'google', name: 'Old Timer' })}` };
+    expect((await t.call('GET', '/account', { headers: old })).json.newsletter).toBeNull();
+    expect(t.mailer.sent).toHaveLength(0);
   });
 
   it('subscribes buyers who ticked the box, once they have paid', async () => {
@@ -206,4 +230,25 @@ describe('campaigns', () => {
     expect(r.json).toMatchObject({ heading: 'Just published: Mathematics Today', productIds: [p.id], status: 'draft' });
     expect(r.json.ctaUrl).toBe('https://eldenap.in/books/mathematics-today');
   });
+
+  it('lists everyone who signed in with Google, from Supabase, but not staff logins', async () => {
+    const h = await customer();
+    await t.call('GET', '/account', { headers: h });
+    await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210' } });
+    t.deps.authUsers = async () => [
+      { id: '33333333-3333-4333-8333-333333333333', email: contact.email, name: 'Asha Verma', avatar: null, providers: ['google'], createdAt: new Date('2026-10-01'), lastSignInAt: new Date('2026-10-02') },
+      { id: '44444444-4444-4444-8444-444444444444', email: 'neha@example.com', name: 'Neha Gupta', avatar: 'https://lh3.googleusercontent.com/n', providers: ['google'], createdAt: new Date('2026-10-05'), lastSignInAt: null },
+      { id: '55555555-5555-4555-8555-555555555555', email: 'owner@eldenap.in', name: '', avatar: null, providers: ['email'], createdAt: new Date('2026-09-01'), lastSignInAt: new Date() },
+    ];
+    const [summary, list] = await Promise.all([
+      t.call('GET', '/admin/newsletter/summary', { headers: await admin() }),
+      t.call('GET', '/admin/newsletter/accounts', { headers: await admin() }),
+    ]);
+    expect(summary.json.accounts).toBe(2);
+    expect(list.json.items.map((a: any) => a.email).sort()).toEqual([contact.email, 'neha@example.com']);
+    const asha = list.json.items.find((a: any) => a.email === contact.email);
+    expect(asha.phone).toBe('9876543210'); // what the customer added is kept
+    expect(list.json.items.find((a: any) => a.email === 'neha@example.com')).toMatchObject({ name: 'Neha Gupta', phone: '', newsletter: null });
+  });
 });
+
