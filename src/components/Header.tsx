@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { catalogueHref } from '../catalogue';
 import { config } from '../config';
 import { useSite } from '../site';
+import { hasAccountSession } from '../store/account';
 import { useCart } from '../store/cart';
 import { Logo } from './Brand';
 import { Arrow, EASE, Marquee } from './motion';
@@ -40,6 +41,7 @@ function Icon({ d }: { d: string }) {
 const ICONS = {
   search: 'M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15ZM21 21l-5.2-5.2',
   bag: 'M5 8h14l-1.1 11.1a2 2 0 0 1-2 1.9H8.1a2 2 0 0 1-2-1.9L5 8ZM9 8V7a3 3 0 0 1 6 0v1',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20.5c1.4-3.6 4.2-5.5 7.5-5.5s6.1 1.9 7.5 5.5',
   menu: 'M4 8h16M4 16h16',
   close: 'M6 6l12 12M18 6 6 18',
 };
@@ -73,6 +75,8 @@ export function Header() {
   useEffect(() => { if (searching) searchInput.current?.focus(); }, [searching]);
 
   const active = NAV.find((n) => n.match?.(pathname, search))?.label;
+  // Re-checked on every navigation, so it updates after signing in or out.
+  const signedIn = useMemo(() => hasAccountSession(), [pathname]);
 
   return (
     <>
@@ -100,6 +104,10 @@ export function Header() {
 
         <div className="header__actions">
           {!searching && <button type="button" className="icon-btn" aria-label="Search" onClick={() => setSearching(true)}><Icon d={ICONS.search} /></button>}
+          <Link to="/account" className={'icon-btn' + (pathname === '/account' ? ' is-active' : '')} aria-label={signedIn ? 'Your account' : 'Sign in'}>
+            <Icon d={ICONS.user} />
+            {signedIn && <span className="header__dot" aria-hidden="true" />}
+          </Link>
           <button type="button" className="icon-btn" onClick={cart.openDrawer} aria-label={`Cart, ${cart.count} item${cart.count === 1 ? '' : 's'}`}>
             <Icon d={ICONS.bag} />
             <AnimatePresence>
@@ -126,7 +134,7 @@ export function Header() {
               <button type="button" className="icon-btn menu__close" aria-label="Close menu" onClick={() => setMenu(false)}><Icon d={ICONS.close} /></button>
             </div>
             <motion.nav className="wrap menu__links" aria-label="Main" initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.06, delayChildren: 0.2 } } }}>
-              {[{ label: 'Home', to: '/' }, ...NAV, { label: 'Track an order', to: '/track' }].map((n, i) => (
+              {[{ label: 'Home', to: '/' }, ...NAV, { label: 'Your account', to: '/account' }, { label: 'Track an order', to: '/track' }].map((n, i) => (
                 <motion.div key={n.label} variants={{ hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: EASE } } }}>
                   <Link to={n.to} className={'menu__link' + (active === n.label ? ' is-active' : '')}>
                     {n.label}<small>{String(i + 1).padStart(2, '0')}</small>

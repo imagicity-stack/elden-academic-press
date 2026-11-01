@@ -11,6 +11,7 @@ import { CartDrawer } from './components/CartDrawer';
 import { Footer } from './components/Footer';
 import { Header, TopBar } from './components/Header';
 import { About } from './pages/About';
+import { Account } from './pages/Account';
 import { BookDetail } from './pages/BookDetail';
 import { Catalogue } from './pages/Catalogue';
 import { Checkout } from './pages/Checkout';
@@ -59,6 +60,7 @@ export function App() {
           <Route path="checkout" element={<Checkout />} />
           <Route path="order/:number" element={<OrderStatus />} />
           <Route path="track" element={<Track />} />
+          <Route path="account" element={<Account />} />
           <Route path="study-hub" element={<StudyHub />} />
           <Route path="about" element={<About />} />
           <Route path="contact" element={<Contact />} />

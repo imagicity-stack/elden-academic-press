@@ -78,6 +78,28 @@ Tip: copies are easiest to read when the `MAIL_TO` inbox is not the sending acco
 
 Google Workspace sends up to 2,000 emails a day per account. (Instead of SMTP you can use [Resend](https://resend.com) with `RESEND_API_KEY`; it's used only when `SMTP_USER`/`SMTP_PASS` are empty.)
 
+## 3b. Customer sign-in with Google
+
+Customers can sign in at **eldenap.in/account** with Google to read their e-books and journals online, download them again and see their orders. Orders are matched by email, so past guest orders appear automatically when they use the same address.
+
+**In Google Cloud** ([console.cloud.google.com](https://console.cloud.google.com), signed in with your Workspace admin account):
+1. Create a project, e.g. “Elden website”.
+2. **APIs & Services → OAuth consent screen** (also called *Google Auth Platform*):
+   - App name `Elden Academic Press`, user support email `hello@eldenap.in`, authorised domain `eldenap.in`, developer contact email.
+   - Audience: **External**, then **Publish app** (status *In production*) so any Google user can sign in. The basic scopes used (email, profile) need no review by Google.
+3. **Credentials / Clients → Create OAuth client → Web application**, name “Elden website”:
+   - Authorised JavaScript origins: `https://eldenap.in` and `https://www.eldenap.in`
+   - Authorised redirect URI: `https://<your-project-id>.supabase.co/auth/v1/callback` (for this project `https://zrnmeisgzobjfygkouue.supabase.co/auth/v1/callback`)
+   - **Create**, then copy the **Client ID** and **Client secret**.
+
+**In Supabase:**
+4. **Authentication → Sign In / Providers → Google** → turn on, paste the Client ID and Client secret → **Save**.
+5. Same page → turn **on** *Allow new users to sign up* (a first-time Google user needs an account). This is safe: the admin only lets in people listed under **Admin → Settings → Staff**, with two-step verification. Keep *Confirm email* on.
+6. **Authentication → URL Configuration → Redirect URLs** → add `https://eldenap.in/account` (and `https://www.eldenap.in/account` if the site also opens on www).
+7. Open `https://eldenap.in/account` → **Continue with Google**.
+
+Google's sign-in screen names `…supabase.co` as the site being signed into; to show `eldenap.in` instead, add Supabase's *Custom domain* add-on (optional, paid).
+
 ## 4. Vercel
 
 1. The project must be on **Vercel Pro** (the free plan doesn't allow commercial sites).

@@ -66,6 +66,7 @@ A self-hosted store and back office, run as one Vercel function (`api/index.ts`)
 | `/checkout` | Contact, delivery address, discount code, Razorpay payment |
 | `/order/:number` | Order status, tracking, invoice and e-book downloads (private link from the confirmation email) |
 | `/track` | Find an order by number and email |
+| `/account` | Customer account (Google sign-in): e-book & journal library to read or download, order history |
 | `/study-hub` | Free downloads, filterable by kind and level (`?kind=Sample%20papers&level=S`) |
 | `/about` | About Elden, publishing with Elden, journals |
 | `/contact` | Contact form and distributors by state |
