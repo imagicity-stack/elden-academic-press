@@ -881,3 +881,4 @@ select.input { appearance: none; padding-right: 42px; background: #FFFFFF url("d
   .acct-order__n { grid-column: 1 / -1; }
   .acct-order__arrow { display: none; }
 }
+.acct-gsi { min-height: 44px; width: min(100%, 360px); }
