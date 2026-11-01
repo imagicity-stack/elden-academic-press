@@ -9,7 +9,7 @@ import { report, visitOf } from '../services/tracking.js';
 
 const zId = z.string().trim().max(80);
 const zEvent = z.object({
-  name: z.enum(['PageView', 'ViewContent', 'Search', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo']),
+  name: z.enum(['PageView', 'ViewContent', 'Search', 'CustomizeProduct', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Contact']),
   eventId: z.string().trim().min(8).max(80),
   url: z.url().max(1000),
   custom: z.object({

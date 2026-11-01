@@ -8,7 +8,8 @@ import { stateName } from './states.js';
 
 export const GRAPH_VERSION = 'v24.0';
 
-export type MetaEventName = 'PageView' | 'ViewContent' | 'Search' | 'AddToCart' | 'InitiateCheckout' | 'AddPaymentInfo' | 'Purchase' | 'Lead' | 'CompleteRegistration' | 'Subscribe';
+export type MetaEventName = 'PageView' | 'ViewContent' | 'Search' | 'CustomizeProduct' | 'AddToCart' | 'InitiateCheckout' | 'AddPaymentInfo'
+  | 'Purchase' | 'Lead' | 'Contact' | 'SubmitApplication' | 'CompleteRegistration' | 'Subscribe';
 
 export interface MetaUser {
   email?: string | null;

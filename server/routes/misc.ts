@@ -42,10 +42,12 @@ forms.post('/enquiries', async (c) => {
     city: input.city ?? '', role: input.role ?? '', title: input.title ?? '', message: input.message ?? '', data: input.data ?? null, ip: c.get('ip'),
   }).returning();
   await sendEnquiryNotice(deps, e, await getSettings(deps.db));
-  // The browser fires the Pixel's Lead with the same id (sent in this header).
+  // The browser fires the Pixel's twin with the same id (sent in this header):
+  // contact form = Contact, author proposal or distributor application = SubmitApplication, others = Lead.
   const visit = visitOf(c);
+  const name = e.kind === 'contact' ? 'Contact' : e.kind === 'proposal' || e.kind === 'dist' ? 'SubmitApplication' : 'Lead';
   await report(deps, visit.consent, {
-    name: 'Lead', eventId: eventIdHeader(c) ?? `lead-${e.id}`, time: deps.now(), url: `${deps.env.SITE_URL}/contact`,
+    name, eventId: eventIdHeader(c) ?? `${name.toLowerCase()}-${e.id}`, time: deps.now(), url: `${deps.env.SITE_URL}/contact`,
     user: { ...visit, email: e.email, phone: e.phone, name: e.name, city: e.city },
     custom: { content_name: e.kind, content_category: 'enquiry' },
   });

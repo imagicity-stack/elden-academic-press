@@ -59,8 +59,8 @@ export function Checkout() {
   const [err, setErr] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sim, setSim] = useState<CheckoutResponse | null>(null);
-  // Opt-in is asked fresh each time (never pre-ticked or remembered).
-  const [newsletter, setNewsletter] = useState(false);
+  // The newsletter box starts ticked; the buyer can untick it.
+  const [newsletter, setNewsletter] = useState(true);
   const pending = useRef<{ key: string; res: CheckoutResponse } | null>(null);
 
   useEffect(() => { document.title = 'Checkout — Elden Academic Press'; }, []);

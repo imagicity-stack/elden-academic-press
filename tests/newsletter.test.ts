@@ -25,28 +25,41 @@ async function addSubscribers(emails: string[]) {
 }
 
 describe('newsletter sign-up', () => {
-  it('needs a mobile number and confirms by email before subscribing', async () => {
-    const noPhone = await t.call('POST', '/newsletter/subscribe', { body: { email: 'reader@example.com' } });
+  it('subscribes from the form when the box is ticked, with a welcome email instead of a confirmation', async () => {
+    const noPhone = await t.call('POST', '/newsletter/subscribe', { body: { email: 'reader@example.com', consent: true } });
     expect(noPhone.status).toBe(400);
+    const noTick = await t.call('POST', '/newsletter/subscribe', { body: { email: 'reader@example.com', phone: '9876543210' } });
+    expect(noTick.status).toBe(400);
+    expect(noTick.json.details.consent[0]).toMatch(/Tick the box/);
 
-    const r = await t.call('POST', '/newsletter/subscribe', { body: { email: 'Reader@Example.com', phone: '+91 98765-43210', name: 'Ravi' } });
-    expect(r.json).toEqual({ status: 'pending' });
-    expect(await status('reader@example.com')).toBe('pending');
+    const r = await t.call('POST', '/newsletter/subscribe', { body: { email: 'Reader@Example.com', phone: '+91 98765-43210', name: 'Ravi', consent: true } });
+    expect(r.json).toEqual({ status: 'subscribed' });
     const [row] = await t.db.select().from(subscribers).where(eq(subscribers.email, 'reader@example.com'));
-    expect(row.phone).toBe('9876543210');
+    expect(row).toMatchObject({ status: 'subscribed', phone: '9876543210', source: 'footer' });
+    expect(row.consentAt).not.toBeNull();
 
-    const mail = t.mailer.sent.find((m) => m.to === 'reader@example.com')!;
-    expect(mail.subject).toMatch(/confirm/i);
-    const link = linkParams(mail.html, 'confirm')!;
-    expect(link.email).toBe('reader@example.com');
+    const mails = t.mailer.sent.filter((m) => m.to === 'reader@example.com');
+    expect(mails).toHaveLength(1);
+    expect(mails[0].subject).toMatch(/subscribed/i);
+    expect(mails[0].subject).not.toMatch(/confirm/i);
+    expect(mails[0].headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
+    expect(linkParams(mails[0].html, 'unsubscribe')?.email).toBe('reader@example.com');
 
-    expect((await t.call('POST', '/newsletter/confirm', { body: { email: link.email, token: 'forged' } })).status).toBe(400);
-    expect((await t.call('POST', '/newsletter/confirm', { body: link })).status).toBe(200);
-    expect(await status('reader@example.com')).toBe('subscribed');
+    // Signing up again: no second welcome.
+    expect((await t.call('POST', '/newsletter/subscribe', { body: { email: 'reader@example.com', phone: '9876543210', consent: true } })).json).toEqual({ status: 'already' });
+    expect(t.mailer.sent.filter((m) => m.to === 'reader@example.com')).toHaveLength(1);
+  });
+
+  it('still honours confirmation links sent before', async () => {
+    await t.db.insert(subscribers).values({ email: 'old@example.com', status: 'pending', source: 'footer' });
+    const token = newsletterToken(SECRET, 'old@example.com');
+    expect((await t.call('POST', '/newsletter/confirm', { body: { email: 'old@example.com', token: 'forged' } })).status).toBe(400);
+    expect((await t.call('POST', '/newsletter/confirm', { body: { email: 'old@example.com', token } })).status).toBe(200);
+    expect(await status('old@example.com')).toBe('subscribed');
   });
 
   it('ignores bots that fill in the hidden field', async () => {
-    const r = await t.call('POST', '/newsletter/subscribe', { body: { email: 'bot@example.com', phone: '9876543210', website: 'spam' } });
+    const r = await t.call('POST', '/newsletter/subscribe', { body: { email: 'bot@example.com', phone: '9876543210', consent: true, website: 'spam' } });
     expect(r.status).toBe(400);
     expect(await status('bot@example.com')).toBeUndefined();
   });
@@ -156,7 +169,7 @@ describe('campaigns', () => {
 
   it('previews, tests and sends only to confirmed subscribers, with unsubscribe headers', async () => {
     await addSubscribers(['one@example.com', 'two@example.com']);
-    await t.call('POST', '/newsletter/subscribe', { body: { email: 'pending@example.com', phone: '9876543210' } });
+    await t.db.insert(subscribers).values({ email: 'pending@example.com', status: 'pending', source: 'footer' });
     const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
     const id = await campaign({ productIds: [p.id] });
 

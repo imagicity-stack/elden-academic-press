@@ -110,6 +110,24 @@ describe('leads and sign-ups', () => {
     expect(toPayload(meta.sent[0])).toMatchObject({ event_name: 'Lead', event_id: 'lead-abcdef12', user_data: { em: [sha('principal@school.in')], ct: [sha('ranchi')] }, custom_data: { content_name: 'sample' } });
   });
 
+  it('reports contact messages, applications and newsletter sign-ups as their own events', async () => {
+    const send = (kind: string, id: string) => t.call('POST', '/enquiries', { headers: { ...accepted, 'X-Meta-Event-Id': id }, body: { kind, name: 'A. Writer', email: 'a@writer.in' } });
+    expect((await send('contact', 'contact-12345678')).status).toBe(201);
+    expect((await send('proposal', 'proposal-12345678')).status).toBe(201);
+    expect((await send('dist', 'dist-12345678')).status).toBe(201);
+    await t.call('POST', '/newsletter/subscribe', { headers: { ...accepted, 'X-Meta-Event-Id': 'subscribe-12345678' }, body: { email: 'n@example.com', phone: '9876543210', consent: true } });
+    expect(meta.sent.map((e) => `${e.name}:${e.eventId}`)).toEqual([
+      'Contact:contact-12345678', 'SubmitApplication:proposal-12345678', 'SubmitApplication:dist-12345678', 'Subscribe:subscribe-12345678',
+    ]);
+  });
+
+  it('relays email/phone taps and format choices from the browser', async () => {
+    const base = { url: 'https://eldenap.in/contact' };
+    expect((await t.call('POST', '/meta/event', { headers: accepted, body: { ...base, name: 'Contact', eventId: 'e1d2c3e4-0000-4000-8000-000000000000', custom: { content_name: 'email' } } })).status).toBe(204);
+    expect((await t.call('POST', '/meta/event', { headers: accepted, body: { ...base, name: 'CustomizeProduct', eventId: 'f1d2c3e4-0000-4000-8000-000000000000', custom: { content_ids: ['x'], format: 'ebook' } } })).status).toBe(204);
+    expect(meta.sent.map((e) => e.name)).toEqual(['Contact', 'CustomizeProduct']);
+  });
+
   it('reports a first Google sign-in as CompleteRegistration, once', async () => {
     const auth = { authorization: `Bearer ${await supabaseToken({ sub: '77777777-7777-4777-8777-777777777777', email: 'new@example.com', provider: 'google', name: 'New Reader' })}`, ...accepted };
     const first = await t.call('GET', '/account', { headers: auth });

@@ -13,9 +13,13 @@ declare global {
 }
 
 /** Events the server also accepts from the browser (POST /api/meta/event). */
-const RELAYED = ['PageView', 'ViewContent', 'Search', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo'] as const;
+const RELAYED = ['PageView', 'ViewContent', 'Search', 'CustomizeProduct', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Contact'] as const;
 type Relayed = (typeof RELAYED)[number];
-type EventName = Relayed | 'Purchase' | 'Lead' | 'CompleteRegistration';
+type EventName = Relayed | 'Purchase' | 'Lead' | 'SubmitApplication' | 'CompleteRegistration' | 'Subscribe';
+
+/** Which Meta event each website form counts as (the server uses the same mapping). */
+export const formEvent = (form: string): 'Contact' | 'SubmitApplication' | 'Lead' =>
+  (form === 'contact' ? 'Contact' : form === 'proposal' || form === 'dist' ? 'SubmitApplication' : 'Lead');
 
 /** How a format is named in events, so audiences can tell e-book and print buyers apart. */
 export const formatName = (kind: string) => (kind === 'digital' ? 'ebook' : kind === 'bundle' ? 'ebook+print' : 'print');
@@ -90,6 +94,14 @@ export function track(name: EventName, custom: Record<string, unknown> = {}, opt
   window.fbq!('track', name, custom, { eventID: eventId });
   if (!opts.eventId && (RELAYED as readonly string[]).includes(name)) relay(name as Relayed, eventId, custom);
 }
+
+// Contact: someone taps your email address, phone number or WhatsApp link.
+document.addEventListener('click', (e) => {
+  const a = (e.target as Element | null)?.closest?.('a[href^="mailto:"], a[href^="tel:"], a[href*="wa.me/"], a[href*="api.whatsapp.com"]') as HTMLAnchorElement | null;
+  if (!a) return;
+  const href = a.getAttribute('href') ?? '';
+  track('Contact', { content_name: href.startsWith('mailto:') ? 'email' : href.startsWith('tel:') ? 'phone' : 'whatsapp' });
+}, true);
 
 // Start-up, and changes of mind.
 syncConsent();
