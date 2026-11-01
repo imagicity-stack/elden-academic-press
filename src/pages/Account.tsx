@@ -8,7 +8,7 @@ import { accountApi, accountsDevMode, accountsEnabled, devSignIn, googleButtonAv
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem } from '../components/motion';
-import { track } from '../meta';
+import { rememberUser, track } from '../meta';
 
 const day = (s: string | null) => (s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
@@ -111,6 +111,7 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
   const [phone, setPhone] = useState(data.profile.phone);
   const [news, setNews] = useState<NewsletterStatus>(data.newsletter);
   useEffect(() => {
+    rememberUser({ email: data.customer.email, name: data.customer.name, phone: data.profile.phone });
     if (data.newAccount) track('CompleteRegistration', { content_name: 'Google sign-in', status: 'complete' }, { eventId: `signup-${data.customer.userId}` });
   }, [data.newAccount, data.customer.userId]);
   const first = data.customer.name.split(' ')[0] || data.customer.email.split('@')[0];
