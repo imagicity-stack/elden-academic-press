@@ -155,6 +155,22 @@ describe('products', () => {
     expect(catalog.json.items.find((i: any) => i.slug === 'chemistry-lab-manual').formats.bundle.price).toBe(39900);
   });
 
+  it('saves an e-book with several labelled files, in order', async () => {
+    const h = await as(OWNER);
+    const files = [
+      { path: '2027/x/part-1.pdf', name: 'Part 1.pdf', title: 'Part 1', size: 1000 },
+      { path: '2027/x/answers.pdf', name: 'Answers.pdf', title: 'Answer key', size: 500 },
+    ];
+    const r = await t.call('POST', '/admin/products', { headers: h, body: { ...draft, status: 'active', digital: { ...draft.digital, files } } });
+    expect(r.status).toBe(201);
+    expect(r.json.variants.digital).toMatchObject({ files, filePath: '2027/x/part-1.pdf', fileName: 'Part 1.pdf', fileSize: 1000 });
+    const reordered = [files[1], files[0]];
+    const u = await t.call('PUT', `/admin/products/${r.json.product.id}`, { headers: h, body: { ...draft, status: 'active', digital: { ...draft.digital, files: reordered } } });
+    expect(u.json.variants.digital).toMatchObject({ files: reordered, filePath: '2027/x/answers.pdf' });
+    const empty = await t.call('PUT', `/admin/products/${r.json.product.id}`, { headers: h, body: { ...draft, status: 'active', digital: { ...draft.digital, files: [] } } });
+    expect(empty.status).toBe(400);
+  });
+
   it('rejects duplicate SKUs and bundles without both formats', async () => {
     const h = await as(OWNER);
     const dup = await t.call('POST', '/admin/products', { headers: h, body: { ...draft, print: { ...draft.print, sku: 'M8-P' } } });

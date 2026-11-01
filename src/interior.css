@@ -949,3 +949,14 @@ select.input { appearance: none; padding-right: 42px; background: #FFFFFF url("d
 .nl-form__agree { font-size: 13.5px; color: var(--ink); }
 .nl-form--dark .nl-form__agree { color: rgba(255, 255, 255, .78); }
 .nl-form--dark .tick__box { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .6); }
+
+/* E-books in several files */
+.dl-list li.dl-list__multi { flex-direction: column; align-items: stretch; }
+.dl-files { margin: 6px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.dl-list .dl-files li { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0; padding: 10px 0; border-radius: 0; border-bottom: 1px solid var(--line); background: none; }
+.dl-files__label { font: 500 14.5px var(--f-text); color: var(--ink) !important; }
+.acct-files { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.acct-files li { display: flex; align-items: center; gap: 14px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.acct-files li span { flex: 1; min-width: 0; font-weight: 500; }
+.acct-files .text-link { font-size: 13.5px; padding: 0; }
+.acct-files .text-link:disabled { opacity: .4; cursor: default; }

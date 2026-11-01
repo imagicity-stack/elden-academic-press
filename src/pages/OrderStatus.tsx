@@ -15,7 +15,7 @@ interface OrderView {
   paidAt: string | null;
   name: string;
   email: string;
-  items: { id: string; productId: string | null; title: string; format: string; kind: string; quantity: number; lineTotal: number; isDigital: boolean; downloadsLeft: number | null; canDownload: boolean }[];
+  items: { id: string; productId: string | null; title: string; format: string; kind: string; quantity: number; lineTotal: number; isDigital: boolean; downloadsLeft: number | null; canDownload: boolean; files?: { index: number; label: string }[] }[];
   downloadsExpireAt: string | null;
   subtotal: number; discount: number; couponCode: string | null; shipping: number; tax: number; total: number; refundedAmount: number;
   requiresShipping: boolean;
@@ -119,16 +119,35 @@ export function OrderStatus() {
             <section className="order-card">
               <h2 className="order-card__title">Your e-books</h2>
               <ul className="dl-list">
-                {digital.map((i) => (
-                  <li key={i.id}>
-                    <div><strong>{i.title}</strong><span>{i.format} · {i.downloadsLeft} download{i.downloadsLeft === 1 ? '' : 's'} left</span></div>
-                    {i.canDownload
-                      ? <a className="btn btn--ink btn--md" href={`/api/orders/${order.number}/download/${i.id}${q}`}>Download PDF</a>
-                      : <span className="dl-list__off">Not available — <a href={`mailto:${cfg?.supportEmail ?? 'hello@eldenap.in'}`}>contact us</a></span>}
-                  </li>
-                ))}
+                {digital.map((i) => {
+                  const files = i.files ?? [];
+                  const href = (f: number) => `/api/orders/${order.number}/download/${i.id}${q}&f=${f}`;
+                  const off = <span className="dl-list__off">Not available — <a href={`mailto:${cfg?.supportEmail ?? 'hello@eldenap.in'}`}>contact us</a></span>;
+                  const left = `${i.downloadsLeft} download${i.downloadsLeft === 1 ? '' : 's'} left`;
+                  if (files.length > 1) {
+                    return (
+                      <li key={i.id} className="dl-list__multi">
+                        <div><strong>{i.title}</strong><span>{i.format} · {files.length} files · {left}</span></div>
+                        <ul className="dl-files">
+                          {files.map((f) => (
+                            <li key={f.index}>
+                              <span className="dl-files__label">{f.label}</span>
+                              {i.canDownload ? <a className="btn btn--ink btn--sm" href={href(f.index)}>Download</a> : off}
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    );
+                  }
+                  return (
+                    <li key={i.id}>
+                      <div><strong>{i.title}</strong><span>{i.format} · {left}</span></div>
+                      {i.canDownload ? <a className="btn btn--ink btn--md" href={href(0)}>Download PDF</a> : off}
+                    </li>
+                  );
+                })}
               </ul>
-              {order.downloadsExpireAt && <p className="order-card__note">Downloads are available until {new Date(order.downloadsExpireAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}. Save the file to your device.</p>}
+              {order.downloadsExpireAt && <p className="order-card__note">Downloads are available until {new Date(order.downloadsExpireAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}. Save the files to your device.</p>}
             </section>
           )}
 
