@@ -19,8 +19,21 @@ export function getConsent(): Consent | null {
   }
 }
 
-/** Signed in to the admin in this browser: staff checking the site aren't counted. */
+// Meta test mode: open any page with ?meta-test and, for this tab, a status panel shows
+// what the Pixel needs, and an admin sign-in no longer stops tracking (so staff can test).
+const TEST = 'elden-meta-test';
+try { if (new URLSearchParams(location.search).has('meta-test')) sessionStorage.setItem(TEST, '1'); } catch { /* ignore */ }
+export function metaTestMode() {
+  try { return sessionStorage.getItem(TEST) === '1'; } catch { return false; }
+}
+export function leaveMetaTest() {
+  try { sessionStorage.removeItem(TEST); } catch { /* ignore */ }
+  location.assign(location.pathname);
+}
+
+/** Signed in to the admin in this browser: staff checking the site aren't counted (except in test mode). */
 export function isStaff() {
+  if (metaTestMode()) return false;
   try { return Boolean(localStorage.getItem('elden-admin-auth')); } catch { return false; }
 }
 
