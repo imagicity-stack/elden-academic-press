@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError, api, inr } from '../store/api';
 import { useStoreConfig } from '../store/catalog';
 import { orderToken } from '../store/orderToken';
-import { track } from '../meta';
+import { formatList, track } from '../meta';
 
 interface OrderView {
   number: number;
@@ -59,6 +59,7 @@ export function OrderStatus() {
       content_ids: [...new Set(ids)],
       contents: order.items.map((i, k) => ({ id: ids[k], quantity: i.quantity, item_price: i.lineTotal / 100 / i.quantity })),
       num_items: order.items.reduce((n, i) => n + i.quantity, 0),
+      format: formatList(order.items.map((i) => i.kind)),
     }, { eventId: `purchase-${order.number}` });
   }, [order, isNew]);
 

@@ -58,7 +58,7 @@ describe('Purchase', () => {
     expect(meta.sent).toHaveLength(1);
     const p = toPayload(meta.sent[0]);
     expect(p).toMatchObject({ event_name: 'Purchase', event_id: `purchase-${o.number}`, action_source: 'website', event_source_url: 'https://eldenap.in/checkout' });
-    expect(p.custom_data).toMatchObject({ value: o.total / 100, currency: 'INR', content_ids: [o.productId], num_items: 2, order_id: String(o.number) });
+    expect(p.custom_data).toMatchObject({ value: o.total / 100, currency: 'INR', content_ids: [o.productId], num_items: 2, order_id: String(o.number), format: 'print' });
     expect(p.user_data).toMatchObject({ em: [sha(contact.email)], ph: [sha('919876543210')], fbp: FBP, fbc: FBC, client_user_agent: 'Mozilla/5.0 Test' });
   });
 
@@ -81,6 +81,18 @@ describe('browser events through the server', () => {
     expect((await t.call('POST', '/meta/event', { headers: accepted, body: event })).status).toBe(204);
     expect(meta.sent).toHaveLength(1);
     expect(toPayload(meta.sent[0])).toMatchObject({ event_name: 'AddToCart', event_id: event.eventId, user_data: { fbp: FBP, fbc: FBC, client_ip_address: '10.0.0.1' }, custom_data: { value: 249 } });
+  });
+
+  it('forwards searches and payment starts with their details', async () => {
+    const search = { name: 'Search', eventId: 'c1d2c3e4-0000-4000-8000-000000000000', url: 'https://eldenap.in/catalogue', custom: { search_string: 'class 10 science', content_type: 'product', content_ids: ['x'] } };
+    const pay = { name: 'AddPaymentInfo', eventId: 'd1d2c3e4-0000-4000-8000-000000000000', url: 'https://eldenap.in/checkout', custom: { value: 499, currency: 'INR', format: 'ebook,print' } };
+    expect((await t.call('POST', '/meta/event', { headers: accepted, body: search })).status).toBe(204);
+    expect((await t.call('POST', '/meta/event', { headers: accepted, body: pay })).status).toBe(204);
+    expect(meta.sent.map((e) => toPayload(e))).toMatchObject([
+      { event_name: 'Search', custom_data: { search_string: 'class 10 science' } },
+      { event_name: 'AddPaymentInfo', custom_data: { value: 499, format: 'ebook,print' } },
+    ]);
+    expect((await t.call('POST', '/meta/event', { headers: accepted, body: { ...pay, custom: { format: '<script>' } } })).status).toBe(400);
   });
 
   it('refuses events it must not relay and pages from other sites', async () => {

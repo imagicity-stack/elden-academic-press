@@ -6,6 +6,7 @@ import { useCatalog } from '../store/catalog';
 import type { Product } from '../store/types';
 import { BookCard } from '../components/BookCard';
 import { EASE } from '../components/motion';
+import { track } from '../meta';
 
 export function Catalogue() {
   const { products, categories, status, reload } = useCatalog();
@@ -28,6 +29,14 @@ export function Catalogue() {
   if (q.trim()) chips.unshift({ id: 'q', label: '“' + q.trim() + '”', remove: () => update(f, '', sort) });
 
   useEffect(() => { document.title = (journalsOnly ? 'Journals' : 'Store') + ' — Elden Academic Press'; }, [journalsOnly]);
+  // Meta Search: what people look for, once they stop typing.
+  const searched = q.trim();
+  const topIds = results.slice(0, 10).map((p) => p.id).join(',');
+  useEffect(() => {
+    if (searched.length < 2) return;
+    const t = setTimeout(() => track('Search', { search_string: searched.slice(0, 100), content_type: 'product', content_ids: topIds ? topIds.split(',') : [] }), 1200);
+    return () => clearTimeout(t);
+  }, [searched, topIds]);
 
   return (
     <div className="store">

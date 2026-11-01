@@ -9,7 +9,7 @@ import { report, visitOf } from '../services/tracking.js';
 
 const zId = z.string().trim().max(80);
 const zEvent = z.object({
-  name: z.enum(['PageView', 'ViewContent', 'AddToCart', 'InitiateCheckout']),
+  name: z.enum(['PageView', 'ViewContent', 'Search', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo']),
   eventId: z.string().trim().min(8).max(80),
   url: z.url().max(1000),
   custom: z.object({
@@ -20,6 +20,8 @@ const zEvent = z.object({
     content_ids: z.array(zId).max(50).optional(),
     contents: z.array(z.object({ id: zId, quantity: z.number().int().min(1).max(1000) })).max(50).optional(),
     num_items: z.number().int().min(0).max(1000).optional(),
+    search_string: zText(100).optional(),
+    format: z.string().regex(/^[a-z+,]{1,40}$/).optional(),
   }).optional(),
 });
 

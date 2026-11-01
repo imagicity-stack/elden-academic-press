@@ -14,7 +14,7 @@ import { BookCover } from '../components/BookCover';
 import { ElmasterMark } from '../components/Brand';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem, Tilt } from '../components/motion';
 import { NotFound } from './NotFound';
-import { track } from '../meta';
+import { formatName, track } from '../meta';
 
 const TABS = ['Overview', 'Contents', 'For teachers'] as const;
 
@@ -57,7 +57,7 @@ function BookView({ book }: { book: Product }) {
     if (!available) return;
     const quantity = kind === 'print' ? qty : 1;
     cart.add({ productId: book.id, kind, quantity });
-    track('AddToCart', { content_ids: [book.id], content_name: book.title, content_type: 'product', contents: [{ id: book.id, quantity }], value: total / 100, currency: 'INR' });
+    track('AddToCart', { content_ids: [book.id], content_name: book.title, content_type: 'product', contents: [{ id: book.id, quantity }], value: total / 100, currency: 'INR', format: formatName(kind) });
     if (go) navigate('/checkout');
     else { setAdded(true); cart.openDrawer(); }
   };
