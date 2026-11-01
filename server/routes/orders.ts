@@ -3,7 +3,7 @@ import { Hono, type Context } from 'hono';
 import { and, asc, eq, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
-import { orderEvents, orderItems, orders, productVariants } from '../db/schema.js';
+import { orderEvents, orderItems, orders } from '../db/schema.js';
 import { body, HttpError, notFound, rateLimit } from '../lib/http.js';
 import { getSettings } from '../services/catalog.js';
 import { sendOrderLink } from '../services/emails.js';
@@ -11,6 +11,8 @@ import { invoiceFileName, renderInvoicePdf } from '../services/invoicePdf.js';
 import { stateName } from '../lib/states.js';
 import { paymentMethodLabel } from '../lib/format.js';
 import { checkOrderToken, type Order } from '../services/orders.js';
+import { downloadLimit, downloadName, fileLabel, filesForItems } from '../services/ebooks.js';
+
 
 export const customerOrders = new Hono<AppEnv>();
 
@@ -57,6 +59,7 @@ customerOrders.get('/:number', async (c) => {
   ]);
   const expiry = o.paidAt && s.downloadExpiryDays > 0 ? new Date(o.paidAt.getTime() + s.downloadExpiryDays * 86400_000) : null;
   const downloadsOpen = isPaid(o) && (!expiry || expiry > deps.now());
+  const files = await filesForItems(deps.db, items);
   c.header('Cache-Control', 'no-store');
   return c.json({
     number: o.number,
@@ -67,11 +70,16 @@ customerOrders.get('/:number', async (c) => {
     paidAt: o.paidAt,
     name: o.name,
     email: o.email,
-    items: items.map((i) => ({
-      id: i.id, productId: i.productId, title: i.title, format: i.formatLabel, kind: i.variantKind, quantity: i.quantity, lineTotal: i.lineTotal, isDigital: i.isDigital,
-      downloadsLeft: i.isDigital ? Math.max(s.maxDownloads - i.downloadsUsed, 0) : null,
-      canDownload: i.isDigital && downloadsOpen && i.downloadsUsed < s.maxDownloads,
-    })),
+    items: items.map((i) => {
+      const fs = files.get(i.id) ?? [];
+      const limit = downloadLimit(s, fs.length);
+      return {
+        id: i.id, productId: i.productId, title: i.title, format: i.formatLabel, kind: i.variantKind, quantity: i.quantity, lineTotal: i.lineTotal, isDigital: i.isDigital,
+        downloadsLeft: i.isDigital ? Math.max(limit - i.downloadsUsed, 0) : null,
+        canDownload: i.isDigital && downloadsOpen && i.downloadsUsed < limit && fs.length > 0,
+        files: fs.map((f, k) => ({ index: k, label: fileLabel(f, k, fs.length) })),
+      };
+    }),
     downloadsExpireAt: expiry,
     subtotal: o.subtotal, discount: o.discount, couponCode: o.couponCode, shipping: o.shipping, tax: o.tax, total: o.total,
     refundedAmount: o.refundedAmount,
@@ -105,16 +113,19 @@ customerOrders.get('/:number/download/:itemId', async (c) => {
     throw new HttpError(410, 'This download link has expired. Please contact us.');
   }
   const itemId = c.req.param('itemId');
+  const [found] = await deps.db.select().from(orderItems).where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, o.id), eq(orderItems.isDigital, true)));
+  if (!found) throw notFound('This e-book isn’t in this order.');
+  // ?f= picks one of the e-book's files (0 = the first).
+  const fs = (await filesForItems(deps.db, [found])).get(found.id) ?? [];
+  const index = Math.max(0, Number.parseInt(c.req.query('f') ?? '0', 10) || 0);
+  const file = fs[index];
+  if (!file) throw new HttpError(404, 'This e-book file is not available. Please contact us.');
   const [item] = await deps.db.update(orderItems)
     .set({ downloadsUsed: sql`${orderItems.downloadsUsed} + 1` })
-    .where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, o.id), eq(orderItems.isDigital, true), sql`${orderItems.downloadsUsed} < ${s.maxDownloads}`))
+    .where(and(eq(orderItems.id, found.id), sql`${orderItems.downloadsUsed} < ${downloadLimit(s, fs.length)}`))
     .returning();
   if (!item) throw new HttpError(403, 'Download limit reached for this e-book. Please contact us if you need more.');
-  const [v] = item.productId
-    ? await deps.db.select().from(productVariants).where(and(eq(productVariants.productId, item.productId), eq(productVariants.kind, 'digital')))
-    : [];
-  if (!v?.filePath) throw new HttpError(404, 'This e-book file is not available. Please contact us.');
-  const url = await deps.storage.signedDownloadUrl('ebooks', v.filePath, 300, v.fileName ?? `${item.title}.pdf`);
+  const url = await deps.storage.signedDownloadUrl('ebooks', file.path, 300, downloadName(file, index, fs.length, item.title));
   c.header('Cache-Control', 'no-store');
   return c.redirect(url, 302);
 });

@@ -177,11 +177,11 @@ function Library({ items }: { items: LibraryItem[] }) {
       </div>
     );
   }
-  const read = async (item: LibraryItem) => {
+  const read = async (item: LibraryItem, file = 0) => {
     setErr(null);
     const win = window.open('', '_blank');
     try {
-      const { url } = await accountApi<{ url: string }>(`/library/${item.itemId}/read`, { method: 'POST' });
+      const { url } = await accountApi<{ url: string }>(`/library/${item.itemId}/read?f=${file}`, { method: 'POST' });
       const href = new URL(url, window.location.origin).href;
       if (win) win.location.href = href; else window.location.href = href;
     } catch (e) {
@@ -201,10 +201,25 @@ function Library({ items }: { items: LibraryItem[] }) {
               <div className="acct-book__info">
                 <div className="book-card__meta">{i.format} · order #{i.orderNumber}</div>
                 {p ? <Link to={'/books/' + p.slug} className="acct-book__title">{i.title}</Link> : <span className="acct-book__title">{i.title}</span>}
-                <div className="acct-book__actions">
-                  <button type="button" className="btn btn--accent btn--sm" disabled={!i.canRead} onClick={() => read(i)}>Read</button>
-                  {i.downloadUrl ? <a className="text-link" href={i.downloadUrl}>Download · {i.downloadsLeft} left</a> : <span className="acct-book__muted">{i.canRead ? 'No downloads left' : 'Access ended'}</span>}
-                </div>
+                {(i.files?.length ?? 0) > 1 ? (
+                  <>
+                    <ul className="acct-files">
+                      {i.files!.map((f) => (
+                        <li key={f.index}>
+                          <span>{f.label}</span>
+                          <button type="button" className="text-link" disabled={!i.canRead} onClick={() => read(i, f.index)}>Read</button>
+                          {f.downloadUrl && <a className="text-link" href={f.downloadUrl}>Download</a>}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="acct-book__muted">{i.downloadUrl ? `${i.downloadsLeft} downloads left` : i.canRead ? 'No downloads left' : 'Access ended'}</div>
+                  </>
+                ) : (
+                  <div className="acct-book__actions">
+                    <button type="button" className="btn btn--accent btn--sm" disabled={!i.canRead} onClick={() => read(i)}>Read</button>
+                    {i.downloadUrl ? <a className="text-link" href={i.downloadUrl}>Download · {i.downloadsLeft} left</a> : <span className="acct-book__muted">{i.canRead ? 'No downloads left' : 'Access ended'}</span>}
+                  </div>
+                )}
                 {i.expiresAt && <div className="acct-book__muted">Available until {day(i.expiresAt)}</div>}
               </div>
             </StaggerItem>

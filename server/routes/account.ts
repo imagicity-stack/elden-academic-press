@@ -7,7 +7,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
-import { accounts, orderItems, orders, productVariants, subscribers } from '../db/schema.js';
+import { accounts, orderItems, orders, subscribers } from '../db/schema.js';
 import { body, HttpError, notFound, rateLimit, zPhone } from '../lib/http.js';
 import { getSettings } from '../services/catalog.js';
 import { subscribe, subscribeNewAccount, unsubscribe } from '../services/newsletter.js';
@@ -15,6 +15,7 @@ import { orderToken } from '../services/orders.js';
 import { report, visitOf } from '../services/tracking.js';
 import { verifySupabaseToken } from './admin/auth.js';
 import { orderStatusLabel } from './orders.js';
+import { downloadLimit, fileLabel, filesForItems } from '../services/ebooks.js';
 
 export interface Customer { userId: string; email: string; name: string; avatar: string | null }
 
@@ -90,6 +91,7 @@ account.get('/', async (c) => {
   const mine = await db.select().from(orders).where(and(eq(orders.email, me.email), inArray(orders.paymentStatus, OWNED)))
     .orderBy(desc(orders.createdAt)).limit(200);
   const items = mine.length ? await db.select().from(orderItems).where(inArray(orderItems.orderId, mine.map((o) => o.id))) : [];
+  const files = await filesForItems(db, items);
   const token = (id: string) => orderToken(env.ORDER_LINK_SECRET, id);
 
   const library = new Map<string, unknown>();
@@ -100,12 +102,19 @@ account.get('/', async (c) => {
       const key = i.productId ?? i.id;
       if (library.has(key)) continue; // newest purchase of a title wins (orders are newest first)
       const open = !expiresAt || expiresAt > now();
+      const fs = files.get(i.id) ?? [];
+      const limit = downloadLimit(s, fs.length);
+      const canDownload = open && i.downloadsUsed < limit;
       library.set(key, {
         itemId: i.id, productId: i.productId, title: i.title, format: i.formatLabel,
         orderNumber: o.number, purchasedAt: o.paidAt, expiresAt,
-        downloadsLeft: Math.max(0, s.maxDownloads - i.downloadsUsed),
-        canRead: open,
-        downloadUrl: open && i.downloadsUsed < s.maxDownloads ? `/api/orders/${o.number}/download/${i.id}?t=${token(o.id)}` : null,
+        downloadsLeft: Math.max(0, limit - i.downloadsUsed),
+        canRead: open && fs.length > 0,
+        downloadUrl: canDownload && fs.length ? `/api/orders/${o.number}/download/${i.id}?t=${token(o.id)}` : null,
+        files: fs.map((f, k) => ({
+          index: k, label: fileLabel(f, k, fs.length),
+          downloadUrl: canDownload ? `/api/orders/${o.number}/download/${i.id}?t=${token(o.id)}&f=${k}` : null,
+        })),
       });
     }
   }
@@ -137,11 +146,11 @@ account.post('/library/:itemId/read', async (c) => {
   if (s.downloadExpiryDays > 0 && row.order.paidAt.getTime() + s.downloadExpiryDays * 86400_000 < now().getTime()) {
     throw new HttpError(410, 'Access to this e-book has expired. Please contact us.');
   }
-  const [v] = row.item.productId
-    ? await db.select().from(productVariants).where(and(eq(productVariants.productId, row.item.productId), eq(productVariants.kind, 'digital')))
-    : [];
-  if (!v?.filePath) throw new HttpError(404, 'This e-book file is not available. Please contact us.');
-  return c.json({ url: await storage.signedDownloadUrl('ebooks', v.filePath, 300) });
+  // ?f= picks one of the e-book's files (0 = the first).
+  const fs = (await filesForItems(db, [row.item])).get(row.item.id) ?? [];
+  const file = fs[Math.max(0, Number.parseInt(c.req.query('f') ?? '0', 10) || 0)];
+  if (!file) throw new HttpError(404, 'This e-book file is not available. Please contact us.');
+  return c.json({ url: await storage.signedDownloadUrl('ebooks', file.path, 300) });
 });
 
 /** The mobile number the customer adds to their account. */

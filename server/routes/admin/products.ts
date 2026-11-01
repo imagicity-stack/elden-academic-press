@@ -66,11 +66,18 @@ const zProduct = z.object({
     filePath: z.string().max(300).nullable().optional(),
     fileName: z.string().max(200).nullable().optional(),
     fileSize: z.number().int().nullable().optional(),
+    /** All the e-book's files in order; when given, the single file fields follow its first entry. */
+    files: z.array(z.object({
+      path: z.string().min(1).max(300),
+      name: z.string().max(200).default(''),
+      title: zText(120).default(''),
+      size: z.number().int().nullable().default(null),
+    })).max(20).optional(),
   }),
   bundle: zVariant,
 }).refine((p) => p.print.enabled || p.digital.enabled, { message: 'Turn on at least one format', path: ['print'] })
   .refine((p) => !p.bundle.enabled || (p.print.enabled && p.digital.enabled), { message: 'A bundle needs both print and e-book', path: ['bundle'] })
-  .refine((p) => !(p.status === 'active' && p.digital.enabled && !p.digital.filePath), { message: 'Upload the e-book file before publishing', path: ['digital'] });
+  .refine((p) => !(p.status === 'active' && p.digital.enabled && !(p.digital.files?.length || p.digital.filePath)), { message: 'Upload the e-book file before publishing', path: ['digital'] });
 
 type ProductInput = z.infer<typeof zProduct>;
 
@@ -91,10 +98,13 @@ function productColumns(p: ProductInput, slug: string) {
 /** Create/update the three variants; stock changes are logged as inventory movements. */
 async function saveVariants(tx: Q, productId: string, p: ProductInput, actor: string) {
   const existing = await tx.select().from(productVariants).where(eq(productVariants.productId, productId));
+  // The e-book's files; the single-file columns mirror the first one.
+  const files = p.digital.files ?? (p.digital.filePath ? [{ path: p.digital.filePath, name: p.digital.fileName ?? '', title: '', size: p.digital.fileSize ?? null }] : []);
+  const first = files[0];
   const find = (k: Variant['kind']) => existing.find((v) => v.kind === k);
   const sets: [Variant['kind'], Partial<typeof productVariants.$inferInsert>, boolean][] = [
     ['print', { price: p.print.price, compareAtPrice: p.print.compareAtPrice ?? null, sku: p.print.sku ?? null, trackStock: p.print.trackStock, weightGrams: p.print.weightGrams ?? null, taxRate: p.print.taxRate }, p.print.enabled],
-    ['digital', { price: p.digital.price, compareAtPrice: p.digital.compareAtPrice ?? null, sku: p.digital.sku ?? null, taxRate: p.digital.taxRate, filePath: p.digital.filePath ?? null, fileName: p.digital.fileName ?? null, fileSize: p.digital.fileSize ?? null }, p.digital.enabled],
+    ['digital', { price: p.digital.price, compareAtPrice: p.digital.compareAtPrice ?? null, sku: p.digital.sku ?? null, taxRate: p.digital.taxRate, files, filePath: first?.path ?? null, fileName: first ? first.name || null : null, fileSize: first?.size ?? null }, p.digital.enabled],
     ['bundle', { price: p.bundle.price, compareAtPrice: p.bundle.compareAtPrice ?? null, sku: p.bundle.sku ?? null }, p.bundle.enabled],
   ];
   for (const [kind, values, enabled] of sets) {
@@ -220,7 +230,7 @@ adminProducts.post('/import', requireRole('manager'), async (c) => {
         pages: r.pages ? Number(r.pages) : null, edition: r.edition ?? '', isbn: r.isbn ?? '',
         highlights: existing?.highlights ?? [], contents: existing?.contents ?? [], coverPath: existing?.coverPath ?? null, coverPalette: existing?.coverPalette ?? 0,
         print: { enabled: !Number.isNaN(pp), price: Number.isNaN(pp) ? old('print')?.price ?? 0 : pp, sku: r.print_sku || old('print')?.sku, stock: r.stock ? Number(r.stock) : old('print')?.stock ?? 0, weightGrams: r.weight_g ? Number(r.weight_g) : old('print')?.weightGrams ?? null, taxRate: old('print')?.taxRate ?? 0 },
-        digital: { enabled: !Number.isNaN(ep), price: Number.isNaN(ep) ? old('digital')?.price ?? 0 : ep, sku: r.ebook_sku || old('digital')?.sku, taxRate: old('digital')?.taxRate ?? 18, filePath: old('digital')?.filePath, fileName: old('digital')?.fileName, fileSize: old('digital')?.fileSize },
+        digital: { enabled: !Number.isNaN(ep), price: Number.isNaN(ep) ? old('digital')?.price ?? 0 : ep, sku: r.ebook_sku || old('digital')?.sku, taxRate: old('digital')?.taxRate ?? 18, filePath: old('digital')?.filePath, fileName: old('digital')?.fileName, fileSize: old('digital')?.fileSize, files: old('digital')?.files?.length ? old('digital')!.files : undefined },
         bundle: { enabled: !Number.isNaN(bp), price: Number.isNaN(bp) ? old('bundle')?.price ?? 0 : bp, sku: old('bundle')?.sku },
       });
       if (input.dryRun) { existing ? updated++ : created++; continue; }

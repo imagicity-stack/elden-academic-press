@@ -1,13 +1,13 @@
 // Transactional emails. Table-based HTML with inline styles so they render the
 // same in Gmail, Outlook and Apple Mail; a plain-text part is added on send.
-import { and, eq, inArray } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
-import { productVariants, type enquiries, type orderItems, type orders } from '../db/schema.js';
+import type { enquiries, orderItems, orders } from '../db/schema.js';
 import { esc, inr, istDate } from '../lib/format.js';
 import { addressList, sendSafely, type Attachment } from '../lib/mail.js';
 import type { Settings } from './catalog.js';
 import { addressLines, invoiceFileName, renderInvoicePdf } from './invoicePdf.js';
 import { orderLink, orderToken } from './orders.js';
+import { fileLabel, filesForItems } from './ebooks.js';
 
 type Order = typeof orders.$inferSelect;
 type Item = typeof orderItems.$inferSelect;
@@ -21,8 +21,6 @@ export const MUTED = '#576072';
 export const LINE = '#E4E0D8';
 export const FONT = `-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif`;
 
-/** E-books are attached to the confirmation while their total size stays under this. */
-const ATTACH_LIMIT = 15 * 1024 * 1024;
 
 /** Our own inboxes (MAIL_TO): they get a hidden copy of every email sent to a customer. */
 const copies = (deps: Deps) => addressList(deps.env.MAIL_TO);
@@ -88,32 +86,6 @@ ${cells.map(([k, v], i) => `<td style="padding:14px ${i === cells.length - 1 ? 0
 </tr></table>`);
 }
 
-/** The order's e-book files, attached while they fit within the size limit. */
-async function ebookAttachments(deps: Deps, items: Item[]): Promise<{ files: Attachment[]; attached: Set<string> }> {
-  const digital = items.filter((i) => i.isDigital && i.productId);
-  const attached = new Set<string>();
-  const files: Attachment[] = [];
-  if (!digital.length) return { files, attached };
-  const variants = await deps.db.select().from(productVariants)
-    .where(and(inArray(productVariants.productId, digital.map((i) => i.productId!)), eq(productVariants.kind, 'digital')));
-  let total = 0;
-  for (const i of digital) {
-    const v = variants.find((x) => x.productId === i.productId);
-    if (!v?.filePath || (v.fileSize && total + v.fileSize > ATTACH_LIMIT)) continue;
-    try {
-      const content = await deps.storage.read('ebooks', v.filePath);
-      if (total + content.length > ATTACH_LIMIT) continue;
-      total += content.length;
-      const name = v.fileName || `${i.title}.pdf`;
-      files.push({ filename: name, content, contentType: name.endsWith('.epub') ? 'application/epub+zip' : 'application/pdf' });
-      attached.add(i.id);
-    } catch (e) {
-      console.error('[mail] could not attach e-book', v.filePath, (e as Error).message);
-    }
-  }
-  return { files, attached };
-}
-
 export async function sendOrderConfirmation(deps: Deps, o: Order, items: Item[], s: Settings) {
   const link = orderLink(deps, o);
   const token = orderToken(deps.env.ORDER_LINK_SECRET, o.id);
@@ -121,27 +93,34 @@ export async function sendOrderConfirmation(deps: Deps, o: Order, items: Item[],
   const digital = items.filter((i) => i.isDigital);
   const first = esc(o.name.split(' ')[0]);
 
+  // Only the invoice is attached; e-books are downloaded from the private links below.
   const attachments: Attachment[] = [];
-  let attached = new Set<string>();
   try {
     if (o.invoiceNumber) attachments.push({ filename: invoiceFileName(o), content: await renderInvoicePdf(o, items, s), contentType: 'application/pdf' });
-    const ebooks = await ebookAttachments(deps, items);
-    attachments.push(...ebooks.files);
-    attached = ebooks.attached;
   } catch (e) {
-    console.error('[mail] attachments failed for order', o.number, (e as Error).message);
+    console.error('[mail] invoice PDF failed for order', o.number, (e as Error).message);
   }
 
-  const ebookRows = digital.map((i) => `<tr>
-<td style="padding:14px 0;border-top:1px solid rgba(255,255,255,0.14);font:600 15px/1.35 ${FONT};color:#FFFFFF">${esc(i.title)}<div style="margin-top:3px;font:400 12.5px/1.4 ${FONT};color:#A9B0BC">${attached.has(i.id) ? 'PDF attached to this email · also downloadable' : 'Ready to download'}</div></td>
-<td align="right" style="padding:14px 0 14px 12px;border-top:1px solid rgba(255,255,255,0.14)"><a href="${site}/api/orders/${o.number}/download/${i.id}?t=${token}" style="display:inline-block;background:${YELLOW};padding:10px 14px;font:700 13px/1 ${FONT};color:${INK};text-decoration:none;white-space:nowrap">Download</a></td></tr>`).join('');
+  // One download button per file (a book can have several: Part 1, Part 2, Answer key…).
+  const files = await filesForItems(deps.db, digital);
+  const ebookRows = digital.flatMap((i) => {
+    const fs = files.get(i.id) ?? [];
+    const rows = fs.length ? fs.map((f, k) => ({ title: fs.length > 1 ? `${i.title}: ${fileLabel(f, k, fs.length)}` : i.title, href: `${site}/api/orders/${o.number}/download/${i.id}?t=${token}&f=${k}` }))
+      : [{ title: i.title, href: link }];
+    return rows.map((r) => `<tr>
+<td style="padding:14px 0;border-top:1px solid rgba(255,255,255,0.14);font:600 15px/1.35 ${FONT};color:#FFFFFF">${esc(r.title)}<div style="margin-top:3px;font:400 12.5px/1.4 ${FONT};color:#A9B0BC">Ready to download</div></td>
+<td align="right" style="padding:14px 0 14px 12px;border-top:1px solid rgba(255,255,255,0.14)"><a href="${esc(r.href)}" style="display:inline-block;background:${YELLOW};padding:10px 14px;font:700 13px/1 ${FONT};color:${INK};text-decoration:none;white-space:nowrap">Download</a></td></tr>`);
+  }).join('');
+  const limitNote = digital.some((i) => (files.get(i.id)?.length ?? 0) > 1)
+    ? `allow ${s.maxDownloads} downloads per file`
+    : `allow ${s.maxDownloads} downloads`;
 
   const body = [
     metaStrip([['Order', `#${o.number}`], ['Paid on', istDate(o.paidAt ?? o.createdAt)], ['Total', inr(o.total)]]),
     digital.length ? section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:${INK};padding:22px 22px 8px">
 ${label('Your e-books', YELLOW)}<div style="margin:10px 0 4px;font:700 20px/1.25 ${FONT};color:#FFFFFF">Start reading now.</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${ebookRows}</table>
-</td></tr><tr><td style="background:${INK};padding:0 22px 18px;font:400 12.5px/1.5 ${FONT};color:#A9B0BC">Download links are private to you and allow ${s.maxDownloads} downloads${s.downloadExpiryDays ? ` within ${s.downloadExpiryDays} days` : ''}. Please save the file on your device.</td></tr></table>`) : '',
+</td></tr><tr><td style="background:${INK};padding:0 22px 18px;font:400 12.5px/1.5 ${FONT};color:#A9B0BC">Download links are private to you and ${limitNote}${s.downloadExpiryDays ? ` within ${s.downloadExpiryDays} days` : ''}. Please save the files on your device.</td></tr></table>`) : '',
     o.requiresShipping ? section(`${h2('What happens next')}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 ${[['1', 'We pack your books', 'Checked and packed at our Hazaribagh office.'], ['2', 'We ship and email you', 'You’ll get the courier name and tracking number.'], ['3', 'Delivered to your door', 'Anywhere in India.']]

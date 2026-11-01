@@ -4,6 +4,9 @@ import {
   boolean, check, index, integer, jsonb, pgEnum, pgSequence, pgTable, serial, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
 
+/** One file of an e-book: where it's stored, its file name, and a label for buyers ("Part 1"). */
+export interface EbookFile { path: string; name: string; title: string; size: number | null }
+
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -84,9 +87,12 @@ export const productVariants = pgTable('product_variants', {
   weightGrams: integer('weight_grams'),
   /** GST % included in the price (printed books are usually 0, e-books 18). */
   taxRate: smallint('tax_rate').notNull().default(0),
+  /** The e-book's first file (kept in step with `files[0]`). */
   filePath: text('file_path'),
   fileName: text('file_name'),
   fileSize: integer('file_size'),
+  /** All of the e-book's files, in order (e.g. Part 1, Part 2, Answer key). */
+  files: jsonb('files').$type<EbookFile[]>().notNull().default([]),
   active: boolean('active').notNull().default(true),
   ...timestamps,
 }, (t) => [

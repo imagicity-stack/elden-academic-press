@@ -9,7 +9,9 @@ import { canManage, useMe } from '../AdminApp';
 import { Badge, Btn, Card, Check, ErrorBox, Loading, MoneyField, Page, SelectField, TextArea, TextField, Toggle, useAction, useToast } from '../ui';
 
 type Kind = 'print' | 'digital' | 'bundle';
-interface VariantRow { kind: Kind; price: number; compareAtPrice: number | null; sku: string | null; stock: number; trackStock: boolean; weightGrams: number | null; taxRate: number; filePath: string | null; fileName: string | null; fileSize: number | null; active: boolean }
+interface VariantRow { kind: Kind; price: number; compareAtPrice: number | null; sku: string | null; stock: number; trackStock: boolean; weightGrams: number | null; taxRate: number; filePath: string | null; fileName: string | null; fileSize: number | null; files?: EbookFile[]; active: boolean }
+interface EbookFile { path: string; name: string; title: string; size: number | null }
+const sizeText = (b: number | null) => (!b ? '' : b < 1048576 ? `${Math.ceil(b / 1024)} KB` : `${(b / 1048576).toFixed(1)} MB`);
 interface ProductRow {
   id: string; slug: string; title: string; series: string; author: string; blurb: string; description: string; categoryId: number | null;
   level: LevelKey; classLabel: string; grade: number | null; boards: string[]; subject: string; language: string; pages: number | null;
@@ -33,7 +35,7 @@ const emptyForm = () => ({
   coverPath: null as string | null, coverUrl: null as string | null, coverPalette: 0,
   hasCompanion: false, isNew: true, featured: false, sort: '0', status: 'draft', seoTitle: '', seoDescription: '',
   print: { enabled: true, price: '', compareAtPrice: '', sku: '', stock: '0', trackStock: true, weightGrams: '', taxRate: '0' },
-  digital: { enabled: false, price: '', compareAtPrice: '', sku: '', taxRate: '18', filePath: null as string | null, fileName: null as string | null, fileSize: null as number | null },
+  digital: { enabled: false, price: '', compareAtPrice: '', sku: '', taxRate: '18', files: [] as EbookFile[] },
   bundle: { enabled: false, price: '', compareAtPrice: '', sku: '' },
 });
 type Form = ReturnType<typeof emptyForm>;
@@ -51,7 +53,8 @@ function fromDetail(d: Detail): Form {
     coverPath: p.coverPath, coverUrl: d.product.coverUrl, coverPalette: p.coverPalette,
     hasCompanion: p.hasCompanion, isNew: p.isNew, featured: p.featured, sort: String(p.sort), status: p.status, seoTitle: p.seoTitle, seoDescription: p.seoDescription,
     print: v.print ? { enabled: v.print.active, price: rupees(v.print.price), compareAtPrice: rupees(v.print.compareAtPrice), sku: v.print.sku ?? '', stock: String(v.print.stock), trackStock: v.print.trackStock, weightGrams: v.print.weightGrams ? String(v.print.weightGrams) : '', taxRate: String(v.print.taxRate) } : { ...f.print, enabled: false },
-    digital: v.digital ? { enabled: v.digital.active, price: rupees(v.digital.price), compareAtPrice: rupees(v.digital.compareAtPrice), sku: v.digital.sku ?? '', taxRate: String(v.digital.taxRate), filePath: v.digital.filePath, fileName: v.digital.fileName, fileSize: v.digital.fileSize } : f.digital,
+    digital: v.digital ? { enabled: v.digital.active, price: rupees(v.digital.price), compareAtPrice: rupees(v.digital.compareAtPrice), sku: v.digital.sku ?? '', taxRate: String(v.digital.taxRate),
+      files: v.digital.files?.length ? v.digital.files : v.digital.filePath ? [{ path: v.digital.filePath, name: v.digital.fileName ?? '', title: '', size: v.digital.fileSize }] : [] } : f.digital,
     bundle: v.bundle ? { enabled: v.bundle.active, price: rupees(v.bundle.price), compareAtPrice: rupees(v.bundle.compareAtPrice), sku: v.bundle.sku ?? '' } : f.bundle,
   };
 }
@@ -68,7 +71,7 @@ function toPayload(f: Form, status = f.status) {
     highlights: lines(f.highlights), contents: lines(f.contents), coverPath: f.coverPath, coverPalette: f.coverPalette,
     hasCompanion: f.hasCompanion, isNew: f.isNew, featured: f.featured, sort: Number(f.sort) || 0, status, seoTitle: f.seoTitle, seoDescription: f.seoDescription,
     print: { enabled: f.print.enabled, price: money(f.print.price) ?? 0, compareAtPrice: money(f.print.compareAtPrice), sku: f.print.sku, stock: Number(f.print.stock) || 0, trackStock: f.print.trackStock, weightGrams: num(f.print.weightGrams), taxRate: Number(f.print.taxRate) || 0 },
-    digital: { enabled: f.digital.enabled, price: money(f.digital.price) ?? 0, compareAtPrice: money(f.digital.compareAtPrice), sku: f.digital.sku, taxRate: Number(f.digital.taxRate) || 0, filePath: f.digital.filePath, fileName: f.digital.fileName, fileSize: f.digital.fileSize },
+    digital: { enabled: f.digital.enabled, price: money(f.digital.price) ?? 0, compareAtPrice: money(f.digital.compareAtPrice), sku: f.digital.sku, taxRate: Number(f.digital.taxRate) || 0, files: f.digital.files },
     bundle: { enabled: f.bundle.enabled && f.print.enabled && f.digital.enabled, price: money(f.bundle.price) ?? 0, compareAtPrice: money(f.bundle.compareAtPrice), sku: f.bundle.sku },
   };
 }
@@ -146,8 +149,22 @@ export default function ProductEditor() {
     const r = await run(bucket, () => uploadFile(bucket, file), bucket === 'covers' ? 'Cover uploaded' : 'E-book file uploaded — save to keep it');
     if (!r) return;
     if (bucket === 'covers') setForm((f) => ({ ...f, coverPath: r.path, coverUrl: r.publicUrl }));
-    else setV('digital', { filePath: r.path, fileName: r.name, fileSize: r.size });
+    else setFiles((fs) => [...fs, { path: r.path, name: r.name, title: '', size: r.size }]);
   };
+  /** The e-book's files: add several at once, label, reorder, replace, remove. */
+  const setFiles = (fn: (files: EbookFile[]) => EbookFile[]) => setForm((f) => ({ ...f, digital: { ...f.digital, files: fn(f.digital.files) } }));
+  const addFiles = async (list: FileList) => { for (const file of [...list]) await upload('ebooks', file); };
+  const replaceFile = async (i: number, file: File) => {
+    const r = await run('ebooks', () => uploadFile('ebooks', file), 'File replaced — save to keep it');
+    if (r) setFiles((fs) => fs.map((x, k) => (k === i ? { ...x, path: r.path, name: r.name, size: r.size } : x)));
+  };
+  const moveFile = (i: number, by: number) => setFiles((fs) => {
+    const j = i + by;
+    if (j < 0 || j >= fs.length) return fs;
+    const next = [...fs];
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
 
   const addCategory = async () => {
     const name = prompt('New category name (e.g. “Lab manuals”)');
@@ -223,16 +240,34 @@ export default function ProductEditor() {
                     <TextField label="SKU" value={form.digital.sku} onChange={(e) => setV('digital', { sku: e.target.value })} />
                     <SelectField label="GST rate" value={form.digital.taxRate} onChange={(e) => setV('digital', { taxRate: e.target.value })}>{['0', '5', '12', '18'].map((r) => <option key={r} value={r}>{r}%{r === '18' ? ' (e-books)' : ''}</option>)}</SelectField>
                   </div>
-                  <div className={'ad-upload' + (serverMsg('digital') ? ' has-error' : '')}>
-                    <div>
-                      <b>{form.digital.fileName ?? 'No file yet'}</b>
-                      <span className="ad-muted">{form.digital.fileSize ? (form.digital.fileSize < 1048576 ? `${Math.ceil(form.digital.fileSize / 1024)} KB · ` : `${(form.digital.fileSize / 1048576).toFixed(1)} MB · `) : ''}PDF or EPUB, up to 300 MB. Stored privately; buyers get expiring download links.</span>
-                      {serverMsg('digital') && <em>{serverMsg('digital')}</em>}
+                  <div className={'ad-files' + (serverMsg('digital') ? ' has-error' : '')}>
+                    <div className="ad-files__head">
+                      <b>E-book files</b>
+                      <span className="ad-muted">PDF or EPUB, up to 300 MB each. Buyers get every file, in this order, with its label.</span>
                     </div>
-                    <label className="ad-btn ad-btn--secondary ad-btn--sm">
-                      {busy === 'ebooks' ? 'Uploading…' : form.digital.filePath ? 'Replace file' : 'Upload file'}
-                      <input type="file" hidden accept="application/pdf,application/epub+zip,.pdf,.epub" onChange={(e) => e.target.files?.[0] && upload('ebooks', e.target.files[0])} />
+                    {form.digital.files.length === 0 && <div className="ad-files__empty">No file yet.</div>}
+                    {form.digital.files.map((f, i) => (
+                      <div key={f.path + i} className="ad-files__row">
+                        <span className="ad-files__n">{i + 1}</span>
+                        <div className="ad-files__main">
+                          <input aria-label={`Label for file ${i + 1}`} placeholder={form.digital.files.length > 1 ? `e.g. Part ${i + 1}, Answer key` : 'Label (optional)'} value={f.title} maxLength={120}
+                            onChange={(e) => setFiles((fs) => fs.map((x, k) => (k === i ? { ...x, title: e.target.value } : x)))} />
+                          <span className="ad-muted">{f.name || f.path.split('/').pop()}{f.size ? ` · ${sizeText(f.size)}` : ''}</span>
+                        </div>
+                        <div className="ad-files__actions">
+                          <button type="button" className="ad-link" disabled={i === 0} onClick={() => moveFile(i, -1)} aria-label="Move up">↑</button>
+                          <button type="button" className="ad-link" disabled={i === form.digital.files.length - 1} onClick={() => moveFile(i, 1)} aria-label="Move down">↓</button>
+                          <label className="ad-link">Replace<input type="file" hidden accept="application/pdf,application/epub+zip,.pdf,.epub" onChange={(e) => e.target.files?.[0] && replaceFile(i, e.target.files[0])} /></label>
+                          <button type="button" className="ad-link ad-neg" onClick={() => confirm(`Remove “${f.title || f.name}” from this e-book? (Buyers who already have it keep their copy.)`) && setFiles((fs) => fs.filter((_, k) => k !== i))}>Remove</button>
+                        </div>
+                      </div>
+                    ))}
+                    {serverMsg('digital') && <em className="ad-files__err">{serverMsg('digital')}</em>}
+                    <label className="ad-btn ad-btn--secondary ad-btn--sm ad-files__add">
+                      {busy === 'ebooks' ? 'Uploading…' : form.digital.files.length ? 'Add another file' : 'Upload file'}
+                      <input type="file" hidden multiple accept="application/pdf,application/epub+zip,.pdf,.epub" onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
                     </label>
+                    <span className="ad-muted">Stored privately; buyers get expiring download links.</span>
                   </div>
                 </>}
               </div>

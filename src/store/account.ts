@@ -26,6 +26,8 @@ declare global { interface Window { google?: { accounts?: { id?: GoogleId } } } 
 export interface LibraryItem {
   itemId: string; productId: string | null; title: string; format: string; orderNumber: number;
   purchasedAt: string; expiresAt: string | null; downloadsLeft: number; canRead: boolean; downloadUrl: string | null;
+  /** The e-book's files (several for books in parts). */
+  files?: { index: number; label: string; downloadUrl: string | null }[];
 }
 export interface AccountOrder {
   number: number; createdAt: string; status: string; total: number; invoice: string | null; requiresShipping: boolean; token: string;

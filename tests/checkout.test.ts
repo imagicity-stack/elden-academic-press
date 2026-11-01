@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { hmacHex } from '../server/lib/crypto.js';
 import { inventoryMovements, orders, productVariants, products } from '../server/db/schema.js';
 import { address, contact, setup, WEBHOOK_SECRET } from './helpers.js';
@@ -77,7 +77,8 @@ describe('checkout and payment', () => {
     expect(t.mailer.sent.map((m) => m.subject)).toEqual(expect.arrayContaining([`Order #${o.number} confirmed: your e-books are ready`, expect.stringContaining('New order')]));
     const confirmation = t.mailer.sent.find((m) => m.to === contact.email)!;
     expect(confirmation.html).toContain(`/api/orders/${o.number}/download/`);
-    expect(confirmation.attachments!.map((a) => a.filename)).toEqual([expect.stringMatching(/^Elden-invoice-EAP-\d\d-\d\d-00001\.pdf$/), 'mathematics-today.pdf']);
+    // Only the invoice is attached; the e-book is downloaded from the email's button.
+    expect(confirmation.attachments!.map((a) => a.filename)).toEqual([expect.stringMatching(/^Elden-invoice-EAP-\d\d-\d\d-00001\.pdf$/)]);
     expect(new TextDecoder().decode(confirmation.attachments![0].content.slice(0, 5))).toBe('%PDF-');
 
     // Second confirmation (e.g. webhook after the browser) changes nothing
@@ -234,6 +235,35 @@ describe('after purchase', () => {
     for (let i = 1; i < 10; i++) await t.call('GET', `/orders/${o.number}/download/${itemId}?t=${o.token}`);
     const over = await t.call('GET', `/orders/${o.number}/download/${itemId}?t=${o.token}`);
     expect(over.status).toBe(403);
+  });
+
+  it('serves every file of an e-book in parts, with the limit per file', async () => {
+    const p = await productBySlug('mathematics-today');
+    await t.db.update(productVariants).set({
+      files: [
+        { path: 'books/maths-part-1.pdf', name: 'Maths Part 1.pdf', title: 'Part 1', size: 1000 },
+        { path: 'books/maths-part-2.pdf', name: '', title: '', size: 2000 },
+        { path: 'books/maths-answers.pdf', name: '', title: 'Answer key', size: 500 },
+      ],
+    }).where(and(eq(productVariants.productId, p.id), eq(productVariants.kind, 'digital')));
+    const r = await checkout([{ productId: p.id, kind: 'digital', quantity: 1 }]);
+    await pay(r.json.razorpay.orderId);
+    const status = await t.call('GET', `/orders/${r.json.number}?t=${r.json.token}`);
+    const item = status.json.items[0];
+    expect(item.files.map((f: any) => f.label)).toEqual(['Part 1', 'Part 2', 'Answer key']);
+    expect(item.downloadsLeft).toBe(30);
+
+    const get = (f: number) => t.call('GET', `/orders/${r.json.number}/download/${item.id}?t=${r.json.token}&f=${f}`);
+    expect((await get(0)).headers.get('location')).toContain('/ebooks/books/maths-part-1.pdf');
+    const second = await get(1);
+    expect(second.headers.get('location')).toContain('/ebooks/books/maths-part-2.pdf');
+    expect((await get(2)).headers.get('location')).toContain('/ebooks/books/maths-answers.pdf');
+    expect((await get(3)).status).toBe(404);
+
+    const mail = t.mailer.sent.find((m) => m.to === contact.email && m.subject.includes(`#${r.json.number}`))!;
+    expect(mail.attachments!.map((a) => a.filename)).toEqual([expect.stringMatching(/^Elden-invoice-/)]);
+    for (const f of [0, 1, 2]) expect(mail.html).toContain(`/download/${item.id}?t=${r.json.token}&amp;f=${f}`);
+    expect(mail.html).toContain('Mathematics Today: Answer key');
   });
 
   it('serves the invoice as a PDF', async () => {
