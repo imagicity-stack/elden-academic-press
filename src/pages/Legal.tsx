@@ -133,7 +133,7 @@ function Privacy() {
           <li>to keep the website secure and prevent fraud;</li>
           <li>to measure and improve how the website works.</li>
         </ul>
-        <p>We use your data with your consent, given when you place an order or send a form, and where the law allows or requires it. We do not sell your data, and we do not send marketing emails unless you ask for them: by subscribing, ticking the box at checkout, or turning on the newsletter in your account. Every newsletter has an unsubscribe link, and you can also unsubscribe from your account page. Unsubscribing never affects emails about your orders.</p>
+        <p>We use your data with your consent, given when you place an order or send a form, and where the law allows or requires it. We do not sell your data. We send our newsletter only to people who subscribe, tick the box at checkout, turn it on in their account, or create an account (the sign-in page says so, and we send a welcome email with an unsubscribe link). Every newsletter has an unsubscribe link, and you can also unsubscribe from your account page. Unsubscribing never affects emails about your orders.</p>
       </Section>
 
       <Section title="3. Who we share it with">

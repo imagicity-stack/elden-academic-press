@@ -86,7 +86,7 @@ function SignIn({ onDone }: { onDone: () => void }) {
           )}
           {!accountsEnabled && !accountsDevMode && <p className="form-notice">Accounts are coming soon. Meanwhile, use the link in your order email or <Link to="/track">track an order</Link>.</p>}
           {err && <div className="form-error" role="alert">{err}</div>}
-          <p className="acct-in__note">Use the Google account with the email you ordered with: your past orders appear automatically. By continuing you agree to our <Link to="/terms">terms</Link> and <Link to="/privacy">privacy policy</Link>.</p>
+          <p className="acct-in__note">Use the Google account with the email you ordered with: your past orders appear automatically. New accounts also get our newsletter about new books and offers; turn it off any time in your account or from any email. By continuing you agree to our <Link to="/terms">terms</Link> and <Link to="/privacy">privacy policy</Link>.</p>
         </Reveal>
       </div>
       <div className="acct-in__art" aria-hidden="true">

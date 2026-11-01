@@ -92,6 +92,57 @@ async function sendConfirmation(deps: Deps, sub: Subscriber, s: Settings) {
   });
 }
 
+const NEW_ACCOUNT_MS = 24 * 3600_000;
+
+/**
+ * A new customer account (first Google sign-in) joins the newsletter, as the sign-in page
+ * says, and gets a welcome email with an unsubscribe link. Anyone who unsubscribed
+ * before stays unsubscribed. Never throws: the account page must always load.
+ */
+export async function subscribeNewAccount(deps: Deps, who: { userId: string; email: string; name: string }, ip: string | null) {
+  try {
+    // Only people who really just signed up: older accounts never saw the sign-in notice.
+    const user = deps.authUser ? await deps.authUser(who.userId) : null;
+    if (user && deps.now().getTime() - user.createdAt.getTime() > NEW_ACCOUNT_MS) return;
+    const email = who.email.toLowerCase();
+    const [existing] = await deps.db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, email));
+    if (existing?.status === 'subscribed' || existing?.status === 'unsubscribed') return;
+    const { row } = await subscribe(deps, { email, name: who.name, source: 'signup', ip, confirmed: true });
+    const welcome = sendWelcome(deps, row, await getSettings(deps.db));
+    if (deps.defer) deps.defer(welcome); else await welcome;
+  } catch (e) {
+    console.error('[newsletter] sign-up subscription failed', (e as Error).message);
+  }
+}
+
+async function sendWelcome(deps: Deps, sub: Subscriber, s: Settings) {
+  const first = sub.name.split(' ')[0];
+  const unsubscribe = unsubscribePage(deps, sub.email);
+  await sendSafely(deps.mailer, {
+    to: sub.email,
+    subject: `Welcome to ${s.storeName}`,
+    replyTo: s.supportEmail,
+    headers: {
+      'List-Unsubscribe': `<${oneClickUrl(deps, sub.email)}>, <mailto:${s.supportEmail}?subject=unsubscribe>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    },
+    html: layout(deps, s, {
+      preheader: 'Your account is ready, and you’ll hear about new books first.',
+      kicker: 'Welcome',
+      title: 'Your account is ready.',
+      intro: first ? `Hi ${esc(first)}, thanks for signing up.` : 'Thanks for signing up.',
+      body: section(
+        p('E-books and journals you buy are in your account, ready to read or download, along with your orders and invoices.')
+        + p('You’re also on our newsletter: new books the week they’re published, free sample papers before exams, and the occasional offer, a few times a month. '
+          + `Not for you? <a href="${unsubscribe}" style="color:${INK}">Unsubscribe</a> in one click, or turn it off in your account.`)
+        + button(`${site(deps)}/account`, 'Go to your account'),
+        '4px 32px 32px',
+      ),
+      unsubscribeUrl: unsubscribe,
+    }),
+  });
+}
+
 /* ---------------- Campaign emails ---------------- */
 
 /** Paragraphs from plain text, with **bold** and [label](https://link). Everything else is escaped. */

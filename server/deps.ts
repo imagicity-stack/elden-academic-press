@@ -6,7 +6,7 @@ import { products, productVariants, resources } from './db/schema.js';
 import { samplePdf, seedDemo } from './db/seed.js';
 import { loadEnv, type Env } from './env.js';
 import { waitUntil } from '@vercel/functions';
-import { supabaseAuthUsers, type AuthUser } from './lib/authUsers.js';
+import { supabaseAuthUser, supabaseAuthUsers, type AuthUser } from './lib/authUsers.js';
 import { consoleMailer, resendMailer, smtpMailer, type Mailer } from './lib/mail.js';
 import { razorpayHttp, razorpaySimulator, type Razorpay } from './lib/razorpay.js';
 import { localStorage, supabaseStorage, type Storage } from './lib/storage.js';
@@ -23,6 +23,8 @@ export interface Deps {
   defer?(task: Promise<unknown>): void;
   /** Everyone signed up in Supabase Auth. Unset when Supabase isn't configured (local development). */
   authUsers?(): Promise<AuthUser[]>;
+  /** One Supabase Auth user (for the date they signed up). */
+  authUser?(id: string): Promise<AuthUser | null>;
 }
 
 // Kept on globalThis so the dev server's hot reloads reuse one database.
@@ -54,8 +56,10 @@ async function buildDeps(env: Env): Promise<Deps> {
   }
 
   // On Vercel, emails (with their PDFs) go out after the response, so paying customers aren't kept waiting.
-  const authUsers = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? supabaseAuthUsers(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY) : undefined;
-  return { env, db, razorpay, mailer, storage, authUsers, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task) : undefined };
+  const sbAdmin = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? [env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY] as const : null;
+  const authUsers = sbAdmin ? supabaseAuthUsers(...sbAdmin) : undefined;
+  const authUser = sbAdmin ? supabaseAuthUser(...sbAdmin) : undefined;
+  return { env, db, razorpay, mailer, storage, authUsers, authUser, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task) : undefined };
 }
 
 /** First local run: fill the embedded database with the demo catalogue and sample files. */
