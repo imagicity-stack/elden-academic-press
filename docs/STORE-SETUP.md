@@ -156,7 +156,7 @@ Email your subscribers about new books and offers from **Admin → Newsletter**,
 **One-time:** if your database was set up before this feature arrived, run [`docs/supabase-updates/0003_newsletter.sql`](supabase-updates/0003_newsletter.sql) in the SQL Editor (see *Updating later* in step 1).
 
 **How people join** (everyone is told they are joining and can leave in one click; Indian law and Gmail both expect that):
-- the form in the website footer and on `/newsletter` (name, email, mobile, and a box to tick confirming they want the emails). No confirmation email: a welcome email with an unsubscribe link follows;
+- the form in the website footer and on `/newsletter` (name, email, mobile, and a "Yes, email me…" box, ticked by default). No confirmation email: a welcome email with an unsubscribe link follows;
 - the *Email me about new books and offers* box at checkout, ticked by default; buyers can untick it (subscribed once the order is paid);
 - creating an account (first sign-in with Google): the sign-in page says new accounts get the newsletter, and a welcome email follows with an unsubscribe link. Anyone who unsubscribed before is never re-added;
 - the newsletter switch on the customer's account page, where they can also add their mobile number;

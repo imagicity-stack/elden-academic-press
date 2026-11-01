@@ -8,12 +8,13 @@ import { Arrow } from './motion';
 type Source = 'footer' | 'newsletter-page' | 'home';
 
 /**
- * Newsletter sign-up: name, email, mobile and a tick box to confirm. Ticking it is the
- * consent, so there's no confirmation email; a welcome email with an unsubscribe link follows.
+ * Newsletter sign-up: name, email, mobile and a confirmation box (ticked by default).
+ * Sending the form is the consent, so there's no confirmation email; a welcome email with an unsubscribe link follows.
  */
 export function NewsletterForm({ source, dark = false }: { source: Source; dark?: boolean }) {
   const [result, setResult] = useState<'already' | 'subscribed' | null>(null);
-  const [agree, setAgree] = useState(false);
+  // Ticked by default; unticking it stops the sign-up.
+  const [agree, setAgree] = useState(true);
   const { busy, error, sent, setSent, submit } = useSubmit(async (form) => {
     const f = Object.fromEntries(new FormData(form)) as Record<string, string>;
     const eventId = newEventId();
@@ -32,7 +33,7 @@ export function NewsletterForm({ source, dark = false }: { source: Source; dark?
         <p>{result === 'already'
           ? 'We’ll keep sending news about new books and offers to that address.'
           : 'Thanks! News about new books, sample papers and offers is on its way to your inbox.'}</p>
-        <button type="button" className="text-link" onClick={() => { setSent(false); setResult(null); setAgree(false); }}>Use another address</button>
+        <button type="button" className="text-link" onClick={() => { setSent(false); setResult(null); setAgree(true); }}>Use another address</button>
       </div>
     );
   }
