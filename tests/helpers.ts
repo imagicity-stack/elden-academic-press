@@ -78,8 +78,12 @@ export async function setup(opts: { env?: Record<string, string>; seed?: boolean
   };
 }
 
-export async function supabaseToken(claims: { sub: string; email: string; aal?: string }, secret = JWT_SECRET) {
-  return new SignJWT({ email: claims.email, aal: claims.aal ?? 'aal2', role: 'authenticated' })
+export async function supabaseToken(claims: { sub: string; email: string; aal?: string; provider?: string; name?: string }, secret = JWT_SECRET) {
+  return new SignJWT({
+    email: claims.email, aal: claims.aal ?? 'aal2', role: 'authenticated',
+    app_metadata: { provider: claims.provider ?? 'email', providers: [claims.provider ?? 'email'] },
+    user_metadata: claims.name ? { full_name: claims.name, avatar_url: 'https://lh3.googleusercontent.com/a/x' } : {},
+  })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(claims.sub)
     .setIssuer(`${SUPABASE_URL}/auth/v1`)

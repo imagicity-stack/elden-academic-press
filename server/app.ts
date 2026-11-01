@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import type { Deps } from './deps.js';
 import { clientIp, HttpError } from './lib/http.js';
 import { RazorpayError } from './lib/razorpay.js';
+import { account, type Customer } from './routes/account.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
 import { customerOrders } from './routes/orders.js';
@@ -12,7 +13,7 @@ import { sitemapXml } from './routes/sitemap.js';
 import { webhooks } from './routes/webhooks.js';
 import { healthCheck, type Health } from './services/health.js';
 
-export type AppEnv = { Variables: { deps: Deps; ip: string; admin: AdminSession } };
+export type AppEnv = { Variables: { deps: Deps; ip: string; admin: AdminSession; customer: Customer } };
 
 export function createApp(getDeps: () => Promise<Deps>) {
   const root = new Hono<AppEnv>();
@@ -59,6 +60,7 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/orders', customerOrders);
   app.route('/webhooks', webhooks);
   app.route('/admin', admin);
+  app.route('/account', account);
   app.route('/cron', cron);
   app.route('/dev', dev);
   return app;
