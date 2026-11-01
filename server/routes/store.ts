@@ -9,6 +9,7 @@ import { MAX_QTY } from '../lib/pricing.js';
 import { STATES, isStateCode } from '../lib/states.js';
 import { getSettings, loadCatalog } from '../services/catalog.js';
 import { confirmRazorpayPayment, createOrder, logEvent, orderToken, quote } from '../services/orders.js';
+import { visitOf } from '../services/tracking.js';
 
 const zState = z.string().refine(isStateCode, 'Choose a state');
 const zItems = z.array(z.object({
@@ -87,7 +88,7 @@ store.post('/checkout', async (c) => {
   const deps = c.get('deps');
   const input = await body(c, zCheckout);
   await rateLimit(deps.db, `checkout:${c.get('ip')}`, 20, 3600);
-  const r = await createOrder(deps, input, c.get('ip'));
+  const r = await createOrder(deps, { ...input, tracking: visitOf(c) }, c.get('ip'));
   return c.json({
     orderId: r.order.id,
     number: r.order.number,

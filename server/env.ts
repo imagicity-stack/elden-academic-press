@@ -34,6 +34,13 @@ const schema = z.object({
   SMTP_PASS: optional,
   RESEND_API_KEY: optional,
 
+  /** Meta Pixel / dataset ID (public; the browser uses it too). */
+  VITE_META_PIXEL_ID: optional,
+  /** Conversions API access token (secret). With the Pixel ID, the server reports events to Meta. */
+  META_CAPI_TOKEN: optional,
+  /** From Events Manager → Test events, while testing. Remove it to go live. */
+  META_TEST_EVENT_CODE: optional,
+
   /** The first person to sign in with this email becomes the store owner. */
   ADMIN_OWNER_EMAIL: optional,
   /** Vercel Cron sends this as a bearer token. */

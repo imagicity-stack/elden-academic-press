@@ -33,7 +33,9 @@ export interface AccountOrder {
 }
 export type NewsletterStatus = 'pending' | 'subscribed' | 'unsubscribed' | null;
 export interface AccountData {
-  customer: { email: string; name: string; avatar: string | null };
+  customer: { userId: string; email: string; name: string; avatar: string | null };
+  /** First visit after signing up (the server reports the registration to Meta with the same id). */
+  newAccount?: boolean;
   profile: { phone: string };
   newsletter: NewsletterStatus;
   orders: AccountOrder[];

@@ -14,6 +14,7 @@ import { BookCover } from '../components/BookCover';
 import { ElmasterMark } from '../components/Brand';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem, Tilt } from '../components/motion';
 import { NotFound } from './NotFound';
+import { track } from '../meta';
 
 const TABS = ['Overview', 'Contents', 'For teachers'] as const;
 
@@ -42,6 +43,10 @@ function BookView({ book }: { book: Product }) {
   const [added, setAdded] = useState(false);
 
   useEffect(() => { document.title = `${book.title} — Elden Academic Press`; }, [book.title]);
+  useEffect(() => {
+    const price = (book.formats.print ?? book.formats.digital)?.price;
+    track('ViewContent', { content_ids: [book.id], content_name: book.title, content_type: 'product', ...(price ? { value: price / 100, currency: 'INR' } : {}) });
+  }, [book.id]);
 
   const kind: Kind = format === 'digital' && withPrint && bundle ? 'bundle' : format;
   const chosen = book.formats[kind];
@@ -50,7 +55,9 @@ function BookView({ book }: { book: Product }) {
 
   const addToCart = (go: boolean) => {
     if (!available) return;
-    cart.add({ productId: book.id, kind, quantity: kind === 'print' ? qty : 1 });
+    const quantity = kind === 'print' ? qty : 1;
+    cart.add({ productId: book.id, kind, quantity });
+    track('AddToCart', { content_ids: [book.id], content_name: book.title, content_type: 'product', contents: [{ id: book.id, quantity }], value: total / 100, currency: 'INR' });
     if (go) navigate('/checkout');
     else { setAdded(true); cart.openDrawer(); }
   };

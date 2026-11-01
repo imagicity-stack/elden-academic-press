@@ -13,6 +13,7 @@ import { getSettings } from '../services/catalog.js';
 import { sendEnquiryNotice } from '../services/emails.js';
 import { processNewsletter } from '../services/newsletter.js';
 import { expireOrders } from '../services/orders.js';
+import { eventIdHeader, report, visitOf } from '../services/tracking.js';
 
 /* ---------------- Enquiry forms ---------------- */
 
@@ -41,6 +42,13 @@ forms.post('/enquiries', async (c) => {
     city: input.city ?? '', role: input.role ?? '', title: input.title ?? '', message: input.message ?? '', data: input.data ?? null, ip: c.get('ip'),
   }).returning();
   await sendEnquiryNotice(deps, e, await getSettings(deps.db));
+  // The browser fires the Pixel's Lead with the same id (sent in this header).
+  const visit = visitOf(c);
+  await report(deps, visit.consent, {
+    name: 'Lead', eventId: eventIdHeader(c) ?? `lead-${e.id}`, time: deps.now(), url: `${deps.env.SITE_URL}/contact`,
+    user: { ...visit, email: e.email, phone: e.phone, name: e.name, city: e.city },
+    custom: { content_name: e.kind, content_category: 'enquiry' },
+  });
   return c.json({ ok: true }, 201);
 });
 

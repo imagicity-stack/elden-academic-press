@@ -12,6 +12,7 @@ import { findCoupon, getSettings, loadPricingProducts, type Settings } from './c
 import { paymentMethodLabel } from '../lib/format.js';
 import { sendOrderConfirmation, sendStoreNewOrder } from './emails.js';
 import { subscribe } from './newsletter.js';
+import { reportPurchase, type Visit } from './tracking.js';
 
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
@@ -91,6 +92,8 @@ export interface CheckoutInput {
   billingState?: string;
   note?: string;
   newsletter?: boolean;
+  /** Set by the server from the request (not the body): ad consent and Meta's browser cookies. */
+  tracking?: Visit;
 }
 
 export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) {
@@ -137,6 +140,7 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
       stockReserved: true,
       customerNote: input.note ?? '',
       newsletterOptIn: input.newsletter ?? false,
+      ...(input.tracking?.consent ? { adConsent: true, fbp: input.tracking.fbp, fbc: input.tracking.fbc, userAgent: input.tracking.userAgent } : {}),
       ip,
     }).returning();
     await tx.insert(orderItems).values(q.lines.map((l) => ({
@@ -312,6 +316,7 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
       sendStoreNewOrder(deps, result.order, items, s),
     ]).catch((e) => console.error('[mail] order emails failed', (e as Error).message));
     if (deps.defer) deps.defer(emails); else await emails;
+    await reportPurchase(deps, result.order, items);
     // The buyer ticked "Email me about new books and offers" at checkout.
     const o = result.order;
     if (o.newsletterOptIn) {

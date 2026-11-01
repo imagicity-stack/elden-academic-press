@@ -92,18 +92,13 @@ async function sendConfirmation(deps: Deps, sub: Subscriber, s: Settings) {
   });
 }
 
-const NEW_ACCOUNT_MS = 24 * 3600_000;
-
 /**
- * A new customer account (first Google sign-in) joins the newsletter, as the sign-in page
+ * A new customer account (first Google sign-in; the caller checks it's really new) joins the newsletter, as the sign-in page
  * says, and gets a welcome email with an unsubscribe link. Anyone who unsubscribed
  * before stays unsubscribed. Never throws: the account page must always load.
  */
-export async function subscribeNewAccount(deps: Deps, who: { userId: string; email: string; name: string }, ip: string | null) {
+export async function subscribeNewAccount(deps: Deps, who: { email: string; name: string }, ip: string | null) {
   try {
-    // Only people who really just signed up: older accounts never saw the sign-in notice.
-    const user = deps.authUser ? await deps.authUser(who.userId) : null;
-    if (user && deps.now().getTime() - user.createdAt.getTime() > NEW_ACCOUNT_MS) return;
     const email = who.email.toLowerCase();
     const [existing] = await deps.db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, email));
     if (existing?.status === 'subscribed' || existing?.status === 'unsubscribed') return;

@@ -4,7 +4,8 @@
     <meta charset="utf-8" />
     <!-- Google Tag Manager (GTM-P38DZ6G5) and Google Analytics (G-0TR5TFH9KP). Not loaded on the admin or the local dev server.
          A private order link's token (/order/123?t=…) is moved out of the address bar first,
-         so it never reaches analytics. vercel.json's CSP lists this script's SHA-256 hash. -->
+         so it never reaches analytics. Consent Mode: until the visitor accepts cookies (the banner,
+         src/consent.ts), Google stores no cookies. vercel.json's CSP lists this script's SHA-256 hash. -->
     <script>
       (function (w, d, l) {
         var p = l.pathname, m = /[?&]t=([^&#]+)/.exec(l.search);
@@ -15,6 +16,10 @@
         if (/^\/admin(\/|$)/.test(p) || /^(localhost|127\.0\.0\.1)$/.test(l.hostname)) return;
         w.dataLayer = w.dataLayer || [];
         w.gtag = function () { w.dataLayer.push(arguments); };
+        var c = null;
+        try { c = localStorage.getItem('elden-consent'); } catch (e) {}
+        var g = c === 'all' ? 'granted' : 'denied';
+        w.gtag('consent', 'default', { ad_storage: g, ad_user_data: g, ad_personalization: g, analytics_storage: g });
         w.gtag('js', new Date());
         w.gtag('config', 'G-0TR5TFH9KP');
         ['gtm.js?id=GTM-P38DZ6G5', 'gtag/js?id=G-0TR5TFH9KP'].forEach(function (src) {

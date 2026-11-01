@@ -172,6 +172,20 @@ Email your subscribers about new books and offers from **Admin → Newsletter**,
 
 **Your lists:** Admin → Newsletter → **Subscribers** (with mobile numbers; export as CSV) and **Signed-up accounts** (everyone who signed in with Google, with the mobile number they added).
 
+## 9. Meta Pixel and Conversions API (Facebook and Instagram ads)
+
+The site reports visits, add-to-carts, checkouts, enquiries, sign-ups and purchases to Meta, from the browser (Pixel) **and** from the server (Conversions API). Each event has one id on both sides, so Meta counts it once, and purchases still count when the buyer used an ad blocker or closed the tab. Only for visitors who press **Accept all** on the cookie banner; the admin and staff (anyone signed in to `/admin` in that browser) are never tracked.
+
+1. **Events Manager** → your dataset (e.g. *EAP Website Data*) → copy the **ID** under its name.
+2. Dataset → **Settings** → **Conversions API** → **Generate access token** → copy it (secret: only into Vercel).
+3. **Business settings → Brand safety → Domains → Add** `eldenap.in` → verify with the DNS TXT record at your registrar.
+4. Run [`docs/supabase-updates/0004_meta_tracking.sql`](supabase-updates/0004_meta_tracking.sql) in Supabase → SQL Editor (before the new version goes live).
+5. Vercel → Environment Variables: `VITE_META_PIXEL_ID` = the ID, `META_CAPI_TOKEN` = the token, and while testing `META_TEST_EVENT_CODE` = the code from **Events Manager → Test events**. Redeploy.
+6. **Test:** open Test events, then on eldenap.in press *Accept all*, open a book, add it to the cart, and place a test order. Each event should appear from **Browser** and **Server**, marked *Deduplicated*, and Purchase should show the order value in ₹.
+7. **Go live:** delete `META_TEST_EVENT_CODE`, redeploy. `/api/health` reminds you while it's still set.
+
+Events: PageView, ViewContent (book page), AddToCart, InitiateCheckout (Pay pressed), Purchase (payment confirmed), Lead (sample, school-order and contact forms), CompleteRegistration (first Google sign-in), Subscribe (newsletter confirmed). With purchases, leads and sign-ups the server sends the customer's email, phone, name, city, state and PIN code, SHA-256 hashed as Meta requires, which raises Meta's match rate.
+
 ---
 
 ## Running costs

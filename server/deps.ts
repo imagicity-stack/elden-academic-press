@@ -8,6 +8,7 @@ import { loadEnv, type Env } from './env.js';
 import { waitUntil } from '@vercel/functions';
 import { supabaseAuthUser, supabaseAuthUsers, type AuthUser } from './lib/authUsers.js';
 import { consoleMailer, resendMailer, smtpMailer, type Mailer } from './lib/mail.js';
+import { metaHttp, type Meta } from './lib/meta.js';
 import { razorpayHttp, razorpaySimulator, type Razorpay } from './lib/razorpay.js';
 import { localStorage, supabaseStorage, type Storage } from './lib/storage.js';
 
@@ -25,6 +26,8 @@ export interface Deps {
   authUsers?(): Promise<AuthUser[]>;
   /** One Supabase Auth user (for the date they signed up). */
   authUser?(id: string): Promise<AuthUser | null>;
+  /** Meta Conversions API; unset when not configured. */
+  meta?: Meta | null;
 }
 
 // Kept on globalThis so the dev server's hot reloads reuse one database.
@@ -59,7 +62,8 @@ async function buildDeps(env: Env): Promise<Deps> {
   const sbAdmin = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? [env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY] as const : null;
   const authUsers = sbAdmin ? supabaseAuthUsers(...sbAdmin) : undefined;
   const authUser = sbAdmin ? supabaseAuthUser(...sbAdmin) : undefined;
-  return { env, db, razorpay, mailer, storage, authUsers, authUser, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task) : undefined };
+  const meta = env.VITE_META_PIXEL_ID && env.META_CAPI_TOKEN ? metaHttp(env.VITE_META_PIXEL_ID, env.META_CAPI_TOKEN, env.META_TEST_EVENT_CODE) : null;
+  return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task) : undefined };
 }
 
 /** First local run: fill the embedded database with the demo catalogue and sample files. */

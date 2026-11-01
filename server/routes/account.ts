@@ -12,6 +12,7 @@ import { body, HttpError, notFound, rateLimit, zPhone } from '../lib/http.js';
 import { getSettings } from '../services/catalog.js';
 import { subscribe, subscribeNewAccount, unsubscribe } from '../services/newsletter.js';
 import { orderToken } from '../services/orders.js';
+import { report, visitOf } from '../services/tracking.js';
 import { verifySupabaseToken } from './admin/auth.js';
 import { orderStatusLabel } from './orders.js';
 
@@ -53,6 +54,12 @@ const requireCustomer: MiddlewareHandler<AppEnv> = async (c, next) => {
 };
 
 export const account = new Hono<AppEnv>();
+
+/** A first visit that is a real sign-up (not an older account opening the page for the first time). */
+async function justSignedUp(deps: AppEnv['Variables']['deps'], userId: string) {
+  const user = deps.authUser ? await deps.authUser(userId).catch(() => null) : null;
+  return !user || deps.now().getTime() - user.createdAt.getTime() < 24 * 3600_000;
+}
 account.use('*', requireCustomer);
 
 const OWNED = ['paid', 'partially_refunded', 'refunded'] as const;
@@ -67,8 +74,17 @@ account.get('/', async (c) => {
   const [profile] = await db.insert(accounts).values({ userId: me.userId, email: me.email, name: me.name, avatarUrl: me.avatar })
     .onConflictDoUpdate({ target: accounts.userId, set: { email: me.email, name: me.name, avatarUrl: me.avatar, lastSeenAt: now() } })
     .returning();
-  // First sign-in: a new account also joins the newsletter (the sign-in page says so).
-  if (!known) await subscribeNewAccount(deps, me, c.get('ip'));
+  // First sign-in: a new account also joins the newsletter (the sign-in page says so),
+  // and counts as a registration for Meta (the page fires the Pixel's twin with this id).
+  const newAccount = !known && await justSignedUp(deps, me.userId);
+  if (newAccount) {
+    await subscribeNewAccount(deps, me, c.get('ip'));
+    const visit = visitOf(c);
+    await report(deps, visit.consent, {
+      name: 'CompleteRegistration', eventId: `signup-${me.userId}`, time: now(), url: `${env.SITE_URL}/account`,
+      user: { ...visit, email: me.email, name: me.name, externalId: me.email }, custom: { content_name: 'Google sign-in', status: 'complete' },
+    });
+  }
   const [sub] = await db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, me.email));
   const s = await getSettings(db);
   const mine = await db.select().from(orders).where(and(eq(orders.email, me.email), inArray(orders.paymentStatus, OWNED)))
@@ -96,6 +112,7 @@ account.get('/', async (c) => {
 
   return c.json({
     customer: me,
+    newAccount,
     profile: { phone: profile.phone },
     newsletter: sub?.status ?? null,
     orders: mine.map((o) => ({

@@ -7,6 +7,7 @@ import { RazorpayError } from './lib/razorpay.js';
 import { account, type Customer } from './routes/account.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
+import { meta } from './routes/meta.js';
 import { newsletter } from './routes/newsletter.js';
 import { customerOrders } from './routes/orders.js';
 import { store } from './routes/store.js';
@@ -70,6 +71,7 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/admin', admin);
   app.route('/account', account);
   app.route('/newsletter', newsletter);
+  app.route('/meta', meta);
   app.route('/cron', cron);
   app.route('/dev', dev);
   return app;
