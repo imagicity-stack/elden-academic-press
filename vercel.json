@@ -8,6 +8,13 @@
       "excludeFiles": "{node_modules/@electric-sql/**,.data/**,tests/**,design/**}"
     }
   },
+  "redirects": [
+    { "source": "/sitemap", "destination": "/sitemap.xml", "permanent": true },
+    { "source": "/sitemap/", "destination": "/sitemap.xml", "permanent": true },
+    { "source": "/sitemap.xml/", "destination": "/sitemap.xml", "permanent": true },
+    { "source": "/sitemap_index.xml", "destination": "/sitemap.xml", "permanent": true },
+    { "source": "/sitemaps.xml", "destination": "/sitemap.xml", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/sitemap.xml", "destination": "/api" },
