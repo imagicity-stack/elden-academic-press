@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
+import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { MIGRATIONS_DIR, type DB } from '../server/db/client.js';
 import * as schema from '../server/db/schema.js';
@@ -116,5 +117,15 @@ describe('public site address', () => {
     expect(siteUrl({ SITE_URL: 'https://www.eldenap.in' }, true)).toBe('https://www.eldenap.in');
     const env = loadEnv({ VERCEL: '1', ORDER_LINK_SECRET: 'x'.repeat(40) });
     expect(env.SITE_URL).toBe('https://eldenap.in');
+  });
+});
+
+describe('database behind the code', () => {
+  it('says the database needs an update instead of a bare 500', async () => {
+    const t = await setup();
+    await t.db.execute(sql`alter table settings drop column newsletter_daily_limit`);
+    const r = await t.call('GET', '/catalog');
+    expect(r.status).toBe(503);
+    expect(r.json.code).toBe('database_update_needed');
   });
 });
