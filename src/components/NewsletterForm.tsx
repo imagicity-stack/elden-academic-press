@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { newEventId, track } from '../meta';
 import { api } from '../store/api';
 import { useSubmit } from '../store/useSubmit';
 import { Arrow } from './motion';
@@ -7,28 +8,32 @@ import { Arrow } from './motion';
 type Source = 'footer' | 'newsletter-page' | 'home';
 
 /**
- * Newsletter sign-up: name, email and mobile. New addresses get a
- * confirmation email first (double opt-in), so nobody is subscribed by
- * someone else typing their address.
+ * Newsletter sign-up: name, email, mobile and a confirmation box (ticked by default).
+ * Sending the form is the consent, so there's no confirmation email; a welcome email with an unsubscribe link follows.
  */
 export function NewsletterForm({ source, dark = false }: { source: Source; dark?: boolean }) {
-  const [result, setResult] = useState<'pending' | 'subscribed' | null>(null);
+  const [result, setResult] = useState<'already' | 'subscribed' | null>(null);
+  // Ticked by default; unticking it stops the sign-up.
+  const [agree, setAgree] = useState(true);
   const { busy, error, sent, setSent, submit } = useSubmit(async (form) => {
     const f = Object.fromEntries(new FormData(form)) as Record<string, string>;
-    const r = await api<{ status: 'pending' | 'subscribed' }>('/newsletter/subscribe', {
-      body: { name: f.name || undefined, email: f.email, phone: f.phone, source, website: f.website || undefined },
+    const eventId = newEventId();
+    const r = await api<{ status: 'already' | 'subscribed' }>('/newsletter/subscribe', {
+      body: { name: f.name || undefined, email: f.email, phone: f.phone, source, consent: agree, website: f.website || undefined },
+      headers: { 'X-Meta-Event-Id': eventId },
     });
+    if (r.status === 'subscribed') track('Subscribe', { content_name: 'Newsletter' }, { eventId });
     setResult(r.status);
   });
 
   if (sent) {
     return (
       <div className={'nl-done' + (dark ? ' nl-done--dark' : '')} role="status">
-        <div className="nl-done__title">{result === 'subscribed' ? 'You’re already on the list.' : 'Check your inbox.'}</div>
-        <p>{result === 'subscribed'
+        <div className="nl-done__title">{result === 'already' ? 'You’re already on the list.' : 'You’re subscribed.'}</div>
+        <p>{result === 'already'
           ? 'We’ll keep sending news about new books and offers to that address.'
-          : 'We’ve sent you an email with a link. Click it to confirm, and you’re in.'}</p>
-        <button type="button" className="text-link" onClick={() => { setSent(false); setResult(null); }}>Use another address</button>
+          : 'Thanks! News about new books, sample papers and offers is on its way to your inbox.'}</p>
+        <button type="button" className="text-link" onClick={() => { setSent(false); setResult(null); setAgree(true); }}>Use another address</button>
       </div>
     );
   }
@@ -41,9 +46,14 @@ export function NewsletterForm({ source, dark = false }: { source: Source; dark?
         <label className="nl-field"><span>Mobile</span><input className="input" name="phone" type="tel" inputMode="tel" autoComplete="tel-national" placeholder="10-digit number" required maxLength={16} /></label>
         <button type="submit" className={'btn btn--lg ' + (dark ? 'btn--yellow' : 'btn--ink')} disabled={busy}>{busy ? 'Subscribing…' : <>Subscribe <Arrow /></>}</button>
       </div>
+      <label className="tick nl-form__agree">
+        <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} required />
+        <span className="tick__box" aria-hidden="true" />
+        <span>Yes, email me about new books, sample papers and offers. I can unsubscribe any time.</span>
+      </label>
       <input type="text" name="website" tabIndex={-1} autoComplete="off" className="hp" aria-hidden="true" />
       {error && <div className="form-error" role="alert">{error}</div>}
-      <p className="nl-form__note">New books, sample papers and offers, a few times a month. Unsubscribe from any email. See our <Link to="/privacy">privacy policy</Link>.</p>
+      <p className="nl-form__note">A few emails a month. See our <Link to="/privacy">privacy policy</Link>.</p>
     </form>
   );
 }

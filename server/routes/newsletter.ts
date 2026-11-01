@@ -3,11 +3,15 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { body, HttpError, rateLimit, zEmail, zPhone, zText } from '../lib/http.js';
-import { checkNewsletterToken, confirmSubscription, subscribe, unsubscribe } from '../services/newsletter.js';
-import { report, visitOf } from '../services/tracking.js';
+import { checkNewsletterToken, confirmSubscription, subscribe, unsubscribe, welcome } from '../services/newsletter.js';
+import { eventIdHeader, report, visitOf } from '../services/tracking.js';
 
 export const newsletter = new Hono<AppEnv>();
 
+/**
+ * The sign-up form: ticking "Yes, email me…" is the consent, so there's no confirmation
+ * email. A welcome email follows, with a one-click unsubscribe for anyone signed up by mistake.
+ */
 newsletter.post('/subscribe', async (c) => {
   const deps = c.get('deps');
   const input = await body(c, z.object({
@@ -15,12 +19,21 @@ newsletter.post('/subscribe', async (c) => {
     phone: zPhone,
     name: zText(120).optional(),
     source: z.enum(['footer', 'newsletter-page', 'home']).default('footer'),
+    consent: z.literal(true, { error: 'Tick the box to confirm you’d like our emails' }),
     /** Honeypot: real people never fill this in. */
     website: z.string().max(0).optional(),
   }));
   await rateLimit(deps.db, `subscribe:${c.get('ip')}`, 10, 3600);
-  const r = await subscribe(deps, { ...input, ip: c.get('ip'), confirmed: false });
-  return c.json({ status: r.status });
+  const r = await subscribe(deps, { email: input.email, phone: input.phone, name: input.name, source: input.source, ip: c.get('ip'), confirmed: true });
+  if (!r.already) {
+    await welcome(deps, r.row, 'newsletter');
+    const visit = visitOf(c);
+    await report(deps, visit.consent, {
+      name: 'Subscribe', eventId: eventIdHeader(c) ?? `subscribe-${r.row.id}`, time: deps.now(), url: `${deps.env.SITE_URL}/newsletter`,
+      user: { ...visit, email: r.row.email, phone: r.row.phone, name: r.row.name }, custom: { content_name: 'Newsletter' },
+    });
+  }
+  return c.json({ status: r.already ? 'already' : 'subscribed' });
 });
 
 newsletter.post('/confirm', async (c) => {

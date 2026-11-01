@@ -156,8 +156,8 @@ Email your subscribers about new books and offers from **Admin → Newsletter**,
 **One-time:** if your database was set up before this feature arrived, run [`docs/supabase-updates/0003_newsletter.sql`](supabase-updates/0003_newsletter.sql) in the SQL Editor (see *Updating later* in step 1).
 
 **How people join** (everyone is told they are joining and can leave in one click; Indian law and Gmail both expect that):
-- the form in the website footer and on `/newsletter` (name, email, mobile). New addresses get an email with a confirmation link first, so nobody can sign up someone else;
-- the *Email me about new books and offers* box at checkout (subscribed once the order is paid);
+- the form in the website footer and on `/newsletter` (name, email, mobile, and a "Yes, email me…" box, ticked by default). No confirmation email: a welcome email with an unsubscribe link follows;
+- the *Email me about new books and offers* box at checkout, ticked by default; buyers can untick it (subscribed once the order is paid);
 - creating an account (first sign-in with Google): the sign-in page says new accounts get the newsletter, and a welcome email follows with an unsubscribe link. Anyone who unsubscribed before is never re-added;
 - the newsletter switch on the customer's account page, where they can also add their mobile number;
 - staff can add someone who asked in person (tick the consent box), or import a CSV of people who opted in elsewhere.
@@ -184,7 +184,7 @@ The site reports visits, add-to-carts, checkouts, enquiries, sign-ups and purcha
 6. **Test:** in Test events, enter `www.eldenap.in/?meta-test` as the website URL and click **Test events**. The page that opens shows a *Meta test mode* panel listing anything still missing (Pixel ID, cookie choice, ad blocker), and it tracks you even though you're signed in to the admin (staff are otherwise never tracked). Press *Accept all*, open a book, add it to the cart, and place a test order. Each event should appear from **Browser** and **Server**, marked *Deduplicated*, and Purchase should show the order value in ₹.
 7. **Go live:** delete `META_TEST_EVENT_CODE`, redeploy. `/api/health` reminds you while it's still set.
 
-Events: PageView, ViewContent (book page), AddToCart, InitiateCheckout (Pay pressed), Purchase (payment confirmed), Lead (sample, school-order and contact forms), CompleteRegistration (first Google sign-in), Subscribe (newsletter confirmed). With purchases, leads and sign-ups the server sends the customer's email, phone, name, city, state and PIN code, SHA-256 hashed as Meta requires, which raises Meta's match rate.
+Events: PageView, ViewContent (book page), Search (store search), CustomizeProduct (switching between e-book, print and both), AddToCart, InitiateCheckout (checkout opened), AddPaymentInfo (Pay pressed), Purchase (payment confirmed), Lead (sample, school-order and teacher forms), SubmitApplication (author proposals and distributor applications), Contact (contact form, or tapping your email, phone or WhatsApp link), CompleteRegistration (first Google sign-in), Subscribe (newsletter sign-up). Cart, checkout and purchase events carry a `format` (`ebook`, `print`, `ebook+print`) for audiences such as "added an e-book, didn't buy". Meta's automatic button-click events are switched off, so only these appear. With purchases, leads and sign-ups the server sends the customer's email, phone, name, city, state and PIN code, SHA-256 hashed as Meta requires, which raises Meta's match rate.
 
 ---
 

@@ -55,6 +55,7 @@ export function reportPurchase(deps: Deps, o: Order, items: OrderItem[]) {
       content_ids: ids,
       contents: items.map((i) => ({ id: i.productId ?? i.id, quantity: i.quantity, item_price: i.unitPrice / 100 })),
       num_items: items.reduce((n, i) => n + i.quantity, 0),
+      format: [...new Set(items.map((i) => (i.variantKind === 'digital' ? 'ebook' : i.variantKind === 'bundle' ? 'ebook+print' : 'print')))].sort().join(','),
     },
   });
 }

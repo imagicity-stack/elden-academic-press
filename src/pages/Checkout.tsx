@@ -6,7 +6,16 @@ import { useCart, useQuote } from '../store/cart';
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { CouponField, issueText } from '../components/CartDrawer';
-import { track } from '../meta';
+import { formatList, track } from '../meta';
+
+/** The cart as Meta event data: value, books, quantities and formats. */
+const cartEvent = (q: { total: number; lines: { productId: string; kind: string; quantity: number }[] }) => ({
+  value: q.total / 100, currency: 'INR', content_type: 'product',
+  content_ids: [...new Set(q.lines.map((l) => l.productId))],
+  contents: q.lines.map((l) => ({ id: l.productId, quantity: l.quantity })),
+  num_items: q.lines.reduce((n, l) => n + l.quantity, 0),
+  format: formatList(q.lines.map((l) => l.kind)),
+});
 
 interface CheckoutResponse {
   orderId: string;
@@ -50,11 +59,18 @@ export function Checkout() {
   const [err, setErr] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sim, setSim] = useState<CheckoutResponse | null>(null);
-  // Opt-in is asked fresh each time (never pre-ticked or remembered).
-  const [newsletter, setNewsletter] = useState(false);
+  // The newsletter box starts ticked; the buyer can untick it.
+  const [newsletter, setNewsletter] = useState(true);
   const pending = useRef<{ key: string; res: CheckoutResponse } | null>(null);
 
   useEffect(() => { document.title = 'Checkout — Elden Academic Press'; }, []);
+  // Meta InitiateCheckout: once per visit to checkout, when the cart's prices are known.
+  const checkoutTracked = useRef(false);
+  useEffect(() => {
+    if (!quote || checkoutTracked.current) return;
+    checkoutTracked.current = true;
+    track('InitiateCheckout', cartEvent(quote));
+  }, [quote]);
   const set = (k: keyof typeof blank) => (e: { target: { value: string } }) => setD((x: typeof blank) => ({ ...x, [k]: e.target.value }));
   const needsAddress = Boolean(quote?.requiresShipping);
 
@@ -114,14 +130,7 @@ export function Checkout() {
     setNotice(null);
     setBusy(true);
     try { localStorage.setItem(DETAILS_KEY, JSON.stringify({ ...d, note: '' })); } catch { /* ignore */ }
-    if (quote) {
-      track('InitiateCheckout', {
-        value: quote.total / 100, currency: 'INR', content_type: 'product',
-        content_ids: [...new Set(quote.lines.map((l) => l.productId))],
-        contents: quote.lines.map((l) => ({ id: l.productId, quantity: l.quantity })),
-        num_items: quote.lines.reduce((n, l) => n + l.quantity, 0),
-      });
-    }
+    if (quote) track('AddPaymentInfo', cartEvent(quote));
     const key = JSON.stringify(payload);
     try {
       let res = pending.current?.key === key ? pending.current.res : null;

@@ -13,8 +13,18 @@ declare global {
 }
 
 /** Events the server also accepts from the browser (POST /api/meta/event). */
-type Relayed = 'PageView' | 'ViewContent' | 'AddToCart' | 'InitiateCheckout';
-type EventName = Relayed | 'Purchase' | 'Lead' | 'CompleteRegistration';
+const RELAYED = ['PageView', 'ViewContent', 'Search', 'CustomizeProduct', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Contact'] as const;
+type Relayed = (typeof RELAYED)[number];
+type EventName = Relayed | 'Purchase' | 'Lead' | 'SubmitApplication' | 'CompleteRegistration' | 'Subscribe';
+
+/** Which Meta event each website form counts as (the server uses the same mapping). */
+export const formEvent = (form: string): 'Contact' | 'SubmitApplication' | 'Lead' =>
+  (form === 'contact' ? 'Contact' : form === 'proposal' || form === 'dist' ? 'SubmitApplication' : 'Lead');
+
+/** How a format is named in events, so audiences can tell e-book and print buyers apart. */
+export const formatName = (kind: string) => (kind === 'digital' ? 'ebook' : kind === 'bundle' ? 'ebook+print' : 'print');
+/** All formats in a cart or order, e.g. "ebook,print". */
+export const formatList = (kinds: string[]) => [...new Set(kinds.map(formatName))].sort().join(',');
 
 const onAdmin = () => /^\/admin(\/|$)/.test(location.pathname);
 const active = () => Boolean(PIXEL) && getConsent() === 'all' && !isStaff() && !onAdmin();
@@ -59,6 +69,8 @@ function load() {
   s.async = true;
   s.src = 'https://connect.facebook.net/en_US/fbevents.js';
   document.head.appendChild(s);
+  // Only the events we send on purpose: no automatic "button click" guesses (SubscribedButtonClick).
+  n('set', 'autoConfig', false, PIXEL);
   n('init', PIXEL);
 }
 
@@ -80,8 +92,16 @@ export function track(name: EventName, custom: Record<string, unknown> = {}, opt
   load();
   const eventId = opts.eventId ?? newEventId();
   window.fbq!('track', name, custom, { eventID: eventId });
-  if (!opts.eventId && (name === 'PageView' || name === 'ViewContent' || name === 'AddToCart' || name === 'InitiateCheckout')) relay(name, eventId, custom);
+  if (!opts.eventId && (RELAYED as readonly string[]).includes(name)) relay(name as Relayed, eventId, custom);
 }
+
+// Contact: someone taps your email address, phone number or WhatsApp link.
+document.addEventListener('click', (e) => {
+  const a = (e.target as Element | null)?.closest?.('a[href^="mailto:"], a[href^="tel:"], a[href*="wa.me/"], a[href*="api.whatsapp.com"]') as HTMLAnchorElement | null;
+  if (!a) return;
+  const href = a.getAttribute('href') ?? '';
+  track('Contact', { content_name: href.startsWith('mailto:') ? 'email' : href.startsWith('tel:') ? 'phone' : 'whatsapp' });
+}, true);
 
 // Start-up, and changes of mind.
 syncConsent();

@@ -1,4 +1,4 @@
-// The newsletter: double opt-in subscriptions, campaigns, and a batch sender
+// The newsletter: subscriptions, campaigns, and a batch sender
 // that works within the mailbox's daily limit. Every email carries a personal
 // unsubscribe link and one-click unsubscribe headers (RFC 8058).
 import { and, asc, count, eq, gte, inArray, ne, sql } from 'drizzle-orm';
@@ -28,9 +28,9 @@ export const unsubscribePage = (deps: Deps, email: string) => `${site(deps)}/new
 const oneClickUrl = (deps: Deps, email: string) => `${site(deps)}/api/newsletter/unsubscribe?${qs(deps, email)}`;
 
 /**
- * Add someone to the list. `confirmed` (signed-in Google account, or a paid
- * order with the box ticked) subscribes at once; otherwise they get an email
- * with a confirmation link first.
+ * Add someone to the list. `confirmed` subscribes at once (the sign-up form's tick box,
+ * a new account, a paid order with the newsletter box ticked, staff with consent);
+ * otherwise they get an email with a confirmation link first (no longer used by the website).
  */
 export async function subscribe(deps: Deps, input: { email: string; name?: string; phone?: string; source: string; ip?: string | null; confirmed: boolean }) {
   const { db, now } = deps;
@@ -43,7 +43,7 @@ export async function subscribe(deps: Deps, input: { email: string; name?: strin
   };
   if (existing?.status === 'subscribed') {
     await db.update(subscribers).set(details).where(eq(subscribers.id, existing.id));
-    return { status: 'subscribed' as const, row: existing };
+    return { status: 'subscribed' as const, row: existing, already: true };
   }
   const status = input.confirmed ? 'subscribed' as const : 'pending' as const;
   const values = {
@@ -58,7 +58,7 @@ export async function subscribe(deps: Deps, input: { email: string; name?: strin
     ? await db.update(subscribers).set(values).where(eq(subscribers.id, existing.id)).returning()
     : await db.insert(subscribers).values({ email, name: input.name ?? '', phone: input.phone ?? '', ...values }).returning();
   if (status === 'pending') await sendConfirmation(deps, row, await getSettings(db));
-  return { status, row };
+  return { status, row, already: false };
 }
 
 export async function confirmSubscription(deps: Deps, email: string, token: string, ip: string | null) {
@@ -103,11 +103,45 @@ export async function subscribeNewAccount(deps: Deps, who: { email: string; name
     const [existing] = await deps.db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, email));
     if (existing?.status === 'subscribed' || existing?.status === 'unsubscribed') return;
     const { row } = await subscribe(deps, { email, name: who.name, source: 'signup', ip, confirmed: true });
-    const welcome = sendWelcome(deps, row, await getSettings(deps.db));
-    if (deps.defer) deps.defer(welcome); else await welcome;
+    await welcome(deps, row, 'account');
   } catch (e) {
     console.error('[newsletter] sign-up subscription failed', (e as Error).message);
   }
+}
+
+/** The welcome email, in the background: for a new account, or a sign-up from the website form. */
+export async function welcome(deps: Deps, sub: Subscriber, kind: 'account' | 'newsletter') {
+  const run = getSettings(deps.db).then((s) => (kind === 'account' ? sendWelcome(deps, sub, s) : sendNewsletterWelcome(deps, sub, s)));
+  if (deps.defer) deps.defer(run.catch((e) => console.error('[newsletter] welcome failed', (e as Error).message))); else await run;
+}
+
+const unsubscribeHeaders = (deps: Deps, s: Settings, email: string) => ({
+  'List-Unsubscribe': `<${oneClickUrl(deps, email)}>, <mailto:${s.supportEmail}?subject=unsubscribe>`,
+  'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+});
+
+async function sendNewsletterWelcome(deps: Deps, sub: Subscriber, s: Settings) {
+  const first = sub.name.split(' ')[0];
+  const unsubscribe = unsubscribePage(deps, sub.email);
+  await sendSafely(deps.mailer, {
+    to: sub.email,
+    subject: `You’re subscribed to ${s.storeName}`,
+    replyTo: s.supportEmail,
+    headers: unsubscribeHeaders(deps, s, sub.email),
+    html: layout(deps, s, {
+      preheader: 'New books, free sample papers and offers, a few times a month.',
+      kicker: 'Welcome',
+      title: 'You’re on the list.',
+      intro: first ? `Hi ${esc(first)}, thanks for subscribing.` : 'Thanks for subscribing.',
+      body: section(
+        p('You’ll hear about new books the week they’re published, free sample papers before exams, and the occasional offer, a few times a month.')
+        + p(`Didn’t sign up, or changed your mind? <a href="${unsubscribe}" style="color:${INK}">Unsubscribe</a> in one click.`)
+        + button(`${site(deps)}/catalogue`, 'Browse the store'),
+        '4px 32px 32px',
+      ),
+      unsubscribeUrl: unsubscribe,
+    }),
+  });
 }
 
 async function sendWelcome(deps: Deps, sub: Subscriber, s: Settings) {
@@ -117,10 +151,7 @@ async function sendWelcome(deps: Deps, sub: Subscriber, s: Settings) {
     to: sub.email,
     subject: `Welcome to ${s.storeName}`,
     replyTo: s.supportEmail,
-    headers: {
-      'List-Unsubscribe': `<${oneClickUrl(deps, sub.email)}>, <mailto:${s.supportEmail}?subject=unsubscribe>`,
-      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-    },
+    headers: unsubscribeHeaders(deps, s, sub.email),
     html: layout(deps, s, {
       preheader: 'Your account is ready, and you’ll hear about new books first.',
       kicker: 'Welcome',

@@ -14,7 +14,7 @@ import { BookCover } from '../components/BookCover';
 import { ElmasterMark } from '../components/Brand';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem, Tilt } from '../components/motion';
 import { NotFound } from './NotFound';
-import { track } from '../meta';
+import { formatName, track } from '../meta';
 
 const TABS = ['Overview', 'Contents', 'For teachers'] as const;
 
@@ -53,11 +53,21 @@ function BookView({ book }: { book: Product }) {
   const available = Boolean(chosen?.available);
   const total = chosen ? chosen.price * (kind === 'print' ? qty : 1) : 0;
 
+  // Meta CustomizeProduct: the visitor switches between e-book, print and both.
+  const chooseFormat = (f: 'print' | 'digital', both: boolean) => {
+    if (f === format && both === withPrint) return;
+    setFormat(f);
+    setWithPrint(both);
+    const k: Kind = f === 'digital' && both && bundle ? 'bundle' : f;
+    const price = book.formats[k]?.price;
+    track('CustomizeProduct', { content_ids: [book.id], content_name: book.title, content_type: 'product', format: formatName(k), ...(price ? { value: price / 100, currency: 'INR' } : {}) });
+  };
+
   const addToCart = (go: boolean) => {
     if (!available) return;
     const quantity = kind === 'print' ? qty : 1;
     cart.add({ productId: book.id, kind, quantity });
-    track('AddToCart', { content_ids: [book.id], content_name: book.title, content_type: 'product', contents: [{ id: book.id, quantity }], value: total / 100, currency: 'INR' });
+    track('AddToCart', { content_ids: [book.id], content_name: book.title, content_type: 'product', contents: [{ id: book.id, quantity }], value: total / 100, currency: 'INR', format: formatName(kind) });
     if (go) navigate('/checkout');
     else { setAdded(true); cart.openDrawer(); }
   };
@@ -111,7 +121,7 @@ function BookView({ book }: { book: Product }) {
               {print && digital && (
                 <div className="seg" role="radiogroup" aria-label="Format">
                   {([['print', 'Printed book', print], ['digital', 'E-book (PDF)', digital]] as const).map(([k, label, f]) => (
-                    <button key={k} type="button" role="radio" aria-checked={format === k} className={'seg__opt' + (format === k ? ' is-on' : '')} onClick={() => setFormat(k)}>
+                    <button key={k} type="button" role="radio" aria-checked={format === k} className={'seg__opt' + (format === k ? ' is-on' : '')} onClick={() => chooseFormat(k, withPrint)}>
                       {format === k && <motion.span layoutId="pd-format" className="seg__bg" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
                       <span>{label}</span><b>{inr(f.price)}</b>
                     </button>
@@ -121,7 +131,7 @@ function BookView({ book }: { book: Product }) {
 
               {format === 'digital' && bundle && print && (
                 <label className={'buy__bundle' + (bundle.available ? '' : ' is-disabled')}>
-                  <input type="checkbox" checked={withPrint} disabled={!bundle.available} onChange={(e) => setWithPrint(e.target.checked)} />
+                  <input type="checkbox" checked={withPrint} disabled={!bundle.available} onChange={(e) => chooseFormat(format, e.target.checked)} />
                   <span className="buy__check" aria-hidden="true" />
                   <span>
                     {bundle.available
