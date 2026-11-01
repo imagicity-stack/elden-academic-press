@@ -4,7 +4,7 @@
 import nodemailer from 'nodemailer';
 
 export interface Attachment { filename: string; content: Uint8Array; contentType?: string }
-export interface Mail { to: string | string[]; bcc?: string[]; subject: string; html: string; text?: string; replyTo?: string; attachments?: Attachment[] }
+export interface Mail { to: string | string[]; bcc?: string[]; subject: string; html: string; text?: string; replyTo?: string; attachments?: Attachment[]; headers?: Record<string, string> }
 export interface Mailer { send(mail: Mail): Promise<void> }
 
 /** A readable plain-text part from our own email HTML, for mail apps that prefer text. */
@@ -40,6 +40,7 @@ export function smtpMailer(opts: { host: string; port: number; user: string; pas
         html: mail.html,
         text: mail.text ?? htmlToText(mail.html),
         replyTo: mail.replyTo,
+        headers: mail.headers,
         attachments: mail.attachments?.map((a) => ({ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType })),
       });
     },
@@ -53,7 +54,7 @@ export function resendMailer(apiKey: string, from: string, fetchImpl: typeof fet
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from, to: mail.to, bcc: mail.bcc?.length ? mail.bcc : undefined, subject: mail.subject, html: mail.html, text: mail.text ?? htmlToText(mail.html), reply_to: mail.replyTo,
+          from, to: mail.to, bcc: mail.bcc?.length ? mail.bcc : undefined, subject: mail.subject, html: mail.html, text: mail.text ?? htmlToText(mail.html), reply_to: mail.replyTo, headers: mail.headers,
           attachments: mail.attachments?.map((a) => ({ filename: a.filename, content: Buffer.from(a.content).toString('base64'), content_type: a.contentType })),
         }),
         signal: AbortSignal.timeout(20_000),

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Logo } from '../components/Brand';
 import '../fonts';
@@ -7,6 +7,9 @@ import { config } from '../config';
 import { LEGAL, legalDocFor, type LegalDoc } from '../legal';
 import { inr } from '../store/api';
 import { useStoreConfig } from '../store/catalog';
+
+// Before launch, /newsletter (where email links land) shares this shell; loaded only there.
+const NewsletterStandalone = lazy(() => import('./Newsletter').then((m) => ({ default: m.NewsletterStandalone })));
 
 const { company: C, grievanceOfficer: G, policy: P } = config;
 
@@ -112,7 +115,8 @@ function Privacy() {
       <Section title="1. What we collect">
         <ul>
           <li><strong>When you order:</strong> your name, email, phone number, delivery address (for printed books), state (for GST), what you bought and paid, any discount code, and the payment reference from Razorpay. We do not receive your card or UPI details.</li>
-          <li><strong>If you sign in with Google:</strong> your name, email address and profile picture from your Google account. We use them to show your orders and e-books in your account; we never see your Google password.</li>
+          <li><strong>If you sign in with Google:</strong> your name, email address and profile picture from your Google account, and the mobile number if you add one to your account. We use them to show your orders and e-books in your account and to contact you about your orders; we never see your Google password.</li>
+          <li><strong>If you subscribe to our newsletter:</strong> your email address, mobile number and name (if given), where you signed up, and when and from which IP address you agreed, as a record of your consent.</li>
           <li><strong>When you send a form</strong> (sample request, school order, enquiry or proposal): your name, contact details, institution, city, role and message.</li>
           <li><strong>Technical data:</strong> your IP address and browser details in our server logs, used for security and to prevent abuse.</li>
           <li><strong>Website analytics:</strong> we use Google Tag Manager and Google Analytics to understand how the website is used: pages visited, links clicked, device and browser, approximate location and how you found us. They set cookies to recognise repeat visits. We do not send them your name, contact details, address, order details or payment information.</li>
@@ -125,10 +129,11 @@ function Privacy() {
           <li>to process, deliver and support your order, including emails about it (confirmation, dispatch, downloads, refunds);</li>
           <li>to issue invoices and keep the records that tax and accounting laws require;</li>
           <li>to reply to your enquiries;</li>
+          <li>if you subscribed, to email you about new books, sample papers and offers;</li>
           <li>to keep the website secure and prevent fraud;</li>
           <li>to measure and improve how the website works.</li>
         </ul>
-        <p>We use your data with your consent, given when you place an order or send a form, and where the law allows or requires it. We do not sell your data, and we do not send marketing emails unless you ask for them.</p>
+        <p>We use your data with your consent, given when you place an order or send a form, and where the law allows or requires it. We do not sell your data, and we do not send marketing emails unless you ask for them: by subscribing, ticking the box at checkout, or turning on the newsletter in your account. Every newsletter has an unsubscribe link, and you can also unsubscribe from your account page. Unsubscribing never affects emails about your orders.</p>
       </Section>
 
       <Section title="3. Who we share it with">
@@ -138,7 +143,7 @@ function Privacy() {
           <li><strong>courier and postal partners</strong>: your name, address and phone number, to deliver printed books;</li>
           <li><strong>Supabase</strong>: our database and file storage;</li>
           <li><strong>Vercel</strong>: website hosting;</li>
-          <li><strong>Resend</strong>: sending our emails;</li>
+          <li><strong>Google Workspace</strong> (and <strong>Resend</strong>, if we use it): sending our emails, including newsletters;</li>
           <li><strong>Google</strong>: account sign-in, and website analytics (Google Tag Manager and Google Analytics);</li>
           <li><strong>authorities</strong>, when the law requires it.</li>
         </ul>
@@ -146,7 +151,7 @@ function Privacy() {
       </Section>
 
       <Section title="4. How long we keep it">
-        <p>Order and invoice records are kept for as long as tax and company law require (generally up to eight years). Enquiries are kept for up to two years after our last contact. Server logs are kept for a short period. After that, data is deleted or anonymised.</p>
+        <p>Order and invoice records are kept for as long as tax and company law require (generally up to eight years). Enquiries are kept for up to two years after our last contact. If you unsubscribe from the newsletter, we keep your email address and the date marked as unsubscribed, so that you are never added again by mistake; ask us and we will delete it completely. Server logs are kept for a short period. After that, data is deleted or anonymised.</p>
       </Section>
 
       <Section title="5. Security">
@@ -286,7 +291,7 @@ export function CompanyLine({ className = '' }: { className?: string }) {
 /** Before launch: the policies on their own, so payment providers and visitors can read them. */
 export function LegalStandalone() {
   const { pathname } = useLocation();
-  const doc = legalDocFor(pathname) ?? 'terms';
+  const doc = legalDocFor(pathname);
   // A block body: in newer browsers scrollTo returns a Promise, which React would take for a clean-up function.
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   return (
@@ -294,7 +299,7 @@ export function LegalStandalone() {
       <header className="legal-shell__head">
         <div className="wrap"><a href="/" aria-label="Elden Academic Press home"><Logo /></a></div>
       </header>
-      <main><LegalPage doc={doc} /></main>
+      <main>{doc ? <LegalPage doc={doc} /> : <Suspense fallback={null}><NewsletterStandalone /></Suspense>}</main>
       <footer className="legal-shell__foot">
         <div className="wrap">
           <CompanyLine />

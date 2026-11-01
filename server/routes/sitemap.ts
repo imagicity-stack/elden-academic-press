@@ -5,7 +5,7 @@ import { asc, eq } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
 import { products } from '../db/schema.js';
 
-const PAGES = ['/', '/catalogue', '/study-hub', '/about', '/contact'];
+const PAGES = ['/', '/catalogue', '/study-hub', '/about', '/contact', '/newsletter'];
 const POLICIES = ['/terms', '/privacy', '/refunds', '/shipping'];
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

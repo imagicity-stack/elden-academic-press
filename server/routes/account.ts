@@ -2,12 +2,15 @@
 // belong to an account through the verified email address used at checkout.
 // Staff access is separate (admin_users allow-list), so a customer account
 // never reaches the admin.
+import { createHash } from 'node:crypto';
 import { Hono, type MiddlewareHandler } from 'hono';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import type { AppEnv } from '../app.js';
-import { orderItems, orders, productVariants } from '../db/schema.js';
-import { HttpError, notFound, rateLimit } from '../lib/http.js';
+import { accounts, orderItems, orders, productVariants, subscribers } from '../db/schema.js';
+import { body, HttpError, notFound, rateLimit, zPhone } from '../lib/http.js';
 import { getSettings } from '../services/catalog.js';
+import { subscribe, unsubscribe } from '../services/newsletter.js';
 import { orderToken } from '../services/orders.js';
 import { verifySupabaseToken } from './admin/auth.js';
 import { orderStatusLabel } from './orders.js';
@@ -22,7 +25,9 @@ const requireCustomer: MiddlewareHandler<AppEnv> = async (c, next) => {
   const token = /^Bearer (.+)$/.exec(c.req.header('authorization') ?? '')?.[1];
   if (!token) throw new HttpError(401, 'Please sign in.', 'unauthenticated');
   if (env.devAdmin && token.startsWith(DEV_PREFIX)) {
-    c.set('customer', { userId: 'dev', email: token.slice(DEV_PREFIX.length).toLowerCase(), name: 'Developer', avatar: null });
+    const email = token.slice(DEV_PREFIX.length).toLowerCase();
+    const h = createHash('sha256').update(email).digest('hex');
+    c.set('customer', { userId: `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`, email, name: 'Developer', avatar: null });
     return next();
   }
   if (!env.SUPABASE_URL) throw new HttpError(503, 'Sign-in is not configured.', 'auth_unconfigured');
@@ -56,6 +61,11 @@ const OWNED = ['paid', 'partially_refunded', 'refunded'] as const;
 account.get('/', async (c) => {
   const { db, env, now } = c.get('deps');
   const me = c.get('customer');
+  // Remember everyone who signs in (with the mobile number they add below).
+  const [profile] = await db.insert(accounts).values({ userId: me.userId, email: me.email, name: me.name, avatarUrl: me.avatar })
+    .onConflictDoUpdate({ target: accounts.userId, set: { email: me.email, name: me.name, avatarUrl: me.avatar, lastSeenAt: now() } })
+    .returning();
+  const [sub] = await db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, me.email));
   const s = await getSettings(db);
   const mine = await db.select().from(orders).where(and(eq(orders.email, me.email), inArray(orders.paymentStatus, OWNED)))
     .orderBy(desc(orders.createdAt)).limit(200);
@@ -82,6 +92,8 @@ account.get('/', async (c) => {
 
   return c.json({
     customer: me,
+    profile: { phone: profile.phone },
+    newsletter: sub?.status ?? null,
     orders: mine.map((o) => ({
       number: o.number, createdAt: o.createdAt, status: orderStatusLabel(o), total: o.total, invoice: o.invoiceNumber,
       requiresShipping: o.requiresShipping, token: token(o.id),
@@ -109,4 +121,29 @@ account.post('/library/:itemId/read', async (c) => {
     : [];
   if (!v?.filePath) throw new HttpError(404, 'This e-book file is not available. Please contact us.');
   return c.json({ url: await storage.signedDownloadUrl('ebooks', v.filePath, 300) });
+});
+
+/** The mobile number the customer adds to their account. */
+account.put('/profile', async (c) => {
+  const { db } = c.get('deps');
+  const me = c.get('customer');
+  const input = await body(c, z.object({ phone: zPhone }));
+  const [row] = await db.update(accounts).set({ phone: input.phone, updatedAt: sql`now()` }).where(eq(accounts.userId, me.userId)).returning();
+  if (!row) throw notFound('Account not found');
+  await db.update(subscribers).set({ phone: input.phone, updatedAt: sql`now()` }).where(eq(subscribers.email, me.email));
+  return c.json({ phone: row.phone });
+});
+
+/** Newsletter on / off. A signed-in Google account has a proven email, so no confirmation email is needed. */
+account.put('/newsletter', async (c) => {
+  const deps = c.get('deps');
+  const me = c.get('customer');
+  const input = await body(c, z.object({ subscribed: z.boolean() }));
+  if (input.subscribed) {
+    const [profile] = await deps.db.select().from(accounts).where(eq(accounts.userId, me.userId));
+    await subscribe(deps, { email: me.email, name: me.name, phone: profile?.phone, source: 'account', ip: c.get('ip'), confirmed: true });
+  } else {
+    await unsubscribe(deps, me.email);
+  }
+  return c.json({ newsletter: input.subscribed ? 'subscribed' : 'unsubscribed' });
 });

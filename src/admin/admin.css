@@ -301,3 +301,26 @@
   .ad-inbox__row .ad-inbox__sub, .ad-inbox__row > :last-child { grid-column: 1 / -1; }
 }
 .ad-nowrap { white-space: nowrap; }
+
+/* Newsletter */
+.ad-nl-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.ad-nl-editor fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.ad-nl-preview { position: sticky; top: 16px; }
+.ad-nl-frame { background: #F4F2ED; border: 1px solid var(--ad-line2); border-radius: 6px; overflow: hidden; display: flex; justify-content: center; }
+.ad-nl-frame iframe { display: block; width: 100%; height: min(72vh, 820px); border: 0; background: #F4F2ED; transition: width .2s; }
+.ad-nl-frame.is-mobile iframe { width: 390px; max-width: 100%; }
+.ad-nl-seg { display: inline-flex; border: 1px solid var(--ad-line); border-radius: 6px; overflow: hidden; }
+.ad-nl-seg button { border: 0; background: none; padding: 5px 10px; font: 600 12px Montserrat, sans-serif; color: var(--ad-muted); cursor: pointer; }
+.ad-nl-seg button.is-on { background: var(--ad-navy); color: #FFFFFF; }
+.ad-nl-books { list-style: none; margin: 0; padding: 0; border: 1px solid var(--ad-line); border-radius: 6px; }
+.ad-nl-books li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; font-weight: 500; color: var(--ad-ink); }
+.ad-nl-books li + li { border-top: 1px solid var(--ad-line2); }
+.ad-nl-books small, .ad-nl-results small { color: var(--ad-muted); font-weight: 400; }
+.ad-nl-search { position: relative; }
+.ad-nl-search input { width: 100%; }
+.ad-nl-results { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); list-style: none; margin: 0; padding: 4px; background: #FFFFFF; border: 1px solid var(--ad-line); border-radius: 6px; box-shadow: 0 10px 30px -12px rgba(0, 0, 0, .25); }
+.ad-nl-results button { width: 100%; border: 0; background: none; padding: 8px 10px; text-align: left; font: 500 13.5px Montserrat, sans-serif; color: var(--ad-ink); border-radius: 4px; cursor: pointer; }
+.ad-nl-results button:hover { background: var(--ad-line2); }
+.ad-nl-progress { height: 8px; background: var(--ad-line2); border-radius: 4px; overflow: hidden; }
+.ad-nl-progress span { display: block; height: 100%; background: var(--ad-green); transition: width .4s; }
+@media (max-width: 1100px) { .ad-nl-editor { grid-template-columns: 1fr; } .ad-nl-preview { position: static; } }

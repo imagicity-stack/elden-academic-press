@@ -77,6 +77,8 @@ const zCheckout = z.object({
   /** Older clients sent the state separately; the address's state is used now. */
   billingState: zState.optional(),
   note: zText(500).optional(),
+  /** "Email me about new books and offers": subscribed once the order is paid. */
+  newsletter: z.boolean().optional(),
   /** Honeypot: real people never fill this in. */
   website: z.string().max(0).optional(),
 });

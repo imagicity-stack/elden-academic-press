@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { catalogueHref } from '../catalogue';
-import { inr } from '../store/api';
+import { errorMessage, inr } from '../store/api';
 import { useCatalog } from '../store/catalog';
-import { accountApi, accountsDevMode, accountsEnabled, devSignIn, googleButtonAvailable, renderGoogleButton, signInWithGoogle, signOut, useAccount, type AccountData, type LibraryItem } from '../store/account';
+import { accountApi, accountsDevMode, accountsEnabled, devSignIn, googleButtonAvailable, renderGoogleButton, signInWithGoogle, signOut, useAccount, type AccountData, type LibraryItem, type NewsletterStatus } from '../store/account';
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem } from '../components/motion';
@@ -103,8 +103,12 @@ function SignIn({ onDone }: { onDone: () => void }) {
 
 /* ---------------- Signed in ---------------- */
 
+type Tab = 'library' | 'orders' | 'details';
+
 function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => void }) {
-  const [tab, setTab] = useState<'library' | 'orders'>(data.library.length ? 'library' : 'orders');
+  const [tab, setTab] = useState<Tab>(data.library.length ? 'library' : 'orders');
+  const [phone, setPhone] = useState(data.profile.phone);
+  const [news, setNews] = useState<NewsletterStatus>(data.newsletter);
   const first = data.customer.name.split(' ')[0] || data.customer.email.split('@')[0];
   return (
     <div className="acct">
@@ -126,8 +130,14 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
       </section>
 
       <div className="wrap">
+        {!phone && tab !== 'details' && (
+          <div className="acct-nudge">
+            <div><b>Add your mobile number.</b> We use it for delivery and to reach you about your orders.</div>
+            <PhoneForm phone={phone} onSaved={setPhone} compact />
+          </div>
+        )}
         <div className="tabs" role="tablist">
-          {([['library', `Library · ${data.library.length}`], ['orders', `Orders · ${data.orders.length}`]] as const).map(([k, label]) => (
+          {([['library', `Library · ${data.library.length}`], ['orders', `Orders · ${data.orders.length}`], ['details', 'Details & emails']] as const).map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={tab === k} className={'tab' + (tab === k ? ' is-on' : '')} onClick={() => setTab(k)}>
               {label}
               {tab === k && <motion.span layoutId="acct-tab" className="tab__line" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
@@ -136,7 +146,9 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
         </div>
         <AnimatePresence mode="wait">
           <motion.div key={tab} className="acct__panel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: EASE }}>
-            {tab === 'library' ? <Library items={data.library} /> : <Orders data={data} />}
+            {tab === 'library' ? <Library items={data.library} />
+              : tab === 'orders' ? <Orders data={data} />
+              : <Details data={data} phone={phone} onPhone={setPhone} news={news} onNews={setNews} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -222,5 +234,82 @@ function Orders({ data }: { data: AccountData }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/* ---------------- Details & emails ---------------- */
+
+function PhoneForm({ phone, onSaved, compact = false }: { phone: string; onSaved: (p: string) => void; compact?: boolean }) {
+  const [value, setValue] = useState(phone);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setErr(null); setSaved(false);
+    try {
+      const r = await accountApi<{ phone: string }>('/profile', { method: 'PUT', body: { phone: value } });
+      setValue(r.phone);
+      setSaved(true);
+      onSaved(r.phone);
+    } catch (e2) {
+      setErr(errorMessage(e2));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className={'acct-phone' + (compact ? ' acct-phone--compact' : '')} onSubmit={save}>
+      <label className="field">
+        {!compact && 'Mobile number'}
+        <input className="input input--white" type="tel" inputMode="tel" autoComplete="tel-national" placeholder="10-digit mobile number" aria-label="Mobile number"
+          value={value} onChange={(e) => { setValue(e.target.value); setSaved(false); }} required maxLength={16} />
+      </label>
+      <button type="submit" className="btn btn--ink btn--md" disabled={busy || !value.trim()}>{busy ? 'Saving…' : 'Save'}</button>
+      {err && <div className="field__error" role="alert">{err}</div>}
+      {saved && !compact && <div className="acct-saved" role="status">Saved.</div>}
+    </form>
+  );
+}
+
+function Details({ data, phone, onPhone, news, onNews }: { data: AccountData; phone: string; onPhone: (p: string) => void; news: NewsletterStatus; onNews: (s: NewsletterStatus) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const on = news === 'subscribed';
+  const toggle = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await accountApi<{ newsletter: NewsletterStatus }>('/newsletter', { method: 'PUT', body: { subscribed: !on } });
+      onNews(r.newsletter);
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="acct-details">
+      <section className="acct-card">
+        <h2 className="acct-card__title">Your details</h2>
+        <dl className="acct-dl">
+          <div><dt>Name</dt><dd>{data.customer.name || '—'}</dd></div>
+          <div><dt>Email</dt><dd>{data.customer.email}</dd></div>
+        </dl>
+        <PhoneForm phone={phone} onSaved={onPhone} />
+        <p className="acct-card__note">Your name and email come from your Google account.</p>
+      </section>
+      <section className="acct-card">
+        <h2 className="acct-card__title">Newsletter</h2>
+        <button type="button" role="switch" aria-checked={on} className={'acct-switch' + (on ? ' is-on' : '')} disabled={busy} onClick={toggle}>
+          <span className="acct-switch__track" aria-hidden="true"><motion.span layout className="acct-switch__knob" transition={{ type: 'spring', stiffness: 500, damping: 34 }} /></span>
+          <span className="acct-switch__text">
+            <b>Email me about new books and offers</b>
+            <span>{on ? `On: news goes to ${data.customer.email}.` : news === 'pending' ? 'Waiting for you to confirm from your inbox. Switching it on here confirms it.' : 'Off. A few emails a month when it’s on; leave any time.'}</span>
+          </span>
+        </button>
+        {err && <div className="form-error" role="alert">{err}</div>}
+        <p className="acct-card__note">Receipts and order updates are always sent, whatever you choose here.</p>
+      </section>
+    </div>
   );
 }

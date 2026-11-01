@@ -60,7 +60,9 @@ export async function mfaEnroll(): Promise<{ factorId: string; qr: string; secre
   // Remove half-finished enrolments first so a fresh QR code can be shown.
   const { data: list } = await supabase!.auth.mfa.listFactors();
   for (const f of list?.all ?? []) if (f.status === 'unverified') await supabase!.auth.mfa.unenroll({ factorId: f.id });
-  const { data, error } = await supabase!.auth.mfa.enroll({ factorType: 'totp', friendlyName: `Elden admin ${new Date().toISOString().slice(0, 10)}` });
+  // The issuer is the name the authenticator app shows. Without it Supabase uses its Site URL,
+  // which is a localhost address until that's changed in Supabase.
+  const { data, error } = await supabase!.auth.mfa.enroll({ factorType: 'totp', issuer: 'Elden Academic Press', friendlyName: `Elden admin ${new Date().toISOString().slice(0, 10)}` });
   if (error) throw new Error(error.message);
   return { factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret };
 }

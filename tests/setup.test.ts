@@ -6,14 +6,29 @@ import { migrate } from 'drizzle-orm/pglite/migrator';
 import { describe, expect, it } from 'vitest';
 import { MIGRATIONS_DIR, type DB } from '../server/db/client.js';
 import * as schema from '../server/db/schema.js';
-import { buildSetupSql } from '../server/db/setup-sql.js';
+import { buildSetupSql, buildUpdateSqls, FIRST_UPDATE } from '../server/db/setup-sql.js';
 import { verifySupabaseToken } from '../server/routes/admin/auth.js';
 import { healthCheck } from '../server/services/health.js';
+import { loadEnv, siteUrl } from '../server/env.js';
 import { JWT_SECRET, SUPABASE_URL, setup, supabaseToken } from './helpers.js';
 
 describe('Supabase setup script', () => {
   it('is up to date with the migrations (run `npm run db:setup-sql`)', () => {
     expect(readFileSync(new URL('../docs/supabase-setup.sql', import.meta.url), 'utf8')).toBe(buildSetupSql());
+  });
+
+  it('has an up-to-date update file for each later migration, which brings an older database level', async () => {
+    const updates = buildUpdateSqls();
+    for (const u of updates) expect(readFileSync(new URL(`../docs/supabase-updates/${u.tag}.sql`, import.meta.url), 'utf8')).toBe(u.sql);
+    // A database set up with only the first migrations, then updated with the files…
+    const pg = new PGlite();
+    const full = buildSetupSql();
+    const firstPart = full.slice(0, full.indexOf(`-- ===== ${readFileSync(new URL('../server/db/migrations/meta/_journal.json', import.meta.url), 'utf8').match(/"tag": "([^"]+)"/g)![FIRST_UPDATE].split('"')[3]} =====`));
+    await pg.exec(firstPart + '\nCREATE SCHEMA IF NOT EXISTS drizzle; CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint);');
+    for (const u of updates) await pg.exec(u.sql);
+    // …matches what the migrator expects (it re-runs nothing).
+    await migrate(drizzle(pg, { schema }), { migrationsFolder: MIGRATIONS_DIR });
+    expect((await pg.query(`select to_regclass('public.subscribers') as t`)).rows).toEqual([{ t: 'subscribers' }]);
   });
 
   it('sets up a fresh database that later migrations continue from', async () => {
@@ -23,7 +38,7 @@ describe('Supabase setup script', () => {
     await migrate(db, { migrationsFolder: MIGRATIONS_DIR }); // would fail on "already exists" if it re-ran anything
     expect(await db.select().from(schema.categories)).toHaveLength(6);
     expect(await db.select().from(schema.settings)).toHaveLength(1);
-    expect((await pg.query('select count(*)::int as n from drizzle.__drizzle_migrations')).rows).toEqual([{ n: 3 }]);
+    expect((await pg.query('select count(*)::int as n from drizzle.__drizzle_migrations')).rows).toEqual([{ n: buildUpdateSqls().length + FIRST_UPDATE }]);
   });
 });
 
@@ -88,5 +103,18 @@ describe('index.html', () => {
     const csp = readFileSync(new URL('../vercel.json', import.meta.url), 'utf8');
     expect(scripts).toHaveLength(1);
     expect(csp).toContain(`'sha256-${createHash('sha256').update(scripts[0]).digest('base64')}'`);
+  });
+});
+
+describe('public site address', () => {
+  it('never puts a localhost address into links on Vercel', () => {
+    expect(siteUrl({}, false)).toBe('http://localhost:5173');
+    expect(siteUrl({ SITE_URL: 'http://localhost:3000/' }, false)).toBe('http://localhost:3000');
+    expect(siteUrl({}, true)).toBe('https://eldenap.in');
+    expect(siteUrl({ SITE_URL: 'http://localhost:5173' }, true)).toBe('https://eldenap.in');
+    expect(siteUrl({ SITE_URL: 'eldenap.in/' }, true)).toBe('https://eldenap.in');
+    expect(siteUrl({ SITE_URL: 'https://www.eldenap.in' }, true)).toBe('https://www.eldenap.in');
+    const env = loadEnv({ VERCEL: '1', ORDER_LINK_SECRET: 'x'.repeat(40) });
+    expect(env.SITE_URL).toBe('https://eldenap.in');
   });
 });

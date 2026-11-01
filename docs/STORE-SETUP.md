@@ -17,6 +17,8 @@ Everything here is done in the browser at [supabase.com/dashboard](https://supab
 
 **b. Create the tables.** Left sidebar → **SQL Editor** → **New query**. Paste the whole of [`docs/supabase-setup.sql`](supabase-setup.sql) and click **Run**. If Supabase shows a warning, choose to run it anyway (the script switches on row-level security itself). You should see *Success. No rows returned*. This creates the store's tables, locks them against Supabase's public keys, creates the `covers`, `resources` and `ebooks` storage buckets, and adds six starting categories. Run it only once.
 
+**Updating later.** When a new version of the store needs database changes, they come as a file in [`docs/supabase-updates/`](supabase-updates/). Run each new file once, the same way, **before** the new version goes live (the changes only add things, so the running site keeps working). `/api/health` names any update that's still missing. A database created from `supabase-setup.sql` already includes every update up to that point.
+
 **c. Sign-in settings** (left sidebar → **Authentication**):
 1. **Sign In / Providers** → turn **off** *Allow new users to sign up* → Save. Staff are added only by invitation from the admin.
 2. **URL Configuration** → *Site URL* `https://eldenap.in` → Save; under *Redirect URLs* → **Add URL** → `https://eldenap.in/admin`.
@@ -146,6 +148,28 @@ Customers can sign in at **eldenap.in/account** with Google to read their e-book
 1. Razorpay: switch to **Live mode**, generate live API keys and add the **same webhook** again in Live mode (webhooks are separate per mode).
 2. Vercel: replace `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` with the live values; set `VITE_SITE_LIVE=true`; redeploy.
 3. Place one small real order and refund it.
+
+## 8. Newsletter
+
+Email your subscribers about new books and offers from **Admin → Newsletter**, sent through the same Google Workspace account as order emails. No outside service.
+
+**One-time:** if your database was set up before this feature arrived, run [`docs/supabase-updates/0003_newsletter.sql`](supabase-updates/0003_newsletter.sql) in the SQL Editor (see *Updating later* in step 1).
+
+**How people join** (only people who asked get campaigns; Indian law and Gmail both require that):
+- the form in the website footer and on `/newsletter` (name, email, mobile). New addresses get an email with a confirmation link first, so nobody can sign up someone else;
+- the *Email me about new books and offers* box at checkout (subscribed once the order is paid);
+- the newsletter switch on the customer's account page, where they can also add their mobile number;
+- staff can add someone who asked in person (tick the consent box), or import a CSV of people who opted in elsewhere.
+
+**Sending a campaign:** **New campaign** (or **Announce by email** on a published product) → write the subject, heading and message, add books (each shows its cover, price and a buy link) and an optional button → watch the live preview → **Send a test** to yourself → **Schedule** or **Send now**.
+
+**Limits:** Google Workspace allows about 2,000 emails a day per account, order emails included. The newsletter stops at **1,500 a day** by default (Settings → Store → Newsletter), and a bigger list simply continues the next day. Emails go out in small batches every 5 minutes (faster while the campaign page is open in the admin).
+
+**Unsubscribing:** every email has an unsubscribe link, and Gmail and Apple Mail show their own *Unsubscribe* button. Unsubscribed people are never re-added by staff or by an import; only they can subscribe again.
+
+**Avoid the spam folder:** besides SPF and DKIM (step 3), add a DMARC record at your domain registrar: TXT, name `_dmarc`, value `v=DMARC1; p=none; rua=mailto:hello@eldenap.in`. Gmail and Yahoo require all three for bulk senders. Never import bought lists or customers who didn't opt in: spam complaints get *all* mail from eldenap.in blocked, receipts included.
+
+**Your lists:** Admin → Newsletter → **Subscribers** (with mobile numbers; export as CSV) and **Signed-up accounts** (everyone who signed in with Google, with the mobile number they added).
 
 ---
 

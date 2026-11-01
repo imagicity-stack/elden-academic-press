@@ -49,6 +49,8 @@ export function Checkout() {
   const [err, setErr] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [sim, setSim] = useState<CheckoutResponse | null>(null);
+  // Opt-in is asked fresh each time (never pre-ticked or remembered).
+  const [newsletter, setNewsletter] = useState(false);
   const pending = useRef<{ key: string; res: CheckoutResponse } | null>(null);
 
   useEffect(() => { document.title = 'Checkout — Elden Academic Press'; }, []);
@@ -61,7 +63,8 @@ export function Checkout() {
     contact: { name: d.name, email: d.email, phone: d.phone },
     shipping: { name: d.name, line1: d.line1, line2: d.line2, city: d.city, state: d.state, pincode: d.pincode },
     note: d.note || undefined,
-  }), [cart.lines, cart.coupon, d]);
+    newsletter: newsletter || undefined,
+  }), [cart.lines, cart.coupon, d, newsletter]);
 
   async function finish(result: PaymentResult) {
     setBusy(true);
@@ -158,6 +161,11 @@ export function Checkout() {
               <Input label="Mobile number" value={d.phone} onChange={set('phone')} type="tel" autoComplete="tel-national" inputMode="numeric" placeholder="10-digit mobile" required />
             </div>
             <Input label="Email" value={d.email} onChange={set('email')} type="email" autoComplete="email" required hint="Your order confirmation and e-book links are sent here." />
+            <label className="tick">
+              <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} />
+              <span className="tick__box" aria-hidden="true" />
+              <span>Email me about new books and offers<small>A few emails a month. Unsubscribe any time.</small></span>
+            </label>
           </fieldset>
 
           <fieldset className="co-section">
