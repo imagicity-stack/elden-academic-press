@@ -2,6 +2,8 @@ import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { MetaStatus } from './components/MetaStatus';
+import { metaTestMode } from './consent';
 import { WithIntro } from './components/Intro';
 import { legalDocFor } from './legal';
 import { ComingSoon } from './pages/ComingSoon';
@@ -49,6 +51,7 @@ const prelaunchPolicy = !live && !staffPreview
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    {!isAdmin && metaTestMode() && <MetaStatus live={live} staffPreview={staffPreview} />}
     <ErrorBoundary>
       {isAdmin ? (
         <BrowserRouter>
