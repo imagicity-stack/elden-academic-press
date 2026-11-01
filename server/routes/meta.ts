@@ -23,6 +23,15 @@ const zEvent = z.object({
     search_string: zText(100).optional(),
     format: z.string().regex(/^[a-z+,]{1,40}$/).optional(),
   }).optional(),
+  /** Details the visitor gave us earlier (checkout, sign-in, a form): hashed before they go to Meta. */
+  user: z.object({
+    email: z.string().trim().max(200).optional(),
+    phone: z.string().trim().max(20).optional(),
+    name: z.string().trim().max(120).optional(),
+    city: z.string().trim().max(100).optional(),
+    state: z.string().trim().max(60).optional(),
+    pincode: z.string().trim().max(10).optional(),
+  }).optional(),
 });
 
 const host = (u: string) => new URL(u).hostname.replace(/^www\./, '');
@@ -36,6 +45,8 @@ meta.post('/event', async (c) => {
   const input = await body(c, zEvent);
   if (host(input.url) !== host(deps.env.SITE_URL)) throw new HttpError(400, 'Unknown page', 'invalid');
   await rateLimit(deps.db, `meta:${c.get('ip')}`, 600, 3600);
-  await report(deps, true, { name: input.name, eventId: input.eventId, time: deps.now(), url: input.url, user: visit, custom: input.custom });
+  const known = input.user ?? {};
+  const email = known.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(known.email) ? known.email : undefined;
+  await report(deps, true, { name: input.name, eventId: input.eventId, time: deps.now(), url: input.url, user: { ...known, email, ...visit }, custom: input.custom });
   return c.body(null, 204);
 });

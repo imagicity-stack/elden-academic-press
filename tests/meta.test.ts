@@ -95,6 +95,17 @@ describe('browser events through the server', () => {
     expect((await t.call('POST', '/meta/event', { headers: accepted, body: { ...pay, custom: { format: '<script>' } } })).status).toBe(400);
   });
 
+  it('matches page views to details the visitor gave earlier, hashed', async () => {
+    const body = { name: 'PageView', eventId: 'a9d2c3e4-0000-4000-8000-000000000000', url: 'https://eldenap.in/', user: { email: 'Asha@Example.com', phone: '98765 43210', name: 'Asha Kumari', city: 'Hazaribagh', state: '20', pincode: '825301' } };
+    expect((await t.call('POST', '/meta/event', { headers: accepted, body })).status).toBe(204);
+    const u = toPayload(meta.sent[0]).user_data;
+    expect(u).toMatchObject({ em: [sha('asha@example.com')], ph: [sha('919876543210')], fn: [sha('asha')], st: [sha('jharkhand')], external_id: [sha('asha@example.com')], fbp: FBP, fbc: FBC });
+    expect(JSON.stringify(u)).not.toContain('Asha');
+    // A bad email is dropped, not forwarded.
+    await t.call('POST', '/meta/event', { headers: accepted, body: { ...body, eventId: 'b9d2c3e4-0000-4000-8000-000000000000', user: { email: 'not-an-email' } } });
+    expect(toPayload(meta.sent[1]).user_data).not.toHaveProperty('em');
+  });
+
   it('refuses events it must not relay and pages from other sites', async () => {
     expect((await t.call('POST', '/meta/event', { headers: accepted, body: { ...event, name: 'Purchase' } })).status).toBe(400);
     expect((await t.call('POST', '/meta/event', { headers: accepted, body: { ...event, url: 'https://evil.example/x' } })).status).toBe(400);

@@ -43,19 +43,62 @@ try {
 const cookieDomain = () => (/(^|\.)eldenap\.in$/.test(location.hostname) ? '; Domain=eldenap.in' : '');
 const readCookie = (name: string) => document.cookie.split('; ').find((c) => c.startsWith(name + '='))?.slice(name.length + 1);
 
-function setClickCookie() {
+const setCookie = (name: string, value: string) => {
+  document.cookie = `${name}=${value}; Path=/; Max-Age=7776000; SameSite=Lax${cookieDomain()}${location.protocol === 'https:' ? '; Secure' : ''}`;
+};
+
+/**
+ * Meta's two browser cookies, set before the first event, so the server's copy of the
+ * very first page view already carries them (Meta's script would set them a moment later;
+ * it keeps cookies that already exist). _fbc only exists after an ad click.
+ */
+function setMetaCookies() {
+  if (!readCookie('_fbp')) setCookie('_fbp', `fb.1.${Date.now()}.${Math.floor(Math.random() * 9e9) + 1e9}`);
   if (readCookie('_fbc')) return;
   try {
     const saved = JSON.parse(sessionStorage.getItem(FBCLID) ?? 'null') as { id: string; at: number } | null;
-    if (saved) document.cookie = `_fbc=fb.1.${saved.at}.${saved.id}; Path=/; Max-Age=7776000; SameSite=Lax${cookieDomain()}${location.protocol === 'https:' ? '; Secure' : ''}`;
+    if (saved) setCookie('_fbc', `fb.1.${saved.at}.${saved.id}`);
   } catch { /* ignore */ }
+}
+
+/**
+ * Details the visitor gave us (checkout, sign-in, newsletter, a form), kept in this browser
+ * only after they accepted cookies, so their later events match them too (Meta hashes
+ * them in the browser; our server hashes its copy).
+ */
+export interface MatchUser { email?: string; phone?: string; name?: string; city?: string; state?: string; pincode?: string }
+const USER = 'elden-meta-user';
+function knownUser(): MatchUser | null {
+  try { return JSON.parse(localStorage.getItem(USER) ?? 'null') as MatchUser | null; } catch { return null; }
+}
+export function rememberUser(u: MatchUser) {
+  if (!active()) return;
+  const clean = Object.fromEntries(Object.entries(u).filter(([, v]) => typeof v === 'string' && v.trim()).map(([k, v]) => [k, String(v).trim().slice(0, 200)]));
+  try { localStorage.setItem(USER, JSON.stringify({ ...knownUser(), ...clean })); } catch { /* ignore */ }
+}
+
+/** The Pixel's "advanced matching" fields, normalised the way Meta asks (it hashes them). */
+function pixelMatch(u: MatchUser | null): Record<string, string> {
+  if (!u) return {};
+  const out: Record<string, string> = {};
+  const email = u.email?.toLowerCase();
+  if (email) { out.em = email; out.external_id = email; }
+  const d = u.phone?.replace(/\D/g, '') ?? '';
+  if (d) out.ph = /^[6-9]\d{9}$/.test(d) ? '91' + d : /^0[6-9]\d{9}$/.test(d) ? '91' + d.slice(1) : d;
+  const parts = (u.name ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (parts[0]) out.fn = parts[0];
+  if (parts.length > 1) out.ln = parts[parts.length - 1];
+  if (u.city) out.ct = u.city.toLowerCase().replace(/[^\p{L}]/gu, '');
+  if (u.pincode) out.zp = u.pincode.replace(/\s/g, '');
+  if (Object.keys(out).length) out.country = 'in';
+  return out;
 }
 
 let loaded = false;
 function load() {
   if (loaded || !PIXEL) return;
   loaded = true;
-  setClickCookie();
+  setMetaCookies();
   // Meta's standard loader, written out so no inline script is needed.
   const n = function (...args: unknown[]) {
     if (n.callMethod) n.callMethod(...args); else n.queue.push(args);
@@ -71,7 +114,7 @@ function load() {
   document.head.appendChild(s);
   // Only the events we send on purpose: no automatic "button click" guesses (SubscribedButtonClick).
   n('set', 'autoConfig', false, PIXEL);
-  n('init', PIXEL);
+  n('init', PIXEL, pixelMatch(knownUser()));
 }
 
 function relay(name: Relayed, eventId: string, custom: Record<string, unknown>) {
@@ -79,7 +122,7 @@ function relay(name: Relayed, eventId: string, custom: Record<string, unknown>) 
     method: 'POST',
     keepalive: true,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, eventId, url: location.origin + location.pathname, custom }),
+    body: JSON.stringify({ name, eventId, url: location.origin + location.pathname, custom, user: knownUser() ?? undefined }),
   }).catch(() => {});
 }
 
@@ -113,6 +156,7 @@ window.addEventListener('elden:consent', (e) => {
     track('PageView'); // the page they're on
   } else if (loaded) {
     window.fbq?.('consent', 'revoke');
+    try { localStorage.removeItem(USER); } catch { /* ignore */ }
     for (const name of ['_fbp', '_fbc']) {
       document.cookie = `${name}=; Path=/; Max-Age=0`;
       document.cookie = `${name}=; Path=/; Max-Age=0${cookieDomain()}`;

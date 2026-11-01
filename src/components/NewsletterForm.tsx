@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { newEventId, track } from '../meta';
+import { newEventId, rememberUser, track } from '../meta';
 import { api } from '../store/api';
 import { useSubmit } from '../store/useSubmit';
 import { Arrow } from './motion';
@@ -22,6 +22,7 @@ export function NewsletterForm({ source, dark = false }: { source: Source; dark?
       body: { name: f.name || undefined, email: f.email, phone: f.phone, source, consent: agree, website: f.website || undefined },
       headers: { 'X-Meta-Event-Id': eventId },
     });
+    rememberUser({ email: f.email, phone: f.phone, name: f.name });
     if (r.status === 'subscribed') track('Subscribe', { content_name: 'Newsletter' }, { eventId });
     setResult(r.status);
   });

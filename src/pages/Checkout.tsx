@@ -6,7 +6,7 @@ import { useCart, useQuote } from '../store/cart';
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { CouponField, issueText } from '../components/CartDrawer';
-import { formatList, track } from '../meta';
+import { formatList, rememberUser, track } from '../meta';
 
 /** The cart as Meta event data: value, books, quantities and formats. */
 const cartEvent = (q: { total: number; lines: { productId: string; kind: string; quantity: number }[] }) => ({
@@ -130,6 +130,7 @@ export function Checkout() {
     setNotice(null);
     setBusy(true);
     try { localStorage.setItem(DETAILS_KEY, JSON.stringify({ ...d, note: '' })); } catch { /* ignore */ }
+    rememberUser({ email: d.email, phone: d.phone, name: d.name, city: d.city, state: d.state, pincode: d.pincode });
     if (quote) track('AddPaymentInfo', cartEvent(quote));
     const key = JSON.stringify(payload);
     try {
