@@ -515,7 +515,7 @@ function Accounts() {
         <Btn size="sm" busy={busy === 'csv'} onClick={() => run('csv', () => downloadFile('/newsletter/accounts/export.csv', 'accounts.csv'))}>Export CSV</Btn>
       </form>
       {error ? <ErrorBox error={error} retry={reload} /> : !data ? <Loading /> : data.items.length === 0 ? (
-        <Empty title={query ? 'Nobody matches.' : 'No accounts yet.'}>{!query && <p className="ad-muted">Customers appear here after they sign in with Google on the website.</p>}</Empty>
+        <Empty title={query ? 'Nobody matches.' : 'No accounts yet.'}>{!query && <p className="ad-muted">Customers appear here once they sign in with Google on the website. Staff logins aren’t listed.</p>}</Empty>
       ) : (
         <div className="ad-table-wrap">
           <table className="ad-table">
@@ -535,6 +535,7 @@ function Accounts() {
         </div>
       )}
       {data && <Pagination page={data.page} total={data.total} limit={data.limit} onPage={setPage} />}
+      <p className="ad-muted ad-nl-note">Everyone who signed in with Google on the website (staff logins aren’t listed). Signing up doesn’t subscribe anyone: they get newsletters only after turning them on, in their account or at checkout.</p>
     </Card>
   );
 }

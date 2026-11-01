@@ -206,4 +206,25 @@ describe('campaigns', () => {
     expect(r.json).toMatchObject({ heading: 'Just published: Mathematics Today', productIds: [p.id], status: 'draft' });
     expect(r.json.ctaUrl).toBe('https://eldenap.in/books/mathematics-today');
   });
+
+  it('lists everyone who signed in with Google, from Supabase, but not staff logins', async () => {
+    const h = await customer();
+    await t.call('GET', '/account', { headers: h });
+    await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210' } });
+    t.deps.authUsers = async () => [
+      { id: '33333333-3333-4333-8333-333333333333', email: contact.email, name: 'Asha Verma', avatar: null, providers: ['google'], createdAt: new Date('2026-10-01'), lastSignInAt: new Date('2026-10-02') },
+      { id: '44444444-4444-4444-8444-444444444444', email: 'neha@example.com', name: 'Neha Gupta', avatar: 'https://lh3.googleusercontent.com/n', providers: ['google'], createdAt: new Date('2026-10-05'), lastSignInAt: null },
+      { id: '55555555-5555-4555-8555-555555555555', email: 'owner@eldenap.in', name: '', avatar: null, providers: ['email'], createdAt: new Date('2026-09-01'), lastSignInAt: new Date() },
+    ];
+    const [summary, list] = await Promise.all([
+      t.call('GET', '/admin/newsletter/summary', { headers: await admin() }),
+      t.call('GET', '/admin/newsletter/accounts', { headers: await admin() }),
+    ]);
+    expect(summary.json.accounts).toBe(2);
+    expect(list.json.items.map((a: any) => a.email).sort()).toEqual([contact.email, 'neha@example.com']);
+    const asha = list.json.items.find((a: any) => a.email === contact.email);
+    expect(asha.phone).toBe('9876543210'); // what the customer added is kept
+    expect(list.json.items.find((a: any) => a.email === 'neha@example.com')).toMatchObject({ name: 'Neha Gupta', phone: '', newsletter: null });
+  });
 });
+

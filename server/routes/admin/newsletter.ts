@@ -16,8 +16,43 @@ const csvResponse = (csv: string, name: string) => new Response(csv, { headers: 
 
 export const adminNewsletter = new Hono<AppEnv>();
 
+/**
+ * Copy customers from Supabase Auth into `accounts`, so everyone who ever signed in with
+ * Google is listed, not only those who opened their account page since. Staff logins
+ * (email and password) are left out. At most once a minute; never breaks the page.
+ */
+const lastSync = new WeakMap<object, { at: number; run: Promise<void> }>();
+function syncAccounts(deps: AppEnv['Variables']['deps']): Promise<void> {
+  if (!deps.authUsers) return Promise.resolve();
+  const prev = lastSync.get(deps);
+  if (prev && Date.now() - prev.at < 60_000) return prev.run; // a sync that's running waits for it to finish
+  const run = copyCustomers(deps).catch((e) => {
+    lastSync.delete(deps);
+    console.error('[accounts] sync from Supabase failed:', (e as Error).message);
+  });
+  lastSync.set(deps, { at: Date.now(), run });
+  return run;
+}
+
+async function copyCustomers(deps: AppEnv['Variables']['deps']) {
+  const customers = (await deps.authUsers!()).filter((u) => u.email && u.providers.includes('google'));
+  for (const u of customers) {
+    await deps.db.insert(accounts).values({ userId: u.id, email: u.email, name: u.name, avatarUrl: u.avatar, createdAt: u.createdAt, lastSeenAt: u.lastSignInAt ?? u.createdAt })
+      .onConflictDoUpdate({
+        target: accounts.userId,
+        set: {
+          email: u.email,
+          name: sql`case when ${u.name} <> '' then ${u.name} else ${accounts.name} end`,
+          avatarUrl: sql`coalesce(${u.avatar}, ${accounts.avatarUrl})`,
+          lastSeenAt: sql`greatest(${accounts.lastSeenAt}, ${u.lastSignInAt ?? u.createdAt})`,
+        },
+      });
+  }
+}
+
 adminNewsletter.get('/summary', async (c) => {
   const { db, now } = c.get('deps');
+  await syncAccounts(c.get('deps'));
   const s = await getSettings(db);
   const [byStatus, [{ n: accountsCount }], [{ n: sentToday }]] = await Promise.all([
     db.select({ status: subscribers.status, n: count() }).from(subscribers).groupBy(subscribers.status),
@@ -111,6 +146,7 @@ adminNewsletter.post('/subscribers/import', requireRole('manager'), async (c) =>
 
 adminNewsletter.get('/accounts', async (c) => {
   const { db } = c.get('deps');
+  await syncAccounts(c.get('deps'));
   const f = query(c, z.object({ q: z.string().trim().max(100).optional(), ...zPage }));
   const where = f.q ? or(ilike(accounts.email, likeOf(f.q)), ilike(accounts.name, likeOf(f.q)), ilike(accounts.phone, likeOf(f.q))) : undefined;
   const [rows, [{ total }]] = await Promise.all([
@@ -123,6 +159,7 @@ adminNewsletter.get('/accounts', async (c) => {
 
 adminNewsletter.get('/accounts/export.csv', async (c) => {
   const { db } = c.get('deps');
+  await syncAccounts(c.get('deps'));
   const rows = await db.select().from(accounts).orderBy(desc(accounts.createdAt)).limit(100_000);
   return csvResponse(toCsv(rows, [['Email', (r) => r.email], ['Name', (r) => r.name], ['Mobile', (r) => r.phone], ['Signed up', (r) => r.createdAt], ['Last seen', (r) => r.lastSeenAt]]), 'accounts.csv');
 });
