@@ -4,6 +4,7 @@ import { ApiError, api, inr } from '../store/api';
 import { useStoreConfig } from '../store/catalog';
 import { orderToken } from '../store/orderToken';
 import { formatList, track } from '../meta';
+import { ga, gaItem } from '../ga';
 
 interface OrderView {
   number: number;
@@ -54,6 +55,11 @@ export function OrderStatus() {
     const key = `elden-purchase-tracked:${order.number}`;
     try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* ignore */ }
     const ids = order.items.map((i) => i.productId ?? i.id);
+    ga('purchase', {
+      transaction_id: String(order.number), currency: 'INR', value: order.total / 100, tax: order.tax / 100, shipping: order.shipping / 100,
+      ...(order.couponCode ? { coupon: order.couponCode } : {}),
+      items: order.items.map((i, k) => gaItem(ids[k], i.title, i.kind, Math.round(i.lineTotal / i.quantity), i.quantity)),
+    });
     track('Purchase', {
       value: order.total / 100, currency: 'INR', order_id: String(order.number), content_type: 'product',
       content_ids: [...new Set(ids)],

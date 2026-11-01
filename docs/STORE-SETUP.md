@@ -186,6 +186,31 @@ The site reports visits, add-to-carts, checkouts, enquiries, sign-ups and purcha
 
 Events: PageView, ViewContent (book page), Search (store search), CustomizeProduct (switching between e-book, print and both), AddToCart, InitiateCheckout (checkout opened), AddPaymentInfo (Pay pressed), Purchase (payment confirmed), Lead (sample, school-order and teacher forms), SubmitApplication (author proposals and distributor applications), Contact (contact form, or tapping your email, phone or WhatsApp link), CompleteRegistration (first Google sign-in), Subscribe (newsletter sign-up). Cart, checkout and purchase events carry a `format` (`ebook`, `print`, `ebook+print`) for audiences such as "added an e-book, didn't buy". Meta's automatic button-click events are switched off, so only these appear. With purchases, leads and sign-ups the server sends the customer's email, phone, name, city, state and PIN code, SHA-256 hashed as Meta requires, which raises Meta's match rate.
 
+## 10. Google: Analytics, Ads, Merchant Center and Search
+
+The website already sends everything Google needs; these are the settings on Google's side.
+
+**What the site sends to Google Analytics (GA4, `G-0TR5TFH9KP`):** `view_item`, `search`, `add_to_cart`, `begin_checkout`, `add_payment_info`, `purchase` (order number, revenue, tax, shipping, books and formats), `generate_lead` (enquiry forms), `sign_up` (first Google sign-in), `newsletter_signup` and `contact` (email/phone taps). Consent Mode applies: until a visitor accepts cookies, Google gets cookie-free signals only. Staff signed in to the admin send no shopping events, and their page views are marked as internal traffic.
+
+**Google Analytics** ([analytics.google.com](https://analytics.google.com) → Admin):
+1. **Data display → Events:** after the first sale, `purchase` is a key event automatically. Mark `generate_lead`, `sign_up` and `newsletter_signup` as key events too (star them).
+2. **Data collection and modification → Data filters:** open *Internal traffic* and set it to **Active**, so your own visits are left out.
+3. **Data collection and modification → Data collection:** turn on **User-provided data collection** (the site sends hashed customer details after checkout, for Google Ads' enhanced conversions).
+4. **Product links:** link **Google Ads**, **Search Console** and **Merchant Center**.
+
+**Google Ads** ([ads.google.com](https://ads.google.com)):
+1. **Goals → Conversions → New conversion action → Import → Google Analytics 4 → Web** → tick `purchase` (and `generate_lead` if you advertise to schools). Use `purchase` as the primary goal; it brings the order value.
+2. **Goals → Settings → Enhanced conversions:** turn on, choose *Google tag / Google Analytics*.
+3. Shopping and Performance Max campaigns use the Merchant Center feed below.
+
+**Google Merchant Center** ([merchants.google.com](https://merchants.google.com)): your books on Google Shopping, free listings and ads.
+1. Business info: name, address, logo; verify and claim `eldenap.in` (it suggests Search Console, which you already use).
+2. **Products → Add products → Add from a file → Enter a link to your file:** `https://eldenap.in/feeds/products.xml`, fetched **daily**. It lists printed books that have a cover image (books without an uploaded cover are left out, as Google requires an image), with price, stock, and the ISBN as GTIN.
+3. **Shipping and returns:** add a shipping service for India matching the store (flat charge, free above your threshold, delivery time) and the return policy from `/refunds`.
+4. Free listings start once products are approved (a few days). The same feed works for Meta: **Commerce Manager → Catalogue → Data sources → Data feed** with the same link.
+
+**Search Console:** sitemap `sitemap.xml` (see above). Book pages carry structured data (price, availability, ISBN, author), so Google can show them as products; check **Shopping → Product snippets / Merchant listings** after a few weeks.
+
 ---
 
 ## Running costs

@@ -1,5 +1,6 @@
 // Enquiry forms (sample copies, bulk orders, teacher access, distributors,
 // contact, author proposals) are stored in the admin and emailed to the store.
+import { ga } from './ga';
 import { formEvent, newEventId, rememberUser, track } from './meta';
 import { api } from './store/api';
 
@@ -19,6 +20,7 @@ export async function submitForm(form: FormName, data: Record<string, string>): 
   await api('/enquiries', { body: { kind: form, ...fields, data: Object.keys(extra).length ? extra : undefined }, headers: { 'X-Meta-Event-Id': eventId } });
   rememberUser({ email: fields.email, phone: fields.phone, name: fields.name, city: fields.city });
   track(formEvent(form), { content_name: form, content_category: 'enquiry' }, { eventId });
+  ga('generate_lead', { lead_source: form });
 }
 
 export const formData = (el: HTMLFormElement) =>

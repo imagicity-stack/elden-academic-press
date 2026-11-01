@@ -11,6 +11,7 @@ import { meta } from './routes/meta.js';
 import { newsletter } from './routes/newsletter.js';
 import { customerOrders } from './routes/orders.js';
 import { store } from './routes/store.js';
+import { productFeedXml } from './routes/feeds.js';
 import { sitemapXml } from './routes/sitemap.js';
 import { webhooks } from './routes/webhooks.js';
 import { healthCheck, pgCode, type Health } from './services/health.js';
@@ -24,6 +25,12 @@ export function createApp(getDeps: () => Promise<Deps>) {
   // Outside /api (vercel.json rewrites /sitemap.xml here); both share one router.
   root.get('/sitemap.xml', async (c) => {
     const xml = await sitemapXml(await getDeps(), process.env.VITE_SITE_LIVE === 'true');
+    return c.body(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' });
+  });
+
+  // Product feed for Google Merchant Center and Meta Commerce Manager (vercel.json rewrites /feeds/* here).
+  root.get('/feeds/products.xml', async (c) => {
+    const xml = await productFeedXml(await getDeps());
     return c.body(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' });
   });
 

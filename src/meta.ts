@@ -2,6 +2,9 @@
 // Each event has an id; the server sends the same event with the same id (Conversions API),
 // so Meta counts it once even when one of the two is blocked.
 import { getConsent, isStaff, syncConsent, type Consent } from './consent';
+import { forgetUser, knownUser, phoneDigits, type MatchUser } from './visitor';
+
+export { rememberUser } from './visitor';
 
 const PIXEL = (import.meta.env.VITE_META_PIXEL_ID as string | undefined)?.trim();
 
@@ -61,30 +64,14 @@ function setMetaCookies() {
   } catch { /* ignore */ }
 }
 
-/**
- * Details the visitor gave us (checkout, sign-in, newsletter, a form), kept in this browser
- * only after they accepted cookies, so their later events match them too (Meta hashes
- * them in the browser; our server hashes its copy).
- */
-export interface MatchUser { email?: string; phone?: string; name?: string; city?: string; state?: string; pincode?: string }
-const USER = 'elden-meta-user';
-function knownUser(): MatchUser | null {
-  try { return JSON.parse(localStorage.getItem(USER) ?? 'null') as MatchUser | null; } catch { return null; }
-}
-export function rememberUser(u: MatchUser) {
-  if (!active()) return;
-  const clean = Object.fromEntries(Object.entries(u).filter(([, v]) => typeof v === 'string' && v.trim()).map(([k, v]) => [k, String(v).trim().slice(0, 200)]));
-  try { localStorage.setItem(USER, JSON.stringify({ ...knownUser(), ...clean })); } catch { /* ignore */ }
-}
-
 /** The Pixel's "advanced matching" fields, normalised the way Meta asks (it hashes them). */
 function pixelMatch(u: MatchUser | null): Record<string, string> {
   if (!u) return {};
   const out: Record<string, string> = {};
   const email = u.email?.toLowerCase();
   if (email) { out.em = email; out.external_id = email; }
-  const d = u.phone?.replace(/\D/g, '') ?? '';
-  if (d) out.ph = /^[6-9]\d{9}$/.test(d) ? '91' + d : /^0[6-9]\d{9}$/.test(d) ? '91' + d.slice(1) : d;
+  const ph = phoneDigits(u.phone);
+  if (ph) out.ph = ph;
   const parts = (u.name ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (parts[0]) out.fn = parts[0];
   if (parts.length > 1) out.ln = parts[parts.length - 1];
@@ -156,7 +143,7 @@ window.addEventListener('elden:consent', (e) => {
     track('PageView'); // the page they're on
   } else if (loaded) {
     window.fbq?.('consent', 'revoke');
-    try { localStorage.removeItem(USER); } catch { /* ignore */ }
+    forgetUser();
     for (const name of ['_fbp', '_fbc']) {
       document.cookie = `${name}=; Path=/; Max-Age=0`;
       document.cookie = `${name}=; Path=/; Max-Age=0${cookieDomain()}`;
