@@ -178,6 +178,10 @@ export default function ProductEditor() {
         {dirty && <span className="ad-dirty">Unsaved changes</span>}
         <Btn busy={busy === 'save'} onClick={() => save()}>{form.status === 'active' ? 'Save' : 'Save draft'}</Btn>
         {form.status !== 'active' && <Btn kind="primary" busy={busy === 'save'} onClick={() => save('active')}>Publish</Btn>}
+        {!isNew && data?.product.status === 'active' && !dirty && (
+          <Btn busy={busy === 'announce'} title="Start a newsletter campaign about this book" onClick={() => run('announce', () => adminApi<{ id: string }>(`/newsletter/campaigns/from-product/${id}`, { method: 'POST' }))
+            .then((c) => c && navigate(`/admin/newsletter/campaigns/${c.id}`))}>Announce by email</Btn>
+        )}
       </>}
     >
       {serverErr && <div className="ad-alert ad-alert--red"><div>{serverErr.message}{serverErr.details ? ': ' + Object.values(serverErr.details as Record<string, string[]>).flat().join(' · ') : ''}</div></div>}

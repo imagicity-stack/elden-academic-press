@@ -11,6 +11,7 @@ import type { RzpPayment } from '../lib/razorpay.js';
 import { findCoupon, getSettings, loadPricingProducts, type Settings } from './catalog.js';
 import { paymentMethodLabel } from '../lib/format.js';
 import { sendOrderConfirmation, sendStoreNewOrder } from './emails.js';
+import { subscribe } from './newsletter.js';
 
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
@@ -89,6 +90,7 @@ export interface CheckoutInput {
   shipping: { name: string; line1: string; line2?: string; city: string; state: string; pincode: string };
   billingState?: string;
   note?: string;
+  newsletter?: boolean;
 }
 
 export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) {
@@ -134,6 +136,7 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
       expiresAt,
       stockReserved: true,
       customerNote: input.note ?? '',
+      newsletterOptIn: input.newsletter ?? false,
       ip,
     }).returning();
     await tx.insert(orderItems).values(q.lines.map((l) => ({
@@ -309,6 +312,12 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
       sendStoreNewOrder(deps, result.order, items, s),
     ]).catch((e) => console.error('[mail] order emails failed', (e as Error).message));
     if (deps.defer) deps.defer(emails); else await emails;
+    // The buyer ticked "Email me about new books and offers" at checkout.
+    const o = result.order;
+    if (o.newsletterOptIn) {
+      await subscribe(deps, { email: o.email, name: o.name, phone: o.phone, source: 'checkout', ip: o.ip, confirmed: true })
+        .catch((e) => console.error('[newsletter] checkout opt-in failed', (e as Error).message));
+    }
   }
   return result;
 }

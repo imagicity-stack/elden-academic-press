@@ -25,7 +25,7 @@ export default function Settings() {
 interface S {
   storeName: string; legalName: string; gstin: string; address: string; stateCode: string; supportEmail: string; supportPhone: string;
   shippingFlat: number; freeShippingAbove: number; orderExpiryMinutes: number; invoicePrefix: string; notifyEmails: string[]; requireMfa: boolean;
-  lowStockThreshold: number; maxDownloads: number; downloadExpiryDays: number; updatedAt: string;
+  lowStockThreshold: number; maxDownloads: number; downloadExpiryDays: number; newsletterDailyLimit: number; updatedAt: string;
 }
 
 function StoreSettings() {
@@ -57,6 +57,7 @@ function StoreSettings() {
             orderExpiryMinutes: Number(s('orderExpiryMinutes')), invoicePrefix: s('invoicePrefix').toUpperCase(),
             notifyEmails: s('notifyEmails').split(/[,\s]+/).filter(Boolean), requireMfa: Boolean(f.requireMfa),
             lowStockThreshold: Number(s('lowStockThreshold')), maxDownloads: Number(s('maxDownloads')), downloadExpiryDays: Number(s('downloadExpiryDays')),
+            newsletterDailyLimit: Number(s('newsletterDailyLimit')),
           },
         });
       } catch (e) { if (e instanceof ApiError) setErr(e); throw e; }
@@ -98,6 +99,12 @@ function StoreSettings() {
           <TextField label="Downloads allowed per e-book" type="number" min={1} value={s('maxDownloads')} onChange={(e) => set('maxDownloads', e.target.value)} />
           <TextField label="Download link lasts (days)" type="number" min={0} hint="0 = forever" value={s('downloadExpiryDays')} onChange={(e) => set('downloadExpiryDays', e.target.value)} />
           <TextField label="Low-stock warning at" type="number" min={0} value={s('lowStockThreshold')} onChange={(e) => set('lowStockThreshold', e.target.value)} />
+        </div>
+      </Card>
+      <Card title="Newsletter">
+        <div className="ad-form-grid">
+          <TextField label="Newsletter emails per day, at most" type="number" min={1} max={10000} value={s('newsletterDailyLimit')} onChange={(e) => set('newsletterDailyLimit', e.target.value)} error={fe('newsletterDailyLimit')}
+            hint="Google Workspace allows about 2,000 emails a day per mailbox, order emails included. Larger lists send over several days." />
         </div>
       </Card>
       <Card title="Security">

@@ -8,7 +8,8 @@ const schema = z.object({
   DATABASE_URL: optional,
   /** Local embedded database folder (development only). */
   PGLITE_DIR: z.string().default('.data/pglite'),
-  SITE_URL: z.string().default('http://localhost:5173'),
+  /** The public address, e.g. https://eldenap.in: used in emails, the sitemap and staff invitations. */
+  SITE_URL: optional,
   /** Signs customers' private order links. Long random string; changing it invalidates old links. */
   ORDER_LINK_SECRET: z.string().default('dev-order-link-secret'),
 
@@ -43,7 +44,27 @@ const schema = z.object({
   ALLOW_PAYMENT_SIMULATOR: optional,
 });
 
-export type Env = z.infer<typeof schema> & {
+const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/|$)/i;
+/** The store's own domain: used on Vercel when SITE_URL is missing or points at a local address. */
+export const PUBLIC_SITE = 'https://eldenap.in';
+
+/** "eldenap.in/" or "https://eldenap.in/" → "https://eldenap.in". */
+const normalise = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`).replace(/\/+$/, '');
+
+/**
+ * The address links point to. Locally: the dev server. On Vercel: SITE_URL, but never
+ * a localhost address (a common copy-paste slip), falling back to the store's domain.
+ */
+export function siteUrl(source: Record<string, string | undefined>, onVercel: boolean): string {
+  const set = source.SITE_URL?.trim();
+  if (!onVercel) return set ? normalise(set) : 'http://localhost:5173';
+  if (set && !LOCAL.test(normalise(set))) return normalise(set);
+  return PUBLIC_SITE;
+}
+
+export type Env = Omit<z.infer<typeof schema>, 'SITE_URL'> & {
+  /** Public address without a trailing slash, never localhost on Vercel. */
+  SITE_URL: string;
   /** Running on Vercel (production or preview). */
   onVercel: boolean;
   isProduction: boolean;
@@ -60,6 +81,7 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
   const isProduction = source.VERCEL_ENV === 'production' || (source.NODE_ENV === 'production' && onVercel);
   return {
     ...parsed,
+    SITE_URL: siteUrl(source, onVercel),
     onVercel,
     isProduction,
     devAdmin: !onVercel && parsed.ALLOW_DEV_ADMIN === 'true',

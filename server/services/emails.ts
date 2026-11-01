@@ -13,13 +13,13 @@ type Order = typeof orders.$inferSelect;
 type Item = typeof orderItems.$inferSelect;
 type Enquiry = typeof enquiries.$inferSelect;
 
-const INK = '#0B1220';
-const ACCENT = '#FF5A1F';
-const YELLOW = '#FFD84D';
-const PAPER = '#F4F2ED';
-const MUTED = '#576072';
-const LINE = '#E4E0D8';
-const FONT = `-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif`;
+export const INK = '#0B1220';
+export const ACCENT = '#FF5A1F';
+export const YELLOW = '#FFD84D';
+export const PAPER = '#F4F2ED';
+export const MUTED = '#576072';
+export const LINE = '#E4E0D8';
+export const FONT = `-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif`;
 
 /** E-books are attached to the confirmation while their total size stays under this. */
 const ATTACH_LIMIT = 15 * 1024 * 1024;
@@ -28,15 +28,15 @@ const ATTACH_LIMIT = 15 * 1024 * 1024;
 const copies = (deps: Deps) => addressList(deps.env.MAIL_TO);
 
 const td = (style: string, html: string) => `<tr><td style="${style}">${html}</td></tr>`;
-const section = (html: string, pad = '0 32px 28px') => td(`background:#FFFFFF;padding:${pad}`, html);
-const p = (html: string, style = '') => `<p style="margin:0 0 14px;font:400 15px/1.6 ${FONT};color:${MUTED};${style}">${html}</p>`;
-const h2 = (text: string) => `<h2 style="margin:0 0 14px;font:700 18px/1.2 ${FONT};color:${INK};letter-spacing:-0.2px">${text}</h2>`;
-const label = (text: string, color = MUTED) => `<div style="font:600 11px/1.2 ${FONT};letter-spacing:1.2px;text-transform:uppercase;color:${color}">${text}</div>`;
+export const section = (html: string, pad = '0 32px 28px') => td(`background:#FFFFFF;padding:${pad}`, html);
+export const p = (html: string, style = '') => `<p style="margin:0 0 14px;font:400 15px/1.6 ${FONT};color:${MUTED};${style}">${html}</p>`;
+export const h2 = (text: string) => `<h2 style="margin:0 0 14px;font:700 18px/1.2 ${FONT};color:${INK};letter-spacing:-0.2px">${text}</h2>`;
+export const label = (text: string, color = MUTED) => `<div style="font:600 11px/1.2 ${FONT};letter-spacing:1.2px;text-transform:uppercase;color:${color}">${text}</div>`;
 
-const button = (href: string, text: string, bg = ACCENT, fg = '#FFFFFF') =>
+export const button = (href: string, text: string, bg = ACCENT, fg = '#FFFFFF') =>
   `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${bg}"><a href="${esc(href)}" style="display:inline-block;padding:15px 26px;font:700 15px/1 ${FONT};color:${fg};text-decoration:none">${esc(text)} &rarr;</a></td></tr></table>`;
 
-function layout(deps: Deps, s: Settings, o: { preheader: string; kicker: string; title: string; intro: string; body: string; footerNote?: string }) {
+export function layout(deps: Deps, s: Settings, o: { preheader: string; kicker: string; title: string; intro: string; body: string; footerNote?: string; unsubscribeUrl?: string }) {
   const site = deps.env.SITE_URL.replace(/\/$/, '');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>${esc(o.title)}</title></head>
 <body style="margin:0;padding:0;background:${PAPER};-webkit-text-size-adjust:100%">
@@ -52,7 +52,7 @@ ${section(`<table role="presentation" cellpadding="0" cellspacing="0"><tr><td st
 <h1 style="margin:20px 0 12px;font:800 32px/1.08 ${FONT};letter-spacing:-1px;color:${INK}">${esc(o.title)}</h1>
 ${p(o.intro, 'font-size:16px')}`, '36px 32px 18px')}
 ${o.body}
-${td(`padding:26px 32px 8px;font:400 12.5px/1.7 ${FONT};color:#8B919D`, `${o.footerNote ? `${o.footerNote}<br>` : ''}Questions? Just reply to this email or write to <a href="mailto:${esc(s.supportEmail)}" style="color:${INK}">${esc(s.supportEmail)}</a>.<br><br>
+${td(`padding:26px 32px 8px;font:400 12.5px/1.7 ${FONT};color:#8B919D`, `${o.unsubscribeUrl ? `You’re getting this because you subscribed to news from ${esc(s.storeName)}. <a href="${esc(o.unsubscribeUrl)}" style="color:${INK}">Unsubscribe</a> any time.<br><br>` : ''}${o.footerNote ? `${o.footerNote}<br>` : ''}Questions? Just reply to this email or write to <a href="mailto:${esc(s.supportEmail)}" style="color:${INK}">${esc(s.supportEmail)}</a>.<br><br>
 <strong style="color:${MUTED}">${esc(s.storeName)}</strong> · ${esc(s.legalName)}<br>${esc(s.address).replace(/\n/g, ', ')}<br>
 <a href="${site}/terms" style="color:#8B919D">Terms</a> &nbsp;·&nbsp; <a href="${site}/privacy" style="color:#8B919D">Privacy</a> &nbsp;·&nbsp; <a href="${site}/refunds" style="color:#8B919D">Refunds</a> &nbsp;·&nbsp; <a href="${site}" style="color:#8B919D">eldenap.in</a>`)}
 </table></td></tr></table></body></html>`;

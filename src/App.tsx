@@ -19,6 +19,7 @@ import { Contact } from './pages/Contact';
 import { Home } from './pages/Home';
 import { LegalPage } from './pages/Legal';
 import { LEGAL } from './legal';
+import { Newsletter } from './pages/Newsletter';
 import { NotFound } from './pages/NotFound';
 import { OrderStatus, Track } from './pages/OrderStatus';
 import { StudyHub } from './pages/StudyHub';
@@ -61,6 +62,7 @@ export function App() {
           <Route path="order/:number" element={<OrderStatus />} />
           <Route path="track" element={<Track />} />
           <Route path="account" element={<Account />} />
+          <Route path="newsletter" element={<Newsletter />} />
           <Route path="study-hub" element={<StudyHub />} />
           <Route path="about" element={<About />} />
           <Route path="contact" element={<Contact />} />

@@ -42,8 +42,10 @@ const staffPreview = !live && (() => {
   try { return Boolean(localStorage.getItem('elden-admin-auth')); } catch { return false; }
 })();
 
-// The policies are public before launch too (payment providers check them).
-const prelaunchPolicy = !live && !staffPreview && Boolean(legalDocFor(window.location.pathname));
+// The policies are public before launch too (payment providers check them), and
+// so is /newsletter, where the confirm and unsubscribe links in emails land.
+const prelaunchPolicy = !live && !staffPreview
+  && (Boolean(legalDocFor(window.location.pathname)) || window.location.pathname.replace(/\/+$/, '') === '/newsletter');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

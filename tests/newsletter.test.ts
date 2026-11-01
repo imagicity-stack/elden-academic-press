@@ -1,0 +1,209 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { accounts, campaignSends, products, settings, subscribers } from '../server/db/schema.js';
+import { newsletterToken, processNewsletter, startCampaign } from '../server/services/newsletter.js';
+import { address, contact, setup, supabaseToken } from './helpers.js';
+
+type Ctx = Awaited<ReturnType<typeof setup>>;
+let t: Ctx;
+beforeEach(async () => { t = await setup(); });
+
+const SECRET = 'order-link-secret-for-tests-0123456789';
+const OWNER = { sub: '11111111-1111-4111-8111-111111111111', email: 'owner@eldenap.in' };
+const admin = async () => ({ Authorization: `Bearer ${await supabaseToken(OWNER)}` });
+const customer = async (email = contact.email) =>
+  ({ authorization: `Bearer ${await supabaseToken({ sub: '33333333-3333-4333-8333-333333333333', email, provider: 'google', name: 'Asha Verma' })}` });
+const linkParams = (html: string, kind: 'confirm' | 'unsubscribe') => {
+  const m = new RegExp(`/newsletter\\?${kind}=1&amp;e=([^&]+)&amp;t=([^"&]+)`).exec(html) ?? new RegExp(`/newsletter\\?${kind}=1&e=([^&]+)&t=([^"&\\s)]+)`).exec(html);
+  return m ? { email: decodeURIComponent(m[1]), token: m[2] } : null;
+};
+const status = async (email: string) => (await t.db.select().from(subscribers).where(eq(subscribers.email, email)))[0]?.status;
+async function addSubscribers(emails: string[]) {
+  for (const email of emails) {
+    expect((await t.call('POST', '/admin/newsletter/subscribers', { headers: await admin(), body: { email, consent: true } })).status).toBe(201);
+  }
+}
+
+describe('newsletter sign-up', () => {
+  it('needs a mobile number and confirms by email before subscribing', async () => {
+    const noPhone = await t.call('POST', '/newsletter/subscribe', { body: { email: 'reader@example.com' } });
+    expect(noPhone.status).toBe(400);
+
+    const r = await t.call('POST', '/newsletter/subscribe', { body: { email: 'Reader@Example.com', phone: '+91 98765-43210', name: 'Ravi' } });
+    expect(r.json).toEqual({ status: 'pending' });
+    expect(await status('reader@example.com')).toBe('pending');
+    const [row] = await t.db.select().from(subscribers).where(eq(subscribers.email, 'reader@example.com'));
+    expect(row.phone).toBe('9876543210');
+
+    const mail = t.mailer.sent.find((m) => m.to === 'reader@example.com')!;
+    expect(mail.subject).toMatch(/confirm/i);
+    const link = linkParams(mail.html, 'confirm')!;
+    expect(link.email).toBe('reader@example.com');
+
+    expect((await t.call('POST', '/newsletter/confirm', { body: { email: link.email, token: 'forged' } })).status).toBe(400);
+    expect((await t.call('POST', '/newsletter/confirm', { body: link })).status).toBe(200);
+    expect(await status('reader@example.com')).toBe('subscribed');
+  });
+
+  it('ignores bots that fill in the hidden field', async () => {
+    const r = await t.call('POST', '/newsletter/subscribe', { body: { email: 'bot@example.com', phone: '9876543210', website: 'spam' } });
+    expect(r.status).toBe(400);
+    expect(await status('bot@example.com')).toBeUndefined();
+  });
+
+  it('unsubscribes from the page link and the one-click header', async () => {
+    await addSubscribers(['a@example.com', 'b@example.com']);
+    const token = newsletterToken(SECRET, 'a@example.com');
+    expect((await t.call('POST', '/newsletter/unsubscribe', { body: { email: 'a@example.com', token: 'nope' } })).status).toBe(400);
+    expect((await t.call('POST', '/newsletter/unsubscribe', { body: { email: 'a@example.com', token } })).status).toBe(200);
+    expect(await status('a@example.com')).toBe('unsubscribed');
+
+    // RFC 8058: the mail app POSTs "List-Unsubscribe=One-Click" to the URL from the header.
+    const b = newsletterToken(SECRET, 'b@example.com');
+    const res = await t.app.request(`/api/newsletter/unsubscribe?e=${encodeURIComponent('b@example.com')}&t=${b}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'List-Unsubscribe=One-Click',
+    });
+    expect(res.status).toBe(200);
+    expect(await status('b@example.com')).toBe('unsubscribed');
+  });
+
+  it('never lets staff re-add someone who unsubscribed', async () => {
+    await addSubscribers(['gone@example.com']);
+    await t.call('POST', '/newsletter/unsubscribe', { body: { email: 'gone@example.com', token: newsletterToken(SECRET, 'gone@example.com') } });
+    const [row] = await t.db.select().from(subscribers).where(eq(subscribers.email, 'gone@example.com'));
+    const put = await t.call('PUT', `/admin/newsletter/subscribers/${row.id}`, { headers: await admin(), body: { name: '', phone: '', status: 'subscribed' } });
+    expect(put.status).toBe(400);
+    const imp = await t.call('POST', '/admin/newsletter/subscribers/import', { headers: await admin(), body: { csv: 'Email,Name,Mobile\ngone@example.com,Gone,\nnew@example.com,New One,9876543210\nnot-an-email,,', consent: true } });
+    expect(imp.json).toEqual({ added: 1, skipped: 1, invalid: 1 });
+    expect(await status('gone@example.com')).toBe('unsubscribed');
+    expect(await status('new@example.com')).toBe('subscribed');
+    expect((await t.call('POST', '/admin/newsletter/subscribers', { headers: await admin(), body: { email: 'x@example.com' } })).status).toBe(400);
+  });
+});
+
+describe('accounts and checkout', () => {
+  it('remembers signed-in customers with their mobile and newsletter choice', async () => {
+    const h = await customer();
+    const first = await t.call('GET', '/account', { headers: h });
+    expect(first.json).toMatchObject({ profile: { phone: '' }, newsletter: null });
+    expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '12345' } })).status).toBe(400);
+    expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '098765 43210' } })).json).toEqual({ phone: '9876543210' });
+
+    const on = await t.call('PUT', '/account/newsletter', { headers: h, body: { subscribed: true } });
+    expect(on.json.newsletter).toBe('subscribed');
+    const [sub] = await t.db.select().from(subscribers).where(eq(subscribers.email, contact.email));
+    expect(sub).toMatchObject({ status: 'subscribed', source: 'account', phone: '9876543210' });
+    expect(t.mailer.sent.some((m) => /confirm/i.test(m.subject))).toBe(false);
+
+    const again = await t.call('GET', '/account', { headers: h });
+    expect(again.json).toMatchObject({ profile: { phone: '9876543210' }, newsletter: 'subscribed' });
+    await t.call('PUT', '/account/newsletter', { headers: h, body: { subscribed: false } });
+    expect(await status(contact.email)).toBe('unsubscribed');
+
+    const list = await t.call('GET', '/admin/newsletter/accounts', { headers: await admin() });
+    expect(list.json.items).toHaveLength(1);
+    expect(list.json.items[0]).toMatchObject({ email: contact.email, phone: '9876543210', newsletter: 'unsubscribed' });
+    expect((await t.db.select().from(accounts)).length).toBe(1);
+  });
+
+  it('subscribes buyers who ticked the box, once they have paid', async () => {
+    const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
+    const buy = async (email: string, newsletter?: boolean) => {
+      const r = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }], contact: { ...contact, email }, shipping: address, newsletter } });
+      expect(r.status).toBe(201);
+      return r.json.razorpay.orderId as string;
+    };
+    const unpaid = await buy('unpaid@example.com', true);
+    expect(await status('unpaid@example.com')).toBeUndefined();
+    await t.call('POST', '/checkout/verify', { body: t.razorpay.simulatePayment(unpaid) });
+    expect(await status('unpaid@example.com')).toBe('subscribed');
+
+    await t.call('POST', '/checkout/verify', { body: t.razorpay.simulatePayment(await buy('no@example.com')) });
+    expect(await status('no@example.com')).toBeUndefined();
+  });
+});
+
+describe('campaigns', () => {
+  async function campaign(extra: Record<string, unknown> = {}) {
+    const r = await t.call('POST', '/admin/newsletter/campaigns', { headers: await admin(), body: { subject: 'New books for 2027', heading: 'Fresh off the press', body: 'Hello **readers**.\n\nSee [the store](https://eldenap.in/catalogue).', ...extra } });
+    expect(r.status).toBe(201);
+    return r.json.id as string;
+  }
+
+  it('previews, tests and sends only to confirmed subscribers, with unsubscribe headers', async () => {
+    await addSubscribers(['one@example.com', 'two@example.com']);
+    await t.call('POST', '/newsletter/subscribe', { body: { email: 'pending@example.com', phone: '9876543210' } });
+    const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
+    const id = await campaign({ productIds: [p.id] });
+
+    const preview = await t.call('POST', '/admin/newsletter/campaigns/preview', { headers: await admin(), body: { subject: '', body: 'Draft **text**', productIds: [p.id] } });
+    expect(preview.json.html).toMatch(/<strong[^>]*>text<\/strong>/);
+    expect(preview.json.html).toContain('Mathematics Today');
+
+    t.mailer.sent.length = 0;
+    const test = await t.call('POST', `/admin/newsletter/campaigns/${id}/test`, { headers: await admin(), body: {} });
+    expect(test.json.to).toBe(OWNER.email);
+    expect(t.mailer.sent[0].subject).toBe('[Test] New books for 2027');
+
+    t.mailer.sent.length = 0;
+    const send = await t.call('POST', `/admin/newsletter/campaigns/${id}/send`, { headers: await admin() });
+    expect(send.status).toBe(200);
+    expect(send.json.recipients).toBe(2);
+    const to = t.mailer.sent.map((m) => m.to).sort();
+    expect(to).toEqual(['one@example.com', 'two@example.com']);
+    const mail = t.mailer.sent[0];
+    expect(mail.headers?.['List-Unsubscribe']).toMatch(/^<https:\/\/eldenap\.in\/api\/newsletter\/unsubscribe\?e=/);
+    expect(mail.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
+    expect(mail.html).toMatch(/<strong[^>]*>readers<\/strong>/);
+    expect(mail.html).toContain('href="https://eldenap.in/catalogue"');
+    expect(linkParams(mail.html, 'unsubscribe')?.email).toBe(mail.to);
+
+    const done = await t.call('GET', `/admin/newsletter/campaigns/${id}`, { headers: await admin() });
+    expect(done.json).toMatchObject({ status: 'sent', sentCount: 2, failedCount: 0 });
+    expect((await t.call('PUT', `/admin/newsletter/campaigns/${id}`, { headers: await admin(), body: { subject: 'Changed' } })).status).toBe(409);
+    expect((await t.call('POST', `/admin/newsletter/campaigns/${id}/send`, { headers: await admin() })).status).toBe(409);
+  });
+
+  it('keeps to the daily limit and skips people who unsubscribe mid-send', async () => {
+    await t.db.update(settings).set({ newsletterDailyLimit: 3 });
+    await addSubscribers(['s1@example.com', 's2@example.com', 's3@example.com', 's4@example.com', 's5@example.com']);
+    const id = await campaign();
+    // Queue it without sending a batch yet (the send endpoint also sends the first batch).
+    expect((await startCampaign(t.deps, id))?.recipients).toBe(5);
+    await t.call('POST', '/newsletter/unsubscribe', { body: { email: 's2@example.com', token: newsletterToken(SECRET, 's2@example.com') } });
+
+    t.mailer.sent.length = 0;
+    const first = await processNewsletter(t.deps);
+    expect(first).toMatchObject({ sent: 3, budgetLeft: 0 });
+    expect(t.mailer.sent.map((m) => m.to)).not.toContain('s2@example.com');
+    expect((await processNewsletter(t.deps)).sent).toBe(0);
+
+    // A day later the rest go out.
+    t.setClock(new Date(Date.now() + 86400_000 + 60_000));
+    expect((await processNewsletter(t.deps)).sent).toBe(1);
+    const sends = await t.db.select().from(campaignSends);
+    expect(sends.filter((s) => s.status === 'skipped')).toHaveLength(1);
+    const done = await t.call('GET', `/admin/newsletter/campaigns/${id}`, { headers: await admin() });
+    expect(done.json).toMatchObject({ status: 'sent', recipients: 5, sentCount: 4 });
+  });
+
+  it('starts scheduled campaigns when they are due, from the cron', async () => {
+    await addSubscribers(['due@example.com']);
+    const id = await campaign();
+    const at = new Date(Date.now() + 3600_000).toISOString();
+    expect((await t.call('POST', `/admin/newsletter/campaigns/${id}/schedule`, { headers: await admin(), body: { at } })).json.status).toBe('scheduled');
+    const cron = { Authorization: 'Bearer cron-secret' };
+    expect((await t.call('GET', '/cron/newsletter', { headers: cron })).json.sent).toBe(0);
+    t.setClock(new Date(Date.now() + 2 * 3600_000));
+    expect((await t.call('GET', '/cron/newsletter', { headers: cron })).json.sent).toBe(1);
+    expect((await t.call('GET', '/cron/newsletter')).status).toBe(401);
+  });
+
+  it('drafts an announcement from a product', async () => {
+    const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
+    const r = await t.call('POST', `/admin/newsletter/campaigns/from-product/${p.id}`, { headers: await admin() });
+    expect(r.status).toBe(201);
+    expect(r.json).toMatchObject({ heading: 'Just published: Mathematics Today', productIds: [p.id], status: 'draft' });
+    expect(r.json.ctaUrl).toBe('https://eldenap.in/books/mathematics-today');
+  });
+});

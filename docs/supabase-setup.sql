@@ -410,6 +410,84 @@ BEGIN
   END IF;
 END $$;
 
+-- ===== 0003_newsletter =====
+
+CREATE TYPE "public"."campaign_status" AS ENUM('draft', 'scheduled', 'sending', 'sent', 'cancelled');--> statement-breakpoint
+CREATE TYPE "public"."send_status" AS ENUM('queued', 'sent', 'failed', 'skipped');--> statement-breakpoint
+CREATE TYPE "public"."subscriber_status" AS ENUM('pending', 'subscribed', 'unsubscribed');--> statement-breakpoint
+CREATE TABLE "accounts" (
+	"user_id" uuid PRIMARY KEY NOT NULL,
+	"email" text NOT NULL,
+	"name" text DEFAULT '' NOT NULL,
+	"phone" text DEFAULT '' NOT NULL,
+	"avatar_url" text,
+	"last_seen_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "campaign_sends" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"campaign_id" uuid NOT NULL,
+	"subscriber_id" uuid NOT NULL,
+	"status" "send_status" DEFAULT 'queued' NOT NULL,
+	"error" text,
+	"sent_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "campaigns" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"subject" text NOT NULL,
+	"preheader" text DEFAULT '' NOT NULL,
+	"heading" text DEFAULT '' NOT NULL,
+	"body" text DEFAULT '' NOT NULL,
+	"cta_label" text DEFAULT '' NOT NULL,
+	"cta_url" text DEFAULT '' NOT NULL,
+	"product_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"status" "campaign_status" DEFAULT 'draft' NOT NULL,
+	"scheduled_at" timestamp with time zone,
+	"started_at" timestamp with time zone,
+	"sent_at" timestamp with time zone,
+	"recipients" integer DEFAULT 0 NOT NULL,
+	"sent_count" integer DEFAULT 0 NOT NULL,
+	"failed_count" integer DEFAULT 0 NOT NULL,
+	"created_by" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "subscribers" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"email" text NOT NULL,
+	"name" text DEFAULT '' NOT NULL,
+	"phone" text DEFAULT '' NOT NULL,
+	"status" "subscriber_status" DEFAULT 'pending' NOT NULL,
+	"source" text DEFAULT '' NOT NULL,
+	"consent_at" timestamp with time zone,
+	"consent_ip" text,
+	"unsubscribed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "subscribers_email_unique" UNIQUE("email")
+);
+--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "newsletter_opt_in" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "settings" ADD COLUMN "newsletter_daily_limit" integer DEFAULT 1500 NOT NULL;--> statement-breakpoint
+ALTER TABLE "campaign_sends" ADD CONSTRAINT "campaign_sends_campaign_id_campaigns_id_fk" FOREIGN KEY ("campaign_id") REFERENCES "public"."campaigns"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "campaign_sends" ADD CONSTRAINT "campaign_sends_subscriber_id_subscribers_id_fk" FOREIGN KEY ("subscriber_id") REFERENCES "public"."subscribers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "accounts_email_idx" ON "accounts" USING btree ("email");--> statement-breakpoint
+CREATE UNIQUE INDEX "campaign_sends_unique" ON "campaign_sends" USING btree ("campaign_id","subscriber_id");--> statement-breakpoint
+CREATE INDEX "campaign_sends_queue_idx" ON "campaign_sends" USING btree ("status","created_at");--> statement-breakpoint
+CREATE INDEX "campaign_sends_sent_idx" ON "campaign_sends" USING btree ("sent_at");--> statement-breakpoint
+CREATE INDEX "campaigns_status_idx" ON "campaigns" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "subscribers_status_idx" ON "subscribers" USING btree ("status");--> statement-breakpoint
+-- Only the store's server reads these, like every other table (see 0001_security).
+ALTER TABLE "accounts" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "subscribers" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "campaigns" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "campaign_sends" ENABLE ROW LEVEL SECURITY;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -417,7 +495,8 @@ CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (id SERIAL PRIMARY KEY, 
 INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('120bc1ac5284b0f9abe3b85b591a6974e5fee6b2ac0cd9ab0665f6c6dc581f48', 1793363978141),
   ('2bf8e3ce6609203484f15a30fe4d28ea0d4096507fca5e1fda37aa97a2fcb9e0', 1793363978922),
-  ('d551b96228e1cc509431a668ea8d88e5672d50239ed161f6d083b684cba35dbe', 1793366707702);
+  ('d551b96228e1cc509431a668ea8d88e5672d50239ed161f6d083b684cba35dbe', 1793366707702),
+  ('a7c6aec2b7878ee57a12e1ff29aedca10c3defc0567e6aafee03cdfebcd7c937', 1793529577196);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

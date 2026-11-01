@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { eq } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
-import { adminUsers, settings } from '../db/schema.js';
+import { adminUsers, settings, subscribers } from '../db/schema.js';
 
 type Check = 'ok' | 'missing' | 'error';
 export interface Health {
@@ -44,7 +44,9 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
   const { env, db, razorpay } = deps;
 
   if (env.onVercel) {
-    if (!source.SITE_URL) todo.push('Set SITE_URL to https://eldenap.in');
+    const site = source.SITE_URL?.trim();
+    if (!site) todo.push('Set SITE_URL to https://eldenap.in (links in emails and the sitemap use it)');
+    else if (/localhost|127\.0\.0\.1/i.test(site)) todo.push(`SITE_URL is a localhost address: change it to https://eldenap.in and redeploy (until then ${env.SITE_URL} is used)`);
     if (!env.CRON_SECRET) todo.push('Set CRON_SECRET (unpaid orders won’t release their stock without it)');
   }
 
@@ -53,7 +55,16 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
     const [row] = await db.select({ id: settings.id }).from(settings).where(eq(settings.id, 1));
     if (!row) throw Object.assign(new Error('settings row missing'), { code: '42P01' });
     hasOwner = (await db.select({ id: adminUsers.userId }).from(adminUsers).where(eq(adminUsers.role, 'owner')).limit(1)).length > 0;
-    checks.database = 'ok';
+    // Databases set up before the newsletter need its update (new tables and columns).
+    try {
+      await db.select({ n: settings.newsletterDailyLimit }).from(settings).limit(1);
+      await db.select({ id: subscribers.id }).from(subscribers).limit(1);
+      checks.database = 'ok';
+    } catch (e) {
+      if (!['42P01', '42703'].includes(pgCode(e) ?? '')) throw e;
+      checks.database = 'missing';
+      todo.push('The database needs an update: run docs/supabase-updates/0003_newsletter.sql in Supabase → SQL Editor');
+    }
   } catch (e) {
     const code = pgCode(e);
     if (code === '42P01') {

@@ -5,6 +5,7 @@ import { LEGAL } from '../legal';
 import { CompanyLine } from '../pages/Legal';
 import { useSite, type ModalKind } from '../site';
 import { Logo } from './Brand';
+import { NewsletterForm } from './NewsletterForm';
 import { Arrow, Reveal } from './motion';
 
 type FooterLink = [label: string, to: string] | [label: string, modal: { modal: ModalKind }] | [label: string, ext: { href: string }];
@@ -56,6 +57,14 @@ export function Footer() {
             <Link to="/catalogue" className="btn btn--ghost-light btn--lg">Browse the store</Link>
           </div>
         </Reveal>
+        <div className="footer__news">
+          <div className="footer__news-text">
+            <div className="footer__col-title">Newsletter</div>
+            <h3 className="footer__news-title">New books, <span className="serif-i">first.</span></h3>
+            <p>Hear about new titles, sample papers and offers before anyone else.</p>
+          </div>
+          <NewsletterForm source="footer" dark />
+        </div>
         <div className="footer__top">
           <div className="footer__brand">
             <Logo light />

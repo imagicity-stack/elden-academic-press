@@ -19,6 +19,9 @@ export const couponType = pgEnum('coupon_type', ['percent', 'fixed']);
 export const enquiryKind = pgEnum('enquiry_kind', ['sample', 'bulk', 'teacher', 'dist', 'contact', 'proposal']);
 export const enquiryStatus = pgEnum('enquiry_status', ['new', 'in_progress', 'closed']);
 export const adminRole = pgEnum('admin_role', ['owner', 'manager', 'staff']);
+export const subscriberStatus = pgEnum('subscriber_status', ['pending', 'subscribed', 'unsubscribed']);
+export const campaignStatus = pgEnum('campaign_status', ['draft', 'scheduled', 'sending', 'sent', 'cancelled']);
+export const sendStatus = pgEnum('send_status', ['queued', 'sent', 'failed', 'skipped']);
 
 export const orderNumberSeq = pgSequence('order_number_seq', { startWith: 100001 });
 
@@ -182,6 +185,8 @@ export const orders = pgTable('orders', {
   cancelReason: text('cancel_reason'),
   refundedAmount: integer('refunded_amount').notNull().default(0),
   customerNote: text('customer_note').notNull().default(''),
+  /** Ticked "email me about new books and offers" at checkout; subscribed once paid. */
+  newsletterOptIn: boolean('newsletter_opt_in').notNull().default(false),
   internalNote: text('internal_note').notNull().default(''),
   needsAttention: boolean('needs_attention').notNull().default(false),
   attentionReason: text('attention_reason'),
@@ -320,6 +325,8 @@ export const settings = pgTable('settings', {
   lowStockThreshold: integer('low_stock_threshold').notNull().default(5),
   maxDownloads: integer('max_downloads').notNull().default(10),
   downloadExpiryDays: integer('download_expiry_days').notNull().default(365),
+  /** Newsletter emails sent per rolling 24 hours (Google Workspace allows about 2,000 a day in total). */
+  newsletterDailyLimit: integer('newsletter_daily_limit').notNull().default(1500),
   updatedAt: timestamps.updatedAt,
 }, (t) => [check('settings_singleton', sql`${t.id} = 1`)]);
 
@@ -350,3 +357,66 @@ export const rateLimits = pgTable('rate_limits', {
   windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
   count: integer('count').notNull().default(0),
 });
+
+/* ---------------- Accounts & newsletter ---------------- */
+
+/** Customers who signed in on the website (Google), with the mobile number they add. */
+export const accounts = pgTable('accounts', {
+  userId: uuid('user_id').primaryKey(),
+  email: text('email').notNull(),
+  name: text('name').notNull().default(''),
+  phone: text('phone').notNull().default(''),
+  avatarUrl: text('avatar_url'),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
+}, (t) => [index('accounts_email_idx').on(t.email)]);
+
+export const subscribers = pgTable('subscribers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull().default(''),
+  phone: text('phone').notNull().default(''),
+  status: subscriberStatus('status').notNull().default('pending'),
+  /** Where they signed up: footer, newsletter page, checkout, account, admin, import. */
+  source: text('source').notNull().default(''),
+  consentAt: timestamp('consent_at', { withTimezone: true }),
+  consentIp: text('consent_ip'),
+  unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
+  ...timestamps,
+}, (t) => [index('subscribers_status_idx').on(t.status)]);
+
+export const campaigns = pgTable('campaigns', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  subject: text('subject').notNull(),
+  preheader: text('preheader').notNull().default(''),
+  heading: text('heading').notNull().default(''),
+  body: text('body').notNull().default(''),
+  ctaLabel: text('cta_label').notNull().default(''),
+  ctaUrl: text('cta_url').notNull().default(''),
+  /** Books shown in the email with cover, price and a buy button. */
+  productIds: jsonb('product_ids').$type<string[]>().notNull().default([]),
+  status: campaignStatus('status').notNull().default('draft'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  recipients: integer('recipients').notNull().default(0),
+  sentCount: integer('sent_count').notNull().default(0),
+  failedCount: integer('failed_count').notNull().default(0),
+  createdBy: text('created_by').notNull().default(''),
+  ...timestamps,
+}, (t) => [index('campaigns_status_idx').on(t.status)]);
+
+/** One row per recipient of a campaign, so sending can resume in batches and never repeats. */
+export const campaignSends = pgTable('campaign_sends', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  campaignId: uuid('campaign_id').notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+  subscriberId: uuid('subscriber_id').notNull().references(() => subscribers.id, { onDelete: 'cascade' }),
+  status: sendStatus('status').notNull().default('queued'),
+  error: text('error'),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('campaign_sends_unique').on(t.campaignId, t.subscriberId),
+  index('campaign_sends_queue_idx').on(t.status, t.createdAt),
+  index('campaign_sends_sent_idx').on(t.sentAt),
+]);

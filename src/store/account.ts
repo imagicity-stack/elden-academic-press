@@ -31,8 +31,11 @@ export interface AccountOrder {
   number: number; createdAt: string; status: string; total: number; invoice: string | null; requiresShipping: boolean; token: string;
   items: { title: string; format: string; quantity: number }[];
 }
+export type NewsletterStatus = 'pending' | 'subscribed' | 'unsubscribed' | null;
 export interface AccountData {
   customer: { email: string; name: string; avatar: string | null };
+  profile: { phone: string };
+  newsletter: NewsletterStatus;
   orders: AccountOrder[];
   library: LibraryItem[];
 }

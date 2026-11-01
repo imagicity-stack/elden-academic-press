@@ -10,6 +10,7 @@ import { isStateCode } from '../../lib/states.js';
 import { getSettings } from '../../services/catalog.js';
 import { orderStatusLabel } from '../orders.js';
 import { audit, requireAdmin, requireRole } from './auth.js';
+import { adminNewsletter } from './newsletter.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
 import { adminCategories, adminInventory, adminProducts, adminUploads } from './products.js';
@@ -35,6 +36,7 @@ admin.route('/customers', adminCustomers);
 admin.route('/coupons', adminCoupons);
 admin.route('/enquiries', adminEnquiries);
 admin.route('/resources', adminResources);
+admin.route('/newsletter', adminNewsletter);
 
 const PAID = ['paid', 'partially_refunded', 'refunded'] as const;
 const IST_DAY = sql`(${orders.paidAt} at time zone 'Asia/Kolkata')::date`;
@@ -103,6 +105,7 @@ admin.put('/settings', requireRole('owner'), async (c) => {
     lowStockThreshold: z.number().int().min(0).max(1000),
     maxDownloads: z.number().int().min(1).max(100),
     downloadExpiryDays: z.number().int().min(0).max(3650),
+    newsletterDailyLimit: z.number().int().min(1).max(10_000).optional(),
   }).refine((v) => !v.gstin || v.gstin.startsWith(v.stateCode), { message: 'The GSTIN’s first two digits should match the business state code', path: ['gstin'] }));
   const [row] = await db.update(settings).set({ ...input, updatedAt: sql`now()` }).where(eq(settings.id, 1)).returning();
   await audit(c, 'settings.update', 'settings', 1, input);
