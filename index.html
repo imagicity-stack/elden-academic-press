@@ -21,7 +21,10 @@
         var g = c === 'all' ? 'granted' : 'denied';
         w.gtag('consent', 'default', { ad_storage: g, ad_user_data: g, ad_personalization: g, analytics_storage: g });
         w.gtag('js', new Date());
-        w.gtag('config', 'G-0TR5TFH9KP');
+        // Staff signed in to the admin show up as internal traffic (filtered out in GA4).
+        var staff = false;
+        try { staff = !!localStorage.getItem('elden-admin-auth') && !/[?&]meta-test/.test(l.search) && sessionStorage.getItem('elden-meta-test') !== '1'; } catch (e) {}
+        w.gtag('config', 'G-0TR5TFH9KP', staff ? { traffic_type: 'internal' } : {});
         ['gtm.js?id=GTM-P38DZ6G5', 'gtag/js?id=G-0TR5TFH9KP'].forEach(function (src) {
           var s = d.createElement('script');
           s.async = true;
@@ -40,6 +43,25 @@
     <meta property="og:url" content="https://eldenap.in/" />
     <meta property="og:image" content="https://eldenap.in/assets/elden-mark.png" />
     <link rel="icon" type="image/png" href="/assets/elden-mark.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Elden Academic Press",
+        "legalName": "FLYKRAFT SYNERIGIES PRIVATE LIMITED",
+        "url": "https://eldenap.in/",
+        "logo": "https://eldenap.in/assets/elden-mark.png",
+        "email": "hello@eldenap.in",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Kolghatti, near Black Tank Reformatory School",
+          "addressLocality": "Hazaribagh",
+          "addressRegion": "Jharkhand",
+          "postalCode": "825310",
+          "addressCountry": "IN"
+        }
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Montserrat:wght@400;500;600;700&family=JetBrains+Mono:wght@400&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />

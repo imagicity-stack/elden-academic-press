@@ -15,6 +15,8 @@ import { ElmasterMark } from '../components/Brand';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem, Tilt } from '../components/motion';
 import { NotFound } from './NotFound';
 import { formatName, track } from '../meta';
+import { ga, gaItem } from '../ga';
+import { BookSchema } from '../components/BookSchema';
 
 const TABS = ['Overview', 'Contents', 'For teachers'] as const;
 
@@ -46,6 +48,8 @@ function BookView({ book }: { book: Product }) {
   useEffect(() => {
     const price = (book.formats.print ?? book.formats.digital)?.price;
     track('ViewContent', { content_ids: [book.id], content_name: book.title, content_type: 'product', ...(price ? { value: price / 100, currency: 'INR' } : {}) });
+    const k = book.formats.print ? 'print' : 'digital';
+    if (price) ga('view_item', { currency: 'INR', value: price / 100, items: [gaItem(book.id, book.title, k, price, 1, book.category?.name)] });
   }, [book.id]);
 
   const kind: Kind = format === 'digital' && withPrint && bundle ? 'bundle' : format;
@@ -68,6 +72,7 @@ function BookView({ book }: { book: Product }) {
     const quantity = kind === 'print' ? qty : 1;
     cart.add({ productId: book.id, kind, quantity });
     track('AddToCart', { content_ids: [book.id], content_name: book.title, content_type: 'product', contents: [{ id: book.id, quantity }], value: total / 100, currency: 'INR', format: formatName(kind) });
+    if (chosen) ga('add_to_cart', { currency: 'INR', value: total / 100, items: [gaItem(book.id, book.title, kind, chosen.price, quantity, book.category?.name)] });
     if (go) navigate('/checkout');
     else { setAdded(true); cart.openDrawer(); }
   };
@@ -90,6 +95,7 @@ function BookView({ book }: { book: Product }) {
 
   return (
     <div className="pd">
+      <BookSchema book={book} />
       <div className="wrap pd__top">
         <div className="crumbs crumbs--28">
           <Link to="/">Home</Link><span>/</span><Link to="/catalogue">Store</Link><span>/</span><span className="crumbs__here">{book.title}</span>

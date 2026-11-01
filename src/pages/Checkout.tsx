@@ -7,6 +7,13 @@ import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { CouponField, issueText } from '../components/CartDrawer';
 import { formatList, rememberUser, track } from '../meta';
+import { ga, gaItem } from '../ga';
+
+/** The cart as Google Analytics data. */
+const gaCart = (q: { total: number; lines: { productId: string; title: string; kind: string; unitPrice: number; quantity: number }[] }, coupon?: string | null) => ({
+  currency: 'INR', value: q.total / 100, ...(coupon ? { coupon } : {}),
+  items: q.lines.map((l) => gaItem(l.productId, l.title, l.kind, l.unitPrice, l.quantity)),
+});
 
 /** The cart as Meta event data: value, books, quantities and formats. */
 const cartEvent = (q: { total: number; lines: { productId: string; kind: string; quantity: number }[] }) => ({
@@ -70,6 +77,7 @@ export function Checkout() {
     if (!quote || checkoutTracked.current) return;
     checkoutTracked.current = true;
     track('InitiateCheckout', cartEvent(quote));
+    ga('begin_checkout', gaCart(quote, cart.coupon));
   }, [quote]);
   const set = (k: keyof typeof blank) => (e: { target: { value: string } }) => setD((x: typeof blank) => ({ ...x, [k]: e.target.value }));
   const needsAddress = Boolean(quote?.requiresShipping);
@@ -131,7 +139,10 @@ export function Checkout() {
     setBusy(true);
     try { localStorage.setItem(DETAILS_KEY, JSON.stringify({ ...d, note: '' })); } catch { /* ignore */ }
     rememberUser({ email: d.email, phone: d.phone, name: d.name, city: d.city, state: d.state, pincode: d.pincode });
-    if (quote) track('AddPaymentInfo', cartEvent(quote));
+    if (quote) {
+      track('AddPaymentInfo', cartEvent(quote));
+      ga('add_payment_info', { ...gaCart(quote, cart.coupon), payment_type: 'Razorpay' });
+    }
     const key = JSON.stringify(payload);
     try {
       let res = pending.current?.key === key ? pending.current.res : null;

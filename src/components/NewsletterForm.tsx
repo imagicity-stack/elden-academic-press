@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ga } from '../ga';
 import { newEventId, rememberUser, track } from '../meta';
 import { api } from '../store/api';
 import { useSubmit } from '../store/useSubmit';
@@ -23,7 +24,10 @@ export function NewsletterForm({ source, dark = false }: { source: Source; dark?
       headers: { 'X-Meta-Event-Id': eventId },
     });
     rememberUser({ email: f.email, phone: f.phone, name: f.name });
-    if (r.status === 'subscribed') track('Subscribe', { content_name: 'Newsletter' }, { eventId });
+    if (r.status === 'subscribed') {
+      track('Subscribe', { content_name: 'Newsletter' }, { eventId });
+      ga('newsletter_signup', { method: source });
+    }
     setResult(r.status);
   });
 

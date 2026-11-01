@@ -7,6 +7,7 @@ import type { Product } from '../store/types';
 import { BookCard } from '../components/BookCard';
 import { EASE } from '../components/motion';
 import { track } from '../meta';
+import { ga } from '../ga';
 
 export function Catalogue() {
   const { products, categories, status, reload } = useCatalog();
@@ -34,7 +35,10 @@ export function Catalogue() {
   const topIds = results.slice(0, 10).map((p) => p.id).join(',');
   useEffect(() => {
     if (searched.length < 2) return;
-    const t = setTimeout(() => track('Search', { search_string: searched.slice(0, 100), content_type: 'product', content_ids: topIds ? topIds.split(',') : [] }), 1200);
+    const t = setTimeout(() => {
+      track('Search', { search_string: searched.slice(0, 100), content_type: 'product', content_ids: topIds ? topIds.split(',') : [] });
+      ga('search', { search_term: searched.slice(0, 100) });
+    }, 1200);
     return () => clearTimeout(t);
   }, [searched, topIds]);
 
