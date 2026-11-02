@@ -33,13 +33,13 @@ export const fallbackMessage = (status: number) =>
 
 /**
  * Reads (and other requests safe to repeat) get one more try after a brief pause when the
- * server was waking up or a connection dropped, so a hiccup doesn't show as an error.
+ * server failed, was waking up or a connection dropped, so a hiccup doesn't show as an error.
  */
 export async function withRetry<T>(repeatable: boolean, run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    const passing = e instanceof ApiError && (e.status === 0 || ([502, 503, 504].includes(e.status) && e.code !== 'database_update_needed'));
+    const passing = e instanceof ApiError && (e.status === 0 || ([500, 502, 503, 504].includes(e.status) && e.code !== 'database_update_needed'));
     if (!repeatable || !passing) throw e;
     await new Promise((r) => setTimeout(r, 800));
     return run();

@@ -1,5 +1,6 @@
 // The store API (mounted at /api). Runs as one Vercel function in production
 // and inside Vite's dev server locally.
+import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import type { Deps } from './deps.js';
 import { clientIp, HttpError } from './lib/http.js';
@@ -61,7 +62,9 @@ export function createApp(getDeps: () => Promise<Deps>) {
       console.error('[razorpay]', err.status, err.message);
       return c.json({ error: 'The payment service returned an error. Please try again.', code: 'gateway_error' }, 502);
     }
-    console.error('[api]', c.req.method, c.req.path, err);
+    // A short reference, shown to the visitor and in the log line, to find this error in Vercel → Logs.
+    const ref = randomBytes(4).toString('hex');
+    console.error(`[api] error ref=${ref}`, c.req.method, c.req.path, err);
     // A missing table or column: the code is newer than the database.
     if (['42P01', '42703'].includes(pgCode(err) ?? '')) {
       return c.json({
@@ -71,9 +74,9 @@ export function createApp(getDeps: () => Promise<Deps>) {
     }
     // Couldn't reach the database (or its connection dropped): safe for the browser to retry.
     if (connectionLost(err)) {
-      return c.json({ error: 'The store is busy for a moment. Please try again.', code: 'db_unavailable' }, 503, { 'Retry-After': '1' });
+      return c.json({ error: 'The store is busy for a moment. Please try again.', code: 'db_unavailable', ref }, 503, { 'Retry-After': '1' });
     }
-    return c.json({ error: 'Something went wrong on our side. Please try again.', code: 'server_error' }, 500);
+    return c.json({ error: `Something went wrong on our side. Please try again. (Error ${ref})`, code: 'server_error', ref }, 500);
   });
 
   app.notFound((c) => c.json({ error: 'Not found', code: 'not_found' }, 404));
