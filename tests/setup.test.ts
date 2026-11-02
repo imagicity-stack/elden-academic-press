@@ -9,7 +9,7 @@ import { IDLE_SECONDS, MIGRATIONS_DIR, stayUpUntilConnectionsClose, type DB } fr
 import * as schema from '../server/db/schema.js';
 import { buildSetupSql, buildUpdateSqls, FIRST_UPDATE } from '../server/db/setup-sql.js';
 import { verifySupabaseToken } from '../server/routes/admin/auth.js';
-import { healthCheck } from '../server/services/health.js';
+import { healthCheck, supabaseRegion } from '../server/services/health.js';
 import { createApp } from '../server/app.js';
 import { loadEnv, siteUrl } from '../server/env.js';
 import { JWT_SECRET, SUPABASE_URL, setup, supabaseToken } from './helpers.js';
@@ -76,6 +76,15 @@ describe('/api/health', () => {
     const h = await healthCheck(async () => ({ ...deps, db: empty }), {});
     expect(h.checks.database).toBe('missing');
     expect(h.todo.join(' ')).toMatch(/supabase-setup\.sql/);
+  });
+});
+
+describe('database region', () => {
+  it('reads only the region from a Supabase pooler address', () => {
+    expect(supabaseRegion('postgresql://postgres.abcd:secret@aws-0-eu-central-1.pooler.supabase.com:6543/postgres')).toBe('eu-central-1');
+    expect(supabaseRegion('postgresql://postgres.abcd:secret@aws-1-ap-south-1.pooler.supabase.com:6543/postgres')).toBe('ap-south-1');
+    expect(supabaseRegion('postgresql://postgres:secret@db.abcd.supabase.co:5432/postgres')).toBeNull();
+    expect(supabaseRegion(undefined)).toBeNull();
   });
 });
 
