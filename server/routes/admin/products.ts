@@ -48,6 +48,8 @@ const zProduct = z.object({
   contents: z.array(z.string().trim().max(200)).max(200).default([]),
   coverPath: z.string().max(300).nullable().optional(),
   coverPalette: z.number().int().min(0).max(5).default(0),
+  /** More photos besides the cover, in order. Left out = keep the saved ones (an older admin page). */
+  images: z.array(z.object({ path: z.string().min(1).max(300), alt: zText(150).default('') })).max(20).optional(),
   hasCompanion: z.boolean().default(false),
   isNew: z.boolean().default(false),
   featured: z.boolean().default(false),
@@ -94,8 +96,8 @@ async function uniqueSlug(db: Q, wanted: string, exceptId?: string) {
 }
 
 function productColumns(p: ProductInput, slug: string) {
-  const { print: _p, digital: _d, bundle: _b, slug: _s, ...rest } = p;
-  return { ...rest, slug, categoryId: p.categoryId ?? null, grade: p.grade ?? null, pages: p.pages ?? null, coverPath: p.coverPath ?? null };
+  const { print: _p, digital: _d, bundle: _b, slug: _s, images, ...rest } = p;
+  return { ...rest, ...(images ? { images } : {}), slug, categoryId: p.categoryId ?? null, grade: p.grade ?? null, pages: p.pages ?? null, coverPath: p.coverPath ?? null };
 }
 
 /** Create/update the three variants; stock changes are logged as inventory movements. */
@@ -232,7 +234,7 @@ adminProducts.post('/import', requireRole('manager'), async (c) => {
         categoryId: catId ?? existing?.categoryId ?? null, level, classLabel: r.class ?? '', grade: r.grade ? Number(r.grade) : null,
         boards: (r.boards ?? '').split(/[;|]/).map((b) => b.trim()).filter(Boolean), subject: r.subject ?? '', language: r.language || 'English',
         pages: r.pages ? Number(r.pages) : null, edition: r.edition ?? '', isbn: r.isbn ?? '',
-        highlights: existing?.highlights ?? [], contents: existing?.contents ?? [], coverPath: existing?.coverPath ?? null, coverPalette: existing?.coverPalette ?? 0, ebookWithPrint: existing?.ebookWithPrint ?? false,
+        highlights: existing?.highlights ?? [], contents: existing?.contents ?? [], coverPath: existing?.coverPath ?? null, coverPalette: existing?.coverPalette ?? 0, images: existing?.images ?? [], ebookWithPrint: existing?.ebookWithPrint ?? false,
         print: { enabled: !Number.isNaN(pp), price: Number.isNaN(pp) ? old('print')?.price ?? 0 : pp, sku: r.print_sku || old('print')?.sku, stock: r.stock ? Number(r.stock) : old('print')?.stock ?? 0, weightGrams: r.weight_g ? Number(r.weight_g) : old('print')?.weightGrams ?? null, taxRate: old('print')?.taxRate ?? 0 },
         digital: { enabled: !Number.isNaN(ep), price: Number.isNaN(ep) ? old('digital')?.price ?? 0 : ep, sku: r.ebook_sku || old('digital')?.sku, taxRate: old('digital')?.taxRate ?? 18, filePath: old('digital')?.filePath, fileName: old('digital')?.fileName, fileSize: old('digital')?.fileSize, files: old('digital')?.files?.length ? old('digital')!.files : undefined },
         bundle: { enabled: !Number.isNaN(bp), price: Number.isNaN(bp) ? old('bundle')?.price ?? 0 : bp, sku: old('bundle')?.sku },
@@ -280,7 +282,7 @@ async function productDetail(c: Context<AppEnv>, id: string) {
   const [{ sold }] = await db.select({ sold: sql<number>`coalesce(sum(${orderItems.quantity}), 0)::int` }).from(orderItems).where(eq(orderItems.productId, id));
   const moves = v('print') ? await db.select().from(inventoryMovements).where(eq(inventoryMovements.variantId, v('print')!.id)).orderBy(desc(inventoryMovements.createdAt)).limit(20) : [];
   return {
-    product: { ...p, coverUrl: p.coverPath ? storage.publicUrl('covers', p.coverPath) : null },
+    product: { ...p, coverUrl: p.coverPath ? storage.publicUrl('covers', p.coverPath) : null, images: p.images.map((i) => ({ ...i, url: storage.publicUrl('covers', i.path) })) },
     variants: { print: v('print') ?? null, digital: v('digital') ?? null, bundle: v('bundle') ?? null },
     sold, movements: moves,
   };

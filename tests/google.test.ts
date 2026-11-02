@@ -25,7 +25,7 @@ describe('ISBN as GTIN', () => {
 describe('/feeds/products.xml', () => {
   it('lists printed books that have a cover, in Merchant Center format', async () => {
     const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
-    await t.db.update(products).set({ coverPath: 'math.jpg', isbn: '978-0-306-40615-7' }).where(eq(products.id, p.id));
+    await t.db.update(products).set({ coverPath: 'math.jpg', isbn: '978-0-306-40615-7', images: [{ path: 'inside.jpg', alt: '' }, { path: 'back.jpg', alt: 'Back cover' }] }).where(eq(products.id, p.id));
     const { res, xml } = await feed();
     expect(res.headers.get('content-type')).toContain('application/xml');
     expect(xml).toContain('xmlns:g="http://base.google.com/ns/1.0"');
@@ -33,6 +33,7 @@ describe('/feeds/products.xml', () => {
     expect(item).toBeTruthy();
     expect(item).toContain('<g:link>https://eldenap.in/books/mathematics-today</g:link>');
     expect(item).toContain('<g:image_link>https://files.test/public/covers/math.jpg</g:image_link>');
+    expect(item).toContain('<g:additional_image_link>https://files.test/public/covers/inside.jpg</g:additional_image_link>\n      <g:additional_image_link>https://files.test/public/covers/back.jpg</g:additional_image_link>');
     expect(item).toMatch(/<g:price>\d+\.\d\d INR<\/g:price>/);
     expect(item).toContain('<g:availability>in_stock</g:availability>');
     expect(item).toContain('<g:gtin>9780306406157</g:gtin>');

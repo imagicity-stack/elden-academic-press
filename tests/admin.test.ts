@@ -189,6 +189,40 @@ describe('products', () => {
     expect(empty.status).toBe(400);
   });
 
+  it('keeps more photos besides the cover, in order, and shows them in the store', async () => {
+    const h = await as(OWNER);
+    const book = { ...draft, status: 'active', digital: { enabled: false, price: 0 }, bundle: { enabled: false, price: 0 }, coverPath: '2027/c/cover.jpg' };
+    const images = [
+      { path: '2027/a/inside.jpg', alt: 'Inside: chapter 3' },
+      { path: '2027/b/back.jpg', alt: '' },
+    ];
+    const r = await t.call('POST', '/admin/products', { headers: h, body: { ...book, images } });
+    expect(r.status).toBe(201);
+    const id = r.json.product.id;
+    expect(r.json.product.coverPath).toBe('2027/c/cover.jpg'); // the cover is untouched
+    expect(r.json.product.images).toEqual(images.map((i) => ({ ...i, url: `https://files.test/public/covers/${i.path}` })));
+
+    // In the store: the cover stays the picture, the photos come separately.
+    const listed = (await t.call('GET', '/catalog')).json.items.find((b: any) => b.id === id);
+    expect(listed.coverUrl).toBe('https://files.test/public/covers/2027/c/cover.jpg');
+    expect(listed.images).toEqual([
+      { url: 'https://files.test/public/covers/2027/a/inside.jpg', alt: 'Inside: chapter 3' },
+      { url: 'https://files.test/public/covers/2027/b/back.jpg', alt: '' },
+    ]);
+
+    // Reordered and one removed.
+    const u = await t.call('PUT', `/admin/products/${id}`, { headers: h, body: { ...book, images: [images[1]] } });
+    expect(u.json.product.images.map((i: any) => i.path)).toEqual(['2027/b/back.jpg']);
+    // A save from an admin page without the photos field (opened before this update) keeps them.
+    const old = await t.call('PUT', `/admin/products/${id}`, { headers: h, body: book });
+    expect(old.json.product.images.map((i: any) => i.path)).toEqual(['2027/b/back.jpg']);
+    // So does a spreadsheet import of the same book.
+    const slug = u.json.product.slug;
+    await t.call('POST', '/admin/products/import', { headers: h, body: { csv: `slug,title,print_price,status\n${slug},${draft.title},250,active\n` } });
+    const [p] = await t.db.select().from(products).where(eq(products.id, id));
+    expect(p.images.map((i) => i.path)).toEqual(['2027/b/back.jpg']);
+  });
+
   it('rejects duplicate SKUs and bundles without both formats', async () => {
     const h = await as(OWNER);
     const dup = await t.call('POST', '/admin/products', { headers: h, body: { ...draft, print: { ...draft.print, sku: 'M8-P' } } });

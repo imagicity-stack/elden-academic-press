@@ -343,3 +343,11 @@
 .ad-files__add { align-self: flex-start; }
 @media (max-width: 640px) { .ad-files__row { grid-template-columns: 22px minmax(0, 1fr); } .ad-files__actions { grid-column: 2; } }
 .ad-free-ebook { margin-top: 12px; padding: 10px 12px; border-radius: 6px; background: #EEF6F0; }
+
+/* More photos (besides the cover) in the product editor */
+.ad-photos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px; }
+.ad-photos__item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ad-photos__item img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px; border: 1px solid #E4DCCD; background: #FBF8F2; }
+.ad-photos__item input { width: 100%; min-width: 0; font: 13px Montserrat, sans-serif; padding: 6px 8px; border: 1px solid #DCD2C0; border-radius: 6px; background: #fff; }
+.ad-photos__actions { display: flex; gap: 10px; align-items: center; }
+.ad-photos__actions .ad-neg { margin-left: auto; }

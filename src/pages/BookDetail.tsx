@@ -11,6 +11,7 @@ import { MAX_QTY, useCart } from '../store/cart';
 import type { Kind, Product } from '../store/types';
 import { BookCard } from '../components/BookCard';
 import { BookCover } from '../components/BookCover';
+import { BookPhotos } from '../components/BookPhotos';
 import { ElmasterMark } from '../components/Brand';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem, Tilt } from '../components/motion';
 import { NotFound } from './NotFound';
@@ -98,10 +99,13 @@ function BookView({ book }: { book: Product }) {
           <Link to="/">Home</Link><span>/</span><Link to="/catalogue">Store</Link><span>/</span><span className="crumbs__here">{book.title}</span>
         </div>
         <div className="pd__grid">
-          <div className="pd__media" style={{ '--pd-tint': c.bg } as CSSProperties}>
-            <motion.div className="pd__cover" initial={{ opacity: 0, y: 30, rotate: -4 }} animate={{ opacity: 1, y: 0, rotate: 0 }} transition={{ duration: 0.9, ease: EASE }}>
-              <Tilt max={12}><BookCover book={book} size="detail" /></Tilt>
-            </motion.div>
+          <div className="pd__side">
+            <div className="pd__media" style={{ '--pd-tint': c.bg } as CSSProperties}>
+              <motion.div className="pd__cover" initial={{ opacity: 0, y: 30, rotate: -4 }} animate={{ opacity: 1, y: 0, rotate: 0 }} transition={{ duration: 0.9, ease: EASE }}>
+                <Tilt max={12}><BookCover book={book} size="detail" /></Tilt>
+              </motion.div>
+            </div>
+            <BookPhotos photos={book.images ?? []} title={book.title} />
           </div>
 
           <div className="pd__info">

@@ -30,7 +30,10 @@ export function isbn13(raw: string): string | null {
 function item(b: CatalogItem, site: string): string | null {
   const print = b.formats.print;
   if (!print || !b.coverUrl) return null;
-  const image = b.coverUrl.startsWith('/') ? site + b.coverUrl : b.coverUrl;
+  const abs = (u: string) => (u.startsWith('/') ? site + u : u);
+  const image = abs(b.coverUrl);
+  // Google takes up to 10 more photos.
+  const more = (b.images ?? []).slice(0, 10).map((i) => abs(i.url));
   const title = clean(`${b.title}${b.classLabel ? ` — ${b.classLabel}` : ''} (${print.includesEbook ? 'Printed book + free e-book' : 'Printed book'})`, 150);
   const description = clean(b.description || b.blurb || b.title, 5000);
   const onSale = print.compareAt && print.compareAt > print.price;
@@ -44,6 +47,7 @@ function item(b: CatalogItem, site: string): string | null {
     f('description', description),
     f('link', `${site}/books/${encodeURIComponent(b.slug)}`),
     f('image_link', image),
+    ...more.map((u) => f('additional_image_link', u)),
     f('availability', print.available ? 'in_stock' : 'out_of_stock'),
     f('price', money(onSale ? print.compareAt! : print.price)),
     ...(onSale ? [f('sale_price', money(print.price))] : []),

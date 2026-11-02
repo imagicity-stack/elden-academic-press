@@ -32,6 +32,8 @@ export interface Product {
   highlights: string[];
   contents: string[];
   coverUrl: string | null;
+  /** More photos besides the cover. */
+  images?: { url: string; alt: string }[];
   palette: number;
   companion: boolean;
   isNew: boolean;

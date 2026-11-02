@@ -43,6 +43,8 @@ export interface CatalogItem {
   highlights: string[];
   contents: string[];
   coverUrl: string | null;
+  /** More photos besides the cover (the cover is always shown first, on its own). */
+  images: { url: string; alt: string }[];
   palette: number;
   companion: boolean;
   isNew: boolean;
@@ -97,6 +99,7 @@ export async function loadCatalog(db: Q, storage: Storage): Promise<{ items: Cat
       highlights: p.highlights,
       contents: p.contents,
       coverUrl: p.coverPath ? storage.publicUrl('covers', p.coverPath) : null,
+      images: (p.images ?? []).map((i) => ({ url: storage.publicUrl('covers', i.path), alt: i.alt })),
       palette: p.coverPalette,
       companion: p.hasCompanion,
       isNew: p.isNew,
