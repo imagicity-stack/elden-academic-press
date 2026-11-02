@@ -963,3 +963,17 @@ select.input { appearance: none; padding-right: 42px; background: #FFFFFF url("d
 .buy__free { padding: 10px 14px; background: #E5F5EC; font: 400 14px/1.45 var(--f-text); color: var(--ink); }
 .buy__free span { font-weight: 700; color: var(--ok); }
 .buy__free b { font-weight: 600; color: var(--ok); }
+
+/* Checkout: how to pay */
+.pay-modes { display: grid; gap: 10px; }
+.pay-mode { display: flex; align-items: flex-start; gap: 14px; width: 100%; padding: 16px 18px; border: 0; background: #FFFFFF; box-shadow: inset 0 0 0 1.5px var(--line-2); text-align: left; cursor: pointer; transition: box-shadow .2s; }
+.pay-mode:hover:not(.is-off) { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.pay-mode.is-on { box-shadow: inset 0 0 0 2px var(--ink); }
+.pay-mode.is-off { cursor: not-allowed; background: var(--paper-2); }
+.pay-mode.is-off .pay-mode__text b { color: var(--faint); }
+.pay-mode__dot { flex: none; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.pay-mode.is-on .pay-mode__dot { box-shadow: inset 0 0 0 6px var(--accent); }
+.pay-mode.is-off .pay-mode__dot { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.pay-mode__text { display: flex; flex-direction: column; gap: 3px; font-size: 15px; color: var(--ink); }
+.pay-mode__text b { font-weight: 600; }
+.pay-mode__text span { font-size: 13.5px; line-height: 1.45; color: var(--muted); }

@@ -8,6 +8,7 @@ import { body, HttpError, notFound, rateLimit, zEmail, zName, zPhone, zPincode, 
 import { MAX_QTY } from '../lib/pricing.js';
 import { STATES, isStateCode } from '../lib/states.js';
 import { getSettings, loadCatalog } from '../services/catalog.js';
+import { tagCatalog } from '../lib/cdn.js';
 import { confirmRazorpayPayment, createOrder, logEvent, orderToken, quote } from '../services/orders.js';
 import { visitOf } from '../services/tracking.js';
 
@@ -24,28 +25,32 @@ export const store = new Hono<AppEnv>();
 store.get('/config', async (c) => {
   const { db, razorpay } = c.get('deps');
   const s = await getSettings(db);
-  c.header('Cache-Control', 'public, max-age=60, s-maxage=300');
+  await tagCatalog();
+  c.header('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
   return c.json({
     storeName: s.storeName,
     payments: razorpay ? { keyId: razorpay.keyId, simulated: razorpay.simulated } : null,
     shipping: { flat: s.shippingFlat, freeAbove: s.freeShippingAbove },
     states: STATES,
     supportEmail: s.supportEmail,
+    cod: s.codEnabled ? { advance: s.codAdvance } : null,
   });
 });
 
 store.get('/catalog', async (c) => {
   const { db, storage } = c.get('deps');
   const data = await loadCatalog(db, storage);
-  // Cached at Vercel's edge for a minute; admins' edits show up within that.
-  c.header('Cache-Control', 'public, max-age=30, s-maxage=60, stale-while-revalidate=600');
+  // Cached at Vercel's edge for a minute (cleared when the admin saves a product); browsers always ask the edge.
+  await tagCatalog();
+  c.header('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600');
   return c.json(data);
 });
 
 store.get('/resources', async (c) => {
   const { db, storage } = c.get('deps');
   const rows = await db.select().from(resources).where(eq(resources.published, true)).orderBy(asc(resources.sort), asc(resources.title));
-  c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+  await tagCatalog();
+  c.header('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
   return c.json({
     items: rows.map((r) => ({
       id: r.id, title: r.title, kind: r.kind, level: r.level, subject: r.subject, size: r.fileSize,
@@ -80,6 +85,8 @@ const zCheckout = z.object({
   note: zText(500).optional(),
   /** "Email me about new books and offers": subscribed once the order is paid. */
   newsletter: z.boolean().optional(),
+  /** 'cod': pay the advance online now and the rest in cash on delivery (printed books only). */
+  paymentMode: z.enum(['online', 'cod']).default('online'),
   /** Honeypot: real people never fill this in. */
   website: z.string().max(0).optional(),
 });

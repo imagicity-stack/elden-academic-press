@@ -28,6 +28,8 @@ export interface LibraryItem {
   purchasedAt: string; expiresAt: string | null; downloadsLeft: number; canRead: boolean; downloadUrl: string | null;
   /** The e-book's files (several for books in parts). */
   files?: { index: number; label: string; downloadUrl: string | null }[];
+  /** Cash on delivery: unlocks once the books are delivered. */
+  awaitingDelivery?: boolean;
 }
 export interface AccountOrder {
   number: number; createdAt: string; status: string; total: number; invoice: string | null; requiresShipping: boolean; token: string;

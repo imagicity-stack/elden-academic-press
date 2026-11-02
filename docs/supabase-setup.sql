@@ -506,6 +506,14 @@ UPDATE "product_variants" SET "files" = jsonb_build_array(jsonb_build_object('pa
 ALTER TABLE "order_items" ADD COLUMN "includes_ebook" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "products" ADD COLUMN "ebook_with_print" boolean DEFAULT false NOT NULL;
 
+-- ===== 0007_cash_on_delivery =====
+
+ALTER TABLE "orders" ADD COLUMN "payment_mode" text DEFAULT 'online' NOT NULL;--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "cod_amount" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "cod_collected_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "settings" ADD COLUMN "cod_enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "settings" ADD COLUMN "cod_advance" integer DEFAULT 6000 NOT NULL;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -517,7 +525,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('a7c6aec2b7878ee57a12e1ff29aedca10c3defc0567e6aafee03cdfebcd7c937', 1793529577196),
   ('06e1e45bcfba4da04c42b09a0220e67611794880049f6b37c61e753680fe072f', 1793535992306),
   ('e09910d8155217384a52e517b0e56a99ceda1c8858b5dfb47883570d1f693426', 1793551879678),
-  ('190fb71cd0a34eb8490872de5172c4afd8d22a046b4ba373f174be7d054e4746', 1793634337644);
+  ('190fb71cd0a34eb8490872de5172c4afd8d22a046b4ba373f174be7d054e4746', 1793634337644),
+  ('dc197dfbe066549b82b7d32fa81540df32d8d6d5d434dc434617fae1aba99c6c', 1793635408554);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

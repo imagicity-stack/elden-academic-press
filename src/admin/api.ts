@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError } from '../store/api';
+import { ApiError, fallbackMessage, withRetry } from '../store/api';
 import { accessToken, supabase } from './auth';
 
 export { ApiError };
@@ -9,23 +9,26 @@ async function authed(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch('/api/admin' + path, { ...init, headers: { ...(init.headers ?? {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
 }
 
-export async function adminApi<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
-  let res: Response;
-  try {
-    res = await authed(path, {
-      method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
-      headers: init.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    });
-  } catch {
-    throw new ApiError(0, 'Can’t reach the server. Check your connection.', 'network');
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    if (res.status === 401) window.dispatchEvent(new Event('admin:unauthenticated'));
-    throw new ApiError(res.status, data.error ?? 'Something went wrong.', data.code, data.details);
-  }
-  return data as T;
+export async function adminApi<T>(path: string, init: { method?: string; body?: unknown; retry?: boolean } = {}): Promise<T> {
+  const method = init.method ?? (init.body === undefined ? 'GET' : 'POST');
+  return withRetry(method === 'GET' || Boolean(init.retry), async () => {
+    let res: Response;
+    try {
+      res = await authed(path, {
+        method,
+        headers: init.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      });
+    } catch {
+      throw new ApiError(0, 'Can’t reach the server. Check your connection.', 'network');
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 401) window.dispatchEvent(new Event('admin:unauthenticated'));
+      throw new ApiError(res.status, data.error ?? fallbackMessage(res.status), data.code, data.details);
+    }
+    return data as T;
+  });
 }
 
 /** Load data for a page; `reload()` refetches. */

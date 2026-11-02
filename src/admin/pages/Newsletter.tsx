@@ -4,7 +4,7 @@ import { adminApi, ApiError, downloadFile, fmtDate, useAdmin } from '../api';
 import { canManage, useMe } from '../AdminApp';
 import { Badge, Btn, Card, Check, Empty, ErrorBox, Loading, Modal, Page, Pagination, SelectField, TextArea, TextField, useAction, type Tone } from '../ui';
 
-interface Summary { subscribed: number; pending: number; unsubscribed: number; accounts: number; sentToday: number; dailyLimit: number }
+interface Summary { subscribed: number; pending: number; unsubscribed: number; accounts: number; accountsNotSubscribed: number; sentToday: number; dailyLimit: number }
 type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled';
 interface Campaign {
   id: string; subject: string; preheader: string; heading: string; body: string; ctaLabel: string; ctaUrl: string; productIds: string[];
@@ -42,11 +42,12 @@ function NewsletterHome({ tab }: { tab: string }) {
       {summary.error ? <ErrorBox error={summary.error} retry={summary.reload} /> : (
         <div className="ad-stats">
           <Stat label="Subscribers" value={s ? n(s.subscribed) : '…'} sub="Receive campaigns" />
-          <Stat label="Waiting to confirm" value={s ? n(s.pending) : '…'} sub="Haven’t clicked the email link yet" />
+          <Stat label="Not confirmed" value={s ? n(s.pending) : '…'} sub="Signed up when the form still asked to confirm" />
           <Stat label="Signed-up accounts" value={s ? n(s.accounts) : '…'} sub="Signed in with Google" />
           <Stat label="Sent in the last 24 hours" value={s ? n(s.sentToday) : '…'} sub={s ? `Limit ${n(s.dailyLimit)} a day (Settings)` : ''} />
         </div>
       )}
+      {s && s.pending > 0 && canManage(me) && <AddUnconfirmed count={s.pending} onDone={summary.reload} />}
       <div className="ad-tabs">{tabs.map(([k, l]) => (
         <NavLink key={k} to={`/admin/newsletter${k === 'campaigns' ? '' : '/' + k}`} end className={({ isActive }) => 'ad-tab' + (isActive || (k === 'campaigns' && tab === 'campaigns') ? ' is-on' : '')}>{l}</NavLink>
       ))}</div>
@@ -112,7 +113,6 @@ function CampaignEditor({ id }: { id: string }) {
   const { me } = useMe();
   const navigate = useNavigate();
   const { data, error, reload, setData } = useAdmin<Campaign>(isNew ? null : `/newsletter/campaigns/${id}`);
-  const summary = useAdmin<Summary>('/newsletter/summary');
   const [f, setF] = useState<Draft | null>(isNew ? EMPTY : null);
   const [saved, setSaved] = useState<string>(JSON.stringify(EMPTY));
   const [fieldErr, setFieldErr] = useState<Record<string, string[]>>({});
@@ -213,7 +213,7 @@ function CampaignEditor({ id }: { id: string }) {
         if (row.id === id) setData(r); else navigate(`/admin/newsletter/campaigns/${row.id}`, { replace: true });
         return true;
       }} />}
-      {dialog === 'send' && <SendDialog summary={summary.data} subject={f.subject} onClose={() => setDialog(null)} send={async () => {
+      {dialog === 'send' && <SendDialog subject={f.subject} onClose={() => setDialog(null)} send={async () => {
         const row = await saveFirst();
         if (!row) return false;
         await adminApi(`/newsletter/campaigns/${row.id}/send`, { method: 'POST' });
@@ -281,7 +281,7 @@ function Preview({ draft }: { draft: Draft }) {
   useEffect(() => {
     const mine = ++seq.current;
     const t = setTimeout(() => {
-      adminApi<{ html: string }>('/newsletter/campaigns/preview', { body: JSON.parse(key) })
+      adminApi<{ html: string }>('/newsletter/campaigns/preview', { body: JSON.parse(key), retry: true })
         .then((r) => { if (mine === seq.current) { setHtml(r.html); setErr(null); } })
         .catch((e) => { if (mine === seq.current) setErr((e as Error).message); });
     }, 450);
@@ -334,23 +334,51 @@ function ScheduleDialog({ current, onClose, schedule }: { current: string | null
   );
 }
 
-function SendDialog({ summary, subject, onClose, send }: { summary: Summary | null; subject: string; onClose: () => void; send: () => Promise<boolean> }) {
+function SendDialog({ subject, onClose, send }: { subject: string; onClose: () => void; send: () => Promise<boolean> }) {
   const [sure, setSure] = useState(false);
   const { busy, run } = useAction();
+  // A fresh count each time the dialog opens.
+  const { data: summary, error, reload } = useAdmin<Summary>('/newsletter/summary');
   const count = summary?.subscribed ?? 0;
   const days = summary ? Math.ceil(count / Math.max(1, summary.dailyLimit)) : 1;
   return (
     <Modal title="Send this campaign now?" onClose={onClose} footer={<>
       <span className="ad-grow" /><Btn onClick={onClose}>Cancel</Btn>
-      <Btn kind="primary" busy={busy === 'send'} disabled={!sure || !count} onClick={() => run('send', send, 'Sending started').then((ok) => ok && onClose())}>Send to {n(count)} subscriber{count === 1 ? '' : 's'}</Btn>
+      <Btn kind="primary" busy={busy === 'send'} disabled={!sure || !count} onClick={() => run('send', send, 'Sending started').then((ok) => ok && onClose())}>
+        {summary ? `Send to ${n(count)} subscriber${count === 1 ? '' : 's'}` : 'Send'}
+      </Btn>
     </>}>
       <div className="ad-form">
-        <p><b>{subject || 'This campaign'}</b> goes to <b>{n(count)}</b> subscriber{count === 1 ? '' : 's'}.{' '}
-          {days > 1 ? `With your limit of ${n(summary!.dailyLimit)} a day it will take about ${days} days.` : 'It goes out in batches over the next few minutes.'}</p>
-        {!count && <div className="ad-alert ad-alert--amber"><div>There are no subscribers yet.</div></div>}
+        {error ? <ErrorBox error={error} retry={reload} /> : !summary ? <p className="ad-muted">Counting subscribers…</p> : (
+          <>
+            <p><b>{subject || 'This campaign'}</b> goes to <b>{n(count)}</b> subscriber{count === 1 ? '' : 's'}.{' '}
+              {days > 1 ? `With your limit of ${n(summary.dailyLimit)} a day it will take about ${days} days.` : 'It goes out in batches over the next few minutes.'}</p>
+            {!count && <div className="ad-alert ad-alert--amber"><div>No one is subscribed yet.</div></div>}
+            {(summary.pending > 0 || summary.accountsNotSubscribed > 0) && (
+              <div className="ad-alert ad-alert--amber"><div>
+                <b>Not included:</b>
+                {summary.pending > 0 && <> {n(summary.pending)} who signed up on the website but never confirmed (add them from the Newsletter page).</>}
+                {summary.accountsNotSubscribed > 0 && <> {n(summary.accountsNotSubscribed)} signed-up account{summary.accountsNotSubscribed === 1 ? '' : 's'} not on the list (they joined before sign-up added people automatically; they can turn it on in their account, or add them under Subscribers if they agreed).</>}
+              </div></div>
+            )}
+          </>
+        )}
         <Check label="I’ve sent myself a test and checked it" checked={sure} onChange={setSure} />
       </div>
     </Modal>
+  );
+}
+
+/** Older website sign-ups that were waiting for an email confirmation the form no longer asks for. */
+function AddUnconfirmed({ count, onDone }: { count: number; onDone: () => void }) {
+  const { busy, run } = useAction();
+  const go = () => run('add', () => adminApi<{ added: number }>('/newsletter/subscribers/add-unconfirmed', { method: 'POST' }))
+    .then((r) => { if (r) onDone(); });
+  return (
+    <div className="ad-alert ad-alert--amber ad-nl-note">
+      <div><b>{n(count)}</b> {count === 1 ? 'person' : 'people'} signed up on the website when the form still asked them to confirm by email, and didn’t click the link. They don’t get campaigns.</div>
+      <Btn size="sm" busy={busy === 'add'} onClick={go}>Add them to the list</Btn>
+    </div>
   );
 }
 
@@ -488,7 +516,9 @@ function EditSubscriber({ sub, onClose, onSaved }: { sub: Subscriber; onClose: (
           </SelectField>
         )}
         {sub.status !== 'subscribed' && (
-          <p className="ad-muted">{sub.status === 'pending' ? 'Hasn’t confirmed from the email yet.' : `Unsubscribed ${fmtDate(sub.unsubscribedAt)}.`} Only they can subscribe again, from the website, so their consent is on record.</p>
+          <p className="ad-muted">{sub.status === 'pending'
+            ? 'Signed up on the website when the form still asked to confirm by email. “Add them to the list” on the Newsletter page adds everyone like this.'
+            : `Unsubscribed ${fmtDate(sub.unsubscribedAt)}. Only they can subscribe again, from the website, so their consent is on record.`}</p>
         )}
         <p className="ad-muted">Joined from {SOURCE[sub.source] ?? sub.source}{sub.consentAt && `, consent ${fmtDate(sub.consentAt, true)}`}.</p>
       </div>

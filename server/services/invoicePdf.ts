@@ -32,7 +32,9 @@ const loadAssets = () => (assets ??= Promise.all([
 export const invoiceTitle = (s: Settings, items: Item[]) =>
   s.gstin ? (items.every((i) => i.variantKind === 'print') ? 'Bill of Supply' : 'Tax Invoice') : 'Invoice';
 
-const payMethod = (o: Order) => paymentMethodLabel(o.paymentMethod) || (o.total ? 'Online' : 'No payment due');
+const payMethod = (o: Order) => (o.paymentMode === 'cod'
+  ? `${inr(o.total - o.codAmount)} advance online, ${inr(o.codAmount)} cash on delivery`
+  : paymentMethodLabel(o.paymentMethod) || (o.total ? 'Online' : 'No payment due'));
 
 export const invoiceFileName = (o: Order) => `Elden-invoice-${(o.invoiceNumber ?? `order-${o.number}`).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`;
 
@@ -257,8 +259,9 @@ export async function renderInvoicePdf(o: Order, items: Item[], s: Settings): Pr
     const sy = w.y - 20;
     const ref = o.razorpayPaymentId && !o.razorpayPaymentId.startsWith('free_') ? o.razorpayPaymentId : '';
     pg().drawRectangle({ x: M, y: sy - (ref ? 46 : 34), width: 170, height: ref ? 56 : 44, borderColor: C.ok, borderWidth: 1.4 });
-    w.text('PAID', M + 12, sy - 8, { font: f.bold, size: 13, color: C.ok, track: 2 });
-    w.text(`${istDate(o.paidAt)} · ${payMethod(o)}`, M + 12, sy - 24, { size: 8, color: C.ok });
+    const codDue = o.paymentMode === 'cod' && !o.codCollectedAt;
+    w.text(codDue ? 'ADVANCE PAID' : 'PAID', M + 12, sy - 8, { font: f.bold, size: 13, color: C.ok, track: 2 });
+    w.text(codDue ? `${istDate(o.paidAt)} · ${inr(o.codAmount)} due on delivery` : `${istDate(o.paidAt)} · ${o.paymentMode === 'cod' ? 'Cash on delivery' : payMethod(o)}`, M + 12, sy - 24, { size: 8, color: C.ok });
     if (ref) w.text(`Ref ${ref}`, M + 12, sy - 36, { size: 7.5, color: C.ok });
   }
 

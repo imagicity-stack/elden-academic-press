@@ -12,11 +12,33 @@ export type Q = DB | Tx;
 
 export const MIGRATIONS_DIR = fileURLToPath(new URL('./migrations', import.meta.url));
 
+/** Seconds an unused database connection stays open before it is closed. */
+export const IDLE_SECONDS = 5;
+
 /** Production / Supabase: postgres.js through Supabase's transaction pooler. */
 export function connectPostgres(url: string): DB {
-  const client = postgres(url, { prepare: false, max: 3, idle_timeout: 20, connect_timeout: 10 });
+  const client = postgres(url, {
+    prepare: false, max: 3, idle_timeout: IDLE_SECONDS, max_lifetime: 5 * 60, connect_timeout: 8,
+  });
   return drizzlePostgres(client, { schema });
 }
+
+/**
+ * Vercel pauses a server instance once its requests and background work finish, and wakes
+ * it for later visitors. A database connection left open across a pause is usually dead on
+ * waking, and the first query on it hangs until the request times out. So after each request
+ * the instance is kept running until its idle connections have closed (what Vercel's
+ * attachDatabasePool does for other drivers). A newer request restarts the wait.
+ */
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+let idleDone: (() => void) | undefined;
+export function stayUpUntilConnectionsClose(waitUntil: (p: Promise<unknown>) => void) {
+  if (idleTimer) { clearTimeout(idleTimer); idleDone?.(); }
+  const p = new Promise<void>((resolve) => { idleDone = resolve; });
+  idleTimer = setTimeout(() => { idleTimer = undefined; idleDone?.(); }, IDLE_SECONDS * 1000 + 500);
+  waitUntil(p);
+}
+export const afterConnectionsClose = () => new Promise<void>((r) => setTimeout(r, IDLE_SECONDS * 1000 + 500));
 
 /** Embedded Postgres (PGlite) for local development and tests. Pass no dir for in-memory. */
 export async function connectPglite(dir?: string): Promise<DB> {

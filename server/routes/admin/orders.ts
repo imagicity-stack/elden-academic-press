@@ -7,7 +7,7 @@ import { toCsv } from '../../lib/csv.js';
 import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
 import { stateName } from '../../lib/states.js';
 import { getSettings } from '../../services/catalog.js';
-import { sendOrderConfirmation, sendRefundNotice, sendShipped } from '../../services/emails.js';
+import { sendEbookUnlocked, sendOrderConfirmation, sendRefundNotice, sendShipped } from '../../services/emails.js';
 import { renderPackingSlip } from '../../services/invoice.js';
 import { invoiceFileName, renderInvoicePdf } from '../../services/invoicePdf.js';
 import { cancelUnpaid, logEvent, orderLink, refundOrder } from '../../services/orders.js';
@@ -59,6 +59,7 @@ adminOrders.get('/', async (c) => {
       id: orders.id, number: orders.number, createdAt: orders.createdAt, name: orders.name, email: orders.email, phone: orders.phone,
       total: orders.total, paymentStatus: orders.paymentStatus, fulfillmentStatus: orders.fulfillmentStatus, cancelledAt: orders.cancelledAt,
       requiresShipping: orders.requiresShipping, needsAttention: orders.needsAttention, items: itemCount.n, shipState: orders.shipState,
+      paymentMode: orders.paymentMode, codAmount: orders.codAmount, codCollectedAt: orders.codCollectedAt,
     }).from(orders).leftJoin(itemCount, eq(itemCount.orderId, orders.id)).where(where)
       .orderBy(desc(orders.createdAt)).limit(f.limit).offset((f.page - 1) * f.limit),
     db.select({ total: count() }).from(orders).where(where),
@@ -129,13 +130,21 @@ adminOrders.post('/:id/fulfillment', async (c) => {
     trackingUrl: input.trackingUrl === '' ? null : input.trackingUrl ?? o.trackingUrl,
     packedAt: input.status === 'packed' ? now : input.status === 'unfulfilled' ? null : o.packedAt ?? now,
     shippedAt: input.status === 'shipped' ? o.shippedAt ?? now : input.status === 'delivered' ? o.shippedAt ?? now : null,
-    deliveredAt: input.status === 'delivered' ? now : null,
+    deliveredAt: input.status === 'delivered' ? o.deliveredAt ?? now : null,
+    // Cash on delivery: the courier collects the balance when the books are delivered.
+    codCollectedAt: o.paymentMode === 'cod' ? (input.status === 'delivered' ? o.codCollectedAt ?? now : null) : null,
     updatedAt: sql`now()`,
   }).where(eq(orders.id, o.id)).returning();
   const label = { unfulfilled: 'Marked as not packed', packed: 'Packed', shipped: `Shipped${u.courier ? ` with ${u.courier}` : ''}${u.trackingNumber ? ` (${u.trackingNumber})` : ''}`, delivered: 'Delivered' }[input.status];
   await logEvent(deps.db, o.id, input.status === 'unfulfilled' ? 'fulfillment' : input.status, label, c.get('admin').email);
   await audit(c, 'order.fulfillment', 'order', o.number, input);
   if (input.status === 'shipped' && input.notify && o.fulfillmentStatus !== 'shipped') await sendShipped(deps, u, await getSettings(deps.db));
+  if (input.status === 'delivered' && o.fulfillmentStatus !== 'delivered' && o.paymentMode === 'cod') {
+    await logEvent(deps.db, o.id, 'cod_collected', `Cash on delivery: ₹${(o.codAmount / 100).toFixed(2)} collected`, c.get('admin').email);
+    // Their free e-book is unlocked now: send the download links.
+    const items = await deps.db.select().from(orderItems).where(eq(orderItems.orderId, o.id));
+    if (input.notify && items.some((i) => i.includesEbook)) await sendEbookUnlocked(deps, u, items, await getSettings(deps.db));
+  }
   return c.json({ order: u });
 });
 

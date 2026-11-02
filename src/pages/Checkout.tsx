@@ -68,6 +68,8 @@ export function Checkout() {
   const [sim, setSim] = useState<CheckoutResponse | null>(null);
   // The newsletter box starts ticked; the buyer can untick it.
   const [newsletter, setNewsletter] = useState(true);
+  // Online in full, or cash on delivery (an advance online, the rest in cash; printed books only).
+  const [payMode, setPayMode] = useState<'online' | 'cod'>('online');
   const pending = useRef<{ key: string; res: CheckoutResponse } | null>(null);
 
   useEffect(() => { document.title = 'Checkout — Elden Academic Press'; }, []);
@@ -82,6 +84,18 @@ export function Checkout() {
   const set = (k: keyof typeof blank) => (e: { target: { value: string } }) => setD((x: typeof blank) => ({ ...x, [k]: e.target.value }));
   const needsAddress = Boolean(quote?.requiresShipping);
 
+  // Why cash on delivery isn't possible for this cart (the server checks the same).
+  const codAdvance = cfg?.cod?.advance ?? 0;
+  const codWhy = !cfg?.cod ? 'off'
+    : !quote ? 'Loading…'
+    : quote.lines.some((l) => l.isDigital) ? 'E-books can only be paid for online.'
+    : !quote.requiresShipping ? 'Only for printed books.'
+    : quote.total <= codAdvance ? 'This order is small enough to pay online in full.'
+    : null;
+  const cod = payMode === 'cod' && !codWhy;
+  const payNow = quote ? (cod ? codAdvance : quote.total) : 0;
+  useEffect(() => { if (payMode === 'cod' && codWhy && codWhy !== 'Loading…') setPayMode('online'); }, [payMode, codWhy]);
+
   const payload = useMemo(() => ({
     items: cart.lines,
     couponCode: cart.coupon || null,
@@ -89,7 +103,8 @@ export function Checkout() {
     shipping: { name: d.name, line1: d.line1, line2: d.line2, city: d.city, state: d.state, pincode: d.pincode },
     note: d.note || undefined,
     newsletter: newsletter || undefined,
-  }), [cart.lines, cart.coupon, d, newsletter]);
+    paymentMode: cod ? 'cod' as const : 'online' as const,
+  }), [cart.lines, cart.coupon, d, newsletter, cod]);
 
   async function finish(result: PaymentResult) {
     setBusy(true);
@@ -114,7 +129,7 @@ export function Checkout() {
       amount: res.razorpay.amount,
       currency: res.razorpay.currency,
       name: cfg?.storeName ?? 'Elden Academic Press',
-      description: `Order #${res.number}`,
+      description: cod ? `Advance for order #${res.number} (cash on delivery)` : `Order #${res.number}`,
       image: `${location.origin}/assets/elden-mark.png`,
       prefill: res.prefill,
       notes: { order_number: String(res.number) },
@@ -141,7 +156,7 @@ export function Checkout() {
     rememberUser({ email: d.email, phone: d.phone, name: d.name, city: d.city, state: d.state, pincode: d.pincode });
     if (quote) {
       track('AddPaymentInfo', cartEvent(quote));
-      ga('add_payment_info', { ...gaCart(quote, cart.coupon), payment_type: 'Razorpay' });
+      ga('add_payment_info', { ...gaCart(quote, cart.coupon), payment_type: cod ? 'Cash on delivery' : 'Online' });
     }
     const key = JSON.stringify(payload);
     try {
@@ -210,6 +225,28 @@ export function Checkout() {
             </div>
           </fieldset>
 
+          {cfg?.cod && (
+            <fieldset className="co-section">
+              <legend>Payment</legend>
+              <div className="pay-modes" role="radiogroup" aria-label="How would you like to pay?">
+                <button type="button" role="radio" aria-checked={!cod} className={'pay-mode' + (!cod ? ' is-on' : '')} onClick={() => setPayMode('online')}>
+                  <span className="pay-mode__dot" aria-hidden="true" />
+                  <span className="pay-mode__text"><b>Pay online now</b><span>UPI, cards, net banking or wallets{quote ? ` · ${inr(quote.total)}` : ''}</span></span>
+                </button>
+                <button type="button" role="radio" aria-checked={cod} aria-disabled={Boolean(codWhy)} className={'pay-mode' + (cod ? ' is-on' : '') + (codWhy ? ' is-off' : '')}
+                  onClick={() => !codWhy && setPayMode('cod')}>
+                  <span className="pay-mode__dot" aria-hidden="true" />
+                  <span className="pay-mode__text">
+                    <b>Cash on delivery</b>
+                    {codWhy
+                      ? <span>Not available: {codWhy === 'Loading…' ? '…' : codWhy}</span>
+                      : <span>Pay {inr(codAdvance)} now, {quote ? inr(quote.total - codAdvance) : ''} in cash when your books arrive.{quote?.lines.some((l) => l.includesEbook) ? ' The free e-book unlocks once they’re delivered.' : ''}</span>}
+                  </span>
+                </button>
+              </div>
+            </fieldset>
+          )}
+
           <fieldset className="co-section">
             <legend>Note (optional)</legend>
             <textarea className="input input--area" rows={2} maxLength={500} value={d.note} onChange={set('note')} placeholder="Anything we should know about delivery?" aria-label="Order note" />
@@ -240,6 +277,10 @@ export function Checkout() {
                 {quote.requiresShipping && <div><dt>Shipping</dt><dd>{quote.shipping ? inr(quote.shipping) : 'Free'}</dd></div>}
                 <div className="sums__total"><dt>Total</dt><dd>{inr(quote.total)}</dd></div>
                 {quote.tax > 0 && <div className="sums__note"><dt>Includes GST</dt><dd>{inr(quote.tax)}</dd></div>}
+                {cod && <>
+                  <div><dt>Pay now (advance)</dt><dd>{inr(codAdvance)}</dd></div>
+                  <div><dt>Pay in cash on delivery</dt><dd>{inr(quote.total - codAdvance)}</dd></div>
+                </>}
               </dl>
             )}
             {quote && quote.freeShippingRemaining > 0 && <div className="drawer__hint">Add {inr(quote.freeShippingRemaining)} more for free delivery.</div>}
@@ -247,7 +288,7 @@ export function Checkout() {
             {notice && <div className="form-notice" role="status">{notice}</div>}
             {cfg && !cfg.payments && <div className="form-notice">Online payment isn’t switched on yet. Please <Link to="/contact">contact us</Link> to order.</div>}
             <button type="submit" className="btn btn--accent btn--lg btn--block" disabled={busy || loading || !quote || hasIssues || !cfg?.payments}>
-              {busy ? 'Please wait…' : quote ? `Pay ${inr(quote.total)}` : 'Pay'}
+              {busy ? 'Please wait…' : quote ? (cod ? `Pay ${inr(payNow)} advance` : `Pay ${inr(payNow)}`) : 'Pay'}
             </button>
             <div className="co-secure">
               <span aria-hidden="true">🔒</span> Payments are processed securely by Razorpay. We never see or store your card or UPI details.

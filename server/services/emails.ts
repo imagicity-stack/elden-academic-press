@@ -1,13 +1,13 @@
 // Transactional emails. Table-based HTML with inline styles so they render the
 // same in Gmail, Outlook and Apple Mail; a plain-text part is added on send.
 import type { Deps } from '../deps.js';
-import type { enquiries, orderItems, orders } from '../db/schema.js';
+import type { EbookFile, enquiries, orderItems, orders } from '../db/schema.js';
 import { esc, inr, istDate } from '../lib/format.js';
 import { addressList, sendSafely, type Attachment } from '../lib/mail.js';
 import type { Settings } from './catalog.js';
 import { addressLines, invoiceFileName, renderInvoicePdf } from './invoicePdf.js';
-import { orderLink, orderToken } from './orders.js';
-import { fileLabel, filesForItems } from './ebooks.js';
+import { onlineAmount, orderLink, orderToken } from './orders.js';
+import { ebookAwaitsDelivery, fileLabel, filesForItems } from './ebooks.js';
 
 type Order = typeof orders.$inferSelect;
 type Item = typeof orderItems.$inferSelect;
@@ -88,8 +88,6 @@ ${cells.map(([k, v], i) => `<td style="padding:14px ${i === cells.length - 1 ? 0
 
 export async function sendOrderConfirmation(deps: Deps, o: Order, items: Item[], s: Settings) {
   const link = orderLink(deps, o);
-  const token = orderToken(deps.env.ORDER_LINK_SECRET, o.id);
-  const site = deps.env.SITE_URL.replace(/\/$/, '');
   // E-books bought, and the e-books that come free with printed copies.
   const files = await filesForItems(deps.db, items);
   const digital = items.filter((i) => i.isDigital || (files.get(i.id)?.length ?? 0) > 0);
@@ -103,26 +101,16 @@ export async function sendOrderConfirmation(deps: Deps, o: Order, items: Item[],
     console.error('[mail] invoice PDF failed for order', o.number, (e as Error).message);
   }
 
-  // One download button per file (a book can have several: Part 1, Part 2, Answer key…).
-  const ebookRows = digital.flatMap((i) => {
-    const fs = files.get(i.id) ?? [];
-    const note = i.isDigital ? 'Ready to download' : 'Free with your printed copy · ready to download';
-    const rows = fs.length ? fs.map((f, k) => ({ title: fs.length > 1 ? `${i.title}: ${fileLabel(f, k, fs.length)}` : i.title, note, href: `${site}/api/orders/${o.number}/download/${i.id}?t=${token}&f=${k}` }))
-      : [{ title: i.title, note, href: link }];
-    return rows.map((r) => `<tr>
-<td style="padding:14px 0;border-top:1px solid rgba(255,255,255,0.14);font:600 15px/1.35 ${FONT};color:#FFFFFF">${esc(r.title)}<div style="margin-top:3px;font:400 12.5px/1.4 ${FONT};color:#A9B0BC">${esc(r.note)}</div></td>
-<td align="right" style="padding:14px 0 14px 12px;border-top:1px solid rgba(255,255,255,0.14)"><a href="${esc(r.href)}" style="display:inline-block;background:${YELLOW};padding:10px 14px;font:700 13px/1 ${FONT};color:${INK};text-decoration:none;white-space:nowrap">Download</a></td></tr>`);
-  }).join('');
-  const limitNote = digital.some((i) => (files.get(i.id)?.length ?? 0) > 1)
-    ? `allow ${s.maxDownloads} downloads per file`
-    : `allow ${s.maxDownloads} downloads`;
+  // Cash on delivery: the free e-book unlocks once the books are delivered (we email the links then).
+  const awaiting = ebookAwaitsDelivery(o);
+  const cod = o.paymentMode === 'cod';
 
   const body = [
-    metaStrip([['Order', `#${o.number}`], ['Paid on', istDate(o.paidAt ?? o.createdAt)], ['Total', inr(o.total)]]),
-    digital.length ? section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:${INK};padding:22px 22px 8px">
-${label('Your e-books', YELLOW)}<div style="margin:10px 0 4px;font:700 20px/1.25 ${FONT};color:#FFFFFF">Start reading now.</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${ebookRows}</table>
-</td></tr><tr><td style="background:${INK};padding:0 22px 18px;font:400 12.5px/1.5 ${FONT};color:#A9B0BC">Download links are private to you and ${limitNote}${s.downloadExpiryDays ? ` within ${s.downloadExpiryDays} days` : ''}. Please save the files on your device.</td></tr></table>`) : '',
+    metaStrip(cod
+      ? [['Order', `#${o.number}`], ['Paid online', inr(onlineAmount(o))], ['Pay on delivery', inr(o.codAmount)]]
+      : [['Order', `#${o.number}`], ['Paid on', istDate(o.paidAt ?? o.createdAt)], ['Total', inr(o.total)]]),
+    cod ? section(p(`<strong style="color:${INK}">Cash on delivery:</strong> please keep <strong style="color:${INK}">${inr(o.codAmount)}</strong> ready for the courier when your books arrive.`)) : '',
+    digital.length ? ebookBlock(deps, o, digital, files, s, awaiting) : '',
     o.requiresShipping ? section(`${h2('What happens next')}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 ${[['1', 'We pack your books', 'Checked and packed at our Hazaribagh office.'], ['2', 'We ship and email you', 'You’ll get the courier name and tracking number.'], ['3', 'Delivered to your door', 'Anywhere in India.']]
@@ -131,17 +119,19 @@ ${[['1', 'We pack your books', 'Checked and packed at our Hazaribagh office.'], 
     section(`${h2('Order summary')}${itemsTable(o, items)}`),
     addressBlock(o),
     section(`${o.invoiceNumber ? p(`Your ${s.gstin ? 'GST invoice' : 'invoice'} <strong style="color:${INK}">${esc(o.invoiceNumber)}</strong> is attached as a PDF.`) : ''}
-${button(link, digital.length ? 'View your order & downloads' : 'Track your order')}`, '4px 32px 32px'),
+${button(link, digital.length && !awaiting ? 'View your order & downloads' : 'Track your order')}`, '4px 32px 32px'),
   ].join('');
 
   await sendSafely(deps.mailer, {
     to: o.email,
-    subject: `Order #${o.number} confirmed${digital.length ? ': your e-books are ready' : ''}`,
+    subject: `Order #${o.number} confirmed${digital.length && !awaiting ? ': your e-books are ready' : ''}`,
     html: layout(deps, s, {
-      preheader: `Thank you for your order. ${digital.length ? 'Your e-books are ready to download.' : 'We’ll email you when it ships.'}`,
+      preheader: `Thank you for your order. ${digital.length && !awaiting ? 'Your e-books are ready to download.' : 'We’ll email you when it ships.'}`,
       kicker: 'Order confirmed',
       title: `Thank you, ${o.name.split(' ')[0]}.`,
-      intro: `We’ve received your payment for order <strong style="color:${INK}">#${o.number}</strong>.${digital.length ? ' Your e-books are ready below.' : ' Here are the details.'}`,
+      intro: cod
+        ? `We’ve received your advance of ${inr(onlineAmount(o))} for order <strong style="color:${INK}">#${o.number}</strong>. The rest, ${inr(o.codAmount)}, is paid in cash on delivery.`
+        : `We’ve received your payment for order <strong style="color:${INK}">#${o.number}</strong>.${digital.length ? ' Your e-books are ready below.' : ' Here are the details.'}`,
       body,
       footerNote: `Keep this email: the links in it are private to your order, ${first}.`,
     }),
@@ -164,7 +154,9 @@ export async function sendStoreNewOrder(deps: Deps, o: Order, items: Item[], s: 
   const to = staffRecipients(deps, s);
   if (!to.length) return;
   const body = [
-    metaStrip([['Order', `#${o.number}`], ['Total', inr(o.total)], ['Fulfil', o.requiresShipping ? 'Ship' : 'Digital only']]),
+    metaStrip(o.paymentMode === 'cod'
+      ? [['Order', `#${o.number}`], ['Total', inr(o.total)], ['Cash on delivery', `Collect ${inr(o.codAmount)}`]]
+      : [['Order', `#${o.number}`], ['Total', inr(o.total)], ['Fulfil', o.requiresShipping ? 'Ship' : 'Digital only']]),
     section(`${h2('Customer')}${p(`<strong style="color:${INK}">${esc(o.name)}</strong><br>${esc(o.email)} · ${esc(o.phone)}`)}`),
     section(`${h2('Items')}${itemsTable(o, items)}`),
     addressBlock(o),
@@ -173,9 +165,51 @@ export async function sendStoreNewOrder(deps: Deps, o: Order, items: Item[], s: 
   ].join('');
   await sendSafely(deps.mailer, {
     to,
-    subject: `New order #${o.number} · ${inr(o.total)} · ${o.name}`,
+    subject: `New order #${o.number} · ${inr(o.total)}${o.paymentMode === 'cod' ? ' · COD' : ''} · ${o.name}`,
     html: layout(deps, s, { preheader: `${o.name} paid ${inr(o.total)}`, kicker: 'New order', title: `Order #${o.number}`, intro: `${esc(o.name)} paid ${inr(o.total)}${o.requiresShipping ? '. Printed books to pack.' : ' for e-books only.'}`, body }),
     replyTo: o.email,
+  });
+}
+
+/** The "Your e-books" block: one download button per file, or a note while it awaits delivery. */
+function ebookBlock(deps: Deps, o: Order, digital: Item[], files: Map<string, EbookFile[]>, s: Settings, awaiting: boolean) {
+  const link = orderLink(deps, o);
+  const token = orderToken(deps.env.ORDER_LINK_SECRET, o.id);
+  const site = deps.env.SITE_URL.replace(/\/$/, '');
+  const rows = digital.flatMap((i) => {
+    const fs = files.get(i.id) ?? [];
+    const note = awaiting ? 'Free with your printed copy · unlocks when your books are delivered'
+      : i.isDigital ? 'Ready to download' : 'Free with your printed copy · ready to download';
+    const list = fs.length ? fs.map((f, k) => ({ title: fs.length > 1 ? `${i.title}: ${fileLabel(f, k, fs.length)}` : i.title, note, href: `${site}/api/orders/${o.number}/download/${i.id}?t=${token}&f=${k}` }))
+      : [{ title: i.title, note, href: link }];
+    return list.map((r) => `<tr>
+<td style="padding:14px 0;border-top:1px solid rgba(255,255,255,0.14);font:600 15px/1.35 ${FONT};color:#FFFFFF">${esc(r.title)}<div style="margin-top:3px;font:400 12.5px/1.4 ${FONT};color:#A9B0BC">${esc(r.note)}</div></td>
+${awaiting ? '' : `<td align="right" style="padding:14px 0 14px 12px;border-top:1px solid rgba(255,255,255,0.14)"><a href="${esc(r.href)}" style="display:inline-block;background:${YELLOW};padding:10px 14px;font:700 13px/1 ${FONT};color:${INK};text-decoration:none;white-space:nowrap">Download</a></td>`}</tr>`);
+  }).join('');
+  const limitNote = digital.some((i) => (files.get(i.id)?.length ?? 0) > 1) ? `allow ${s.maxDownloads} downloads per file` : `allow ${s.maxDownloads} downloads`;
+  const foot = awaiting
+    ? 'Cash on delivery: your free e-book unlocks as soon as your books are delivered. We’ll email you the download links then.'
+    : `Download links are private to you and ${limitNote}${s.downloadExpiryDays ? ` within ${s.downloadExpiryDays} days` : ''}. Please save the files on your device.`;
+  return section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:${INK};padding:22px 22px 8px">
+${label('Your e-books', YELLOW)}<div style="margin:10px 0 4px;font:700 20px/1.25 ${FONT};color:#FFFFFF">${awaiting ? 'Coming with your delivery.' : 'Start reading now.'}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+</td></tr><tr><td style="background:${INK};padding:0 22px 18px;font:400 12.5px/1.5 ${FONT};color:#A9B0BC">${foot}</td></tr></table>`);
+}
+
+/** Cash on delivery: the books were delivered, so the free e-book is unlocked. */
+export async function sendEbookUnlocked(deps: Deps, o: Order, items: Item[], s: Settings) {
+  const files = await filesForItems(deps.db, items);
+  const digital = items.filter((i) => (files.get(i.id)?.length ?? 0) > 0);
+  if (!digital.length) return;
+  const body = ebookBlock(deps, o, digital, files, s, false) + section(button(orderLink(deps, o), 'View your order & downloads', INK), '4px 32px 32px');
+  await sendSafely(deps.mailer, {
+    to: o.email, subject: `Your free e-book is ready · order #${o.number}`, replyTo: s.supportEmail, bcc: copies(deps),
+    html: layout(deps, s, {
+      preheader: 'Your books were delivered, and your free e-book is ready to download.',
+      kicker: 'Delivered', title: 'Your free e-book is ready.',
+      intro: `Your books for order <strong style="color:${INK}">#${o.number}</strong> have been delivered. Thank you! Your free e-book is ready below.`,
+      body,
+    }),
   });
 }
 
@@ -185,7 +219,10 @@ export async function sendShipped(deps: Deps, o: Order, s: Settings) {
 ${label(esc(o.courier ?? 'Courier'), YELLOW)}<div style="margin:8px 0 ${o.trackingUrl ? 14 : 0}px;font:700 22px/1.2 ${FONT};color:#FFFFFF;letter-spacing:0.5px">${esc(o.trackingNumber)}</div>
 ${o.trackingUrl ? button(o.trackingUrl, 'Track your parcel', YELLOW, INK) : ''}</td></tr></table>`)
     : '';
-  const body = tracking + addressBlock(o) + section(button(orderLink(deps, o), 'View your order', INK), '4px 32px 32px');
+  const cod = o.paymentMode === 'cod' && !o.codCollectedAt
+    ? section(p(`<strong style="color:${INK}">Cash on delivery:</strong> please keep <strong style="color:${INK}">${inr(o.codAmount)}</strong> ready for the courier.`))
+    : '';
+  const body = tracking + cod + addressBlock(o) + section(button(orderLink(deps, o), 'View your order', INK), '4px 32px 32px');
   await sendSafely(deps.mailer, {
     to: o.email, subject: `Your books are on their way · order #${o.number}`, replyTo: s.supportEmail, bcc: copies(deps),
     html: layout(deps, s, { preheader: o.trackingNumber ? `Tracking number ${o.trackingNumber}` : 'Your order has shipped', kicker: 'Shipped', title: 'Your books are on their way.', intro: `Order <strong style="color:${INK}">#${o.number}</strong> has left our office.`, body }),

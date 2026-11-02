@@ -14,7 +14,8 @@ import { store } from './routes/store.js';
 import { productFeedXml } from './routes/feeds.js';
 import { sitemapXml } from './routes/sitemap.js';
 import { webhooks } from './routes/webhooks.js';
-import { healthCheck, pgCode, type Health } from './services/health.js';
+import { tagCatalog } from './lib/cdn.js';
+import { connectionLost, healthCheck, pgCode, type Health } from './services/health.js';
 
 export type AppEnv = { Variables: { deps: Deps; ip: string; admin: AdminSession; customer: Customer } };
 
@@ -25,12 +26,14 @@ export function createApp(getDeps: () => Promise<Deps>) {
   // Outside /api (vercel.json rewrites /sitemap.xml here); both share one router.
   root.get('/sitemap.xml', async (c) => {
     const xml = await sitemapXml(await getDeps(), process.env.VITE_SITE_LIVE === 'true');
+    await tagCatalog();
     return c.body(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' });
   });
 
   // Product feed for Google Merchant Center and Meta Commerce Manager (vercel.json rewrites /feeds/* here).
   root.get('/feeds/products.xml', async (c) => {
     const xml = await productFeedXml(await getDeps());
+    await tagCatalog();
     return c.body(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' });
   });
 
@@ -65,6 +68,10 @@ export function createApp(getDeps: () => Promise<Deps>) {
         error: 'The database needs an update. Open /api/health to see which file to run in Supabase → SQL Editor.',
         code: 'database_update_needed',
       }, 503);
+    }
+    // Couldn't reach the database (or its connection dropped): safe for the browser to retry.
+    if (connectionLost(err)) {
+      return c.json({ error: 'The store is busy for a moment. Please try again.', code: 'db_unavailable' }, 503, { 'Retry-After': '1' });
     }
     return c.json({ error: 'Something went wrong on our side. Please try again.', code: 'server_error' }, 500);
   });

@@ -6,7 +6,7 @@ import { Badge, Btn, Card, Empty, ErrorBox, FulBadge, Loading, Page, Pagination,
 
 interface Row {
   id: string; number: number; createdAt: string; name: string; email: string; phone: string; total: number;
-  paymentStatus: string; fulfillmentStatus: string; cancelledAt: string | null; requiresShipping: boolean; needsAttention: boolean; items: number; status: string;
+  paymentStatus: string; fulfillmentStatus: string; cancelledAt: string | null; requiresShipping: boolean; needsAttention: boolean; items: number; status: string; paymentMode?: string; codAmount?: number; codCollectedAt?: string | null;
 }
 
 const TABS: { key: string; label: string; params: Record<string, string> }[] = [
@@ -67,7 +67,8 @@ export default function Orders() {
                     <td><Link to={`/admin/orders/${o.id}`} className="ad-strong" onClick={(e) => e.stopPropagation()}>#{o.number}</Link>{o.needsAttention && <Badge tone="red">Check</Badge>}</td>
                     <td className="ad-muted ad-nowrap">{fmtDate(o.createdAt, true)}</td>
                     <td><div>{o.name}</div><div className="ad-muted">{o.email}</div></td>
-                    <td>{o.cancelledAt && o.paymentStatus !== 'expired' ? <Badge tone="grey">Cancelled</Badge> : <PayBadge s={o.paymentStatus} />}</td>
+                    <td>{o.cancelledAt && o.paymentStatus !== 'expired' ? <Badge tone="grey">Cancelled</Badge> : <PayBadge s={o.paymentStatus} />}
+                      {o.paymentMode === 'cod' && !o.cancelledAt && <Badge tone={o.codCollectedAt ? 'green' : 'amber'}>{o.codCollectedAt ? 'COD collected' : `COD ${inr(o.codAmount ?? 0)}`}</Badge>}</td>
                     <td>{['paid', 'partially_refunded'].includes(o.paymentStatus) && !o.cancelledAt ? <FulBadge s={o.fulfillmentStatus} /> : <span className="ad-muted">—</span>}</td>
                     <td className="ad-num">{o.items}</td>
                     <td className="ad-num ad-strong">{inr(o.total)}</td>

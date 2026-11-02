@@ -7,6 +7,7 @@ import type { AppEnv } from '../../app.js';
 import { adminUsers, auditLog, enquiries, orderItems, orders, productVariants, products, settings } from '../../db/schema.js';
 import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
 import { isStateCode } from '../../lib/states.js';
+import { clearCatalogCache } from '../../lib/cdn.js';
 import { getSettings } from '../../services/catalog.js';
 import { orderStatusLabel } from '../orders.js';
 import { audit, requireAdmin, requireRole } from './auth.js';
@@ -26,6 +27,11 @@ admin.get('/me', requireAdmin({ allowAal1: true }), (c) => {
 });
 
 admin.use('*', requireAdmin());
+// After saving books, categories, files or settings, the store shows the change on the next reload.
+admin.use('*', async (c, next) => {
+  await next();
+  if (c.req.method !== 'GET' && c.res.status < 400 && /\/admin\/(products|categories|inventory|uploads|resources|settings)\b/.test(c.req.path)) await clearCatalogCache();
+});
 
 admin.route('/orders', adminOrders);
 admin.route('/products', adminProducts);
@@ -106,6 +112,9 @@ admin.put('/settings', requireRole('owner'), async (c) => {
     maxDownloads: z.number().int().min(1).max(100),
     downloadExpiryDays: z.number().int().min(0).max(3650),
     newsletterDailyLimit: z.number().int().min(1).max(10_000).optional(),
+    codEnabled: z.boolean().optional(),
+    /** Advance paid online for cash-on-delivery orders (paise). */
+    codAdvance: z.number().int().min(100).max(10_000_000).optional(),
   }).refine((v) => !v.gstin || v.gstin.startsWith(v.stateCode), { message: 'The GSTIN’s first two digits should match the business state code', path: ['gstin'] }));
   const [row] = await db.update(settings).set({ ...input, updatedAt: sql`now()` }).where(eq(settings.id, 1)).returning();
   await audit(c, 'settings.update', 'settings', 1, input);

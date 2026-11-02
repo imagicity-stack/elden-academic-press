@@ -26,6 +26,9 @@ export async function filesForItems(db: Q, items: ItemRef[]) {
   return new Map(items.map((i) => [i.id, comesWithEbook(i) ? ebookFiles(vars.find((v) => v.productId === i.productId)) : []]));
 }
 
+/** Cash-on-delivery orders: the free e-book unlocks once the books are delivered. */
+export const ebookAwaitsDelivery = (o: { paymentMode: string; deliveredAt: Date | null }) => o.paymentMode === 'cod' && !o.deliveredAt;
+
 /** Downloads allowed for one purchased e-book: the setting, once per file. */
 export const downloadLimit = (s: Pick<Settings, 'maxDownloads'>, files: number) => s.maxDownloads * Math.max(1, files);
 

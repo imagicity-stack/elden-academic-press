@@ -45,6 +45,8 @@ export interface StoreConfig {
   shipping: { flat: number; freeAbove: number };
   states: { code: string; name: string }[];
   supportEmail: string;
+  /** Cash on delivery for printed books: the advance paid online (paise), or null when off. */
+  cod: { advance: number } | null;
 }
 
 export type LineIssue = { code: 'unavailable' } | { code: 'out_of_stock' } | { code: 'insufficient_stock'; available: number };
@@ -62,6 +64,8 @@ export interface QuoteLine {
   discount: number;
   requiresShipping: boolean;
   isDigital: boolean;
+  /** A printed copy that includes the e-book free. */
+  includesEbook?: boolean;
   issue: LineIssue | null;
 }
 
