@@ -13,7 +13,7 @@ export interface Health {
   simulated: boolean;
   checks: Record<'config' | 'database' | 'storage' | 'adminSignIn' | 'payments' | 'email', Check>;
   /** Milliseconds for one small database query (the first may include connecting), and where the server runs. */
-  speed?: { firstQueryMs: number; queryMs: number; serverRegion: string | null };
+  speed?: { firstQueryMs: number; queryMs: number; serverRegion: string | null; databaseRegion: string | null };
   todo: string[];
 }
 
@@ -24,6 +24,23 @@ const timeout = () => AbortSignal.timeout(5000);
 export const pgCode = (e: unknown): string | undefined => {
   const err = e as { code?: string; cause?: { code?: string } };
   return err.code ?? err.cause?.code;
+};
+
+/** The AWS region in a Supabase pooler address (aws-0-eu-central-1.pooler.supabase.com); never the rest of the URL. */
+export function supabaseRegion(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    return /^aws-\d+-([a-z]{2}-[a-z]+-\d)\.pooler\.supabase\.com$/.exec(new URL(url).hostname)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The Vercel region nearest each Supabase region. */
+const VERCEL_NEAR: Record<string, string> = {
+  'ap-south-1': 'bom1', 'ap-southeast-1': 'sin1', 'ap-southeast-2': 'syd1', 'ap-northeast-1': 'hnd1', 'ap-northeast-2': 'icn1',
+  'eu-central-1': 'fra1', 'eu-central-2': 'fra1', 'eu-west-1': 'dub1', 'eu-west-2': 'lhr1', 'eu-west-3': 'cdg1', 'eu-north-1': 'arn1',
+  'us-east-1': 'iad1', 'us-east-2': 'cle1', 'us-west-1': 'sfo1', 'us-west-2': 'pdx1', 'ca-central-1': 'yul1', 'sa-east-1': 'gru1',
 };
 
 const LOST = new Set(['CONNECTION_CLOSED', 'CONNECTION_ENDED', 'CONNECTION_DESTROYED', 'CONNECT_TIMEOUT',
@@ -69,9 +86,15 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
     await db.execute(sql`select 1`);
     const t1 = Date.now();
     await db.execute(sql`select 1`);
-    speed = { firstQueryMs: t1 - t0, queryMs: Date.now() - t1, serverRegion: source.VERCEL_REGION ?? null };
-    // In the same region (Mumbai) a query takes a few milliseconds; ~100+ means the database is far away.
-    if (env.onVercel && speed.queryMs > 80) todo.push(`Each database query takes ${speed.queryMs} ms: the Supabase project is probably not in Mumbai (ap-south-1), or the server isn’t (vercel.json regions: bom1)`);
+    const databaseRegion = supabaseRegion(env.DATABASE_URL);
+    speed = { firstQueryMs: t1 - t0, queryMs: Date.now() - t1, serverRegion: source.VERCEL_REGION ?? null, databaseRegion };
+    // Next to each other a query takes a few milliseconds; every extra one per page adds the distance again.
+    const near = databaseRegion ? VERCEL_NEAR[databaseRegion] : undefined;
+    if (env.onVercel && near && speed.serverRegion && near !== speed.serverRegion) {
+      todo.push(`The server runs in ${speed.serverRegion} but the database is in ${databaseRegion}: set "regions": ["${near}"] in vercel.json so each query takes a few milliseconds instead of ${speed.queryMs}`);
+    } else if (env.onVercel && speed.queryMs > 40) {
+      todo.push(`Each database query takes ${speed.queryMs} ms: the server (vercel.json "regions") should be in the same region as the Supabase project`);
+    }
     const [row] = await db.select({ id: settings.id }).from(settings).where(eq(settings.id, 1));
     if (!row) throw Object.assign(new Error('settings row missing'), { code: '42P01' });
     hasOwner = (await db.select({ id: adminUsers.userId }).from(adminUsers).where(eq(adminUsers.role, 'owner')).limit(1)).length > 0;

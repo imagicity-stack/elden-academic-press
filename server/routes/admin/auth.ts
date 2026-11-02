@@ -48,7 +48,8 @@ async function authenticate(c: Context<AppEnv>): Promise<AdminSession> {
   const userId = String(claims.sub ?? '');
   const email = String(claims.email ?? '').toLowerCase();
 
-  let [row] = await db.select().from(adminUsers).where(eq(adminUsers.userId, userId));
+  // Both at once: each trip to the database counts.
+  let [[row], s] = await Promise.all([db.select().from(adminUsers).where(eq(adminUsers.userId, userId)), getSettings(db)]);
   if (!row && env.ADMIN_OWNER_EMAIL && email === env.ADMIN_OWNER_EMAIL.toLowerCase()) {
     // First sign-in of the configured owner, as long as no owner exists yet.
     const [owner] = await db.select({ id: adminUsers.userId }).from(adminUsers).where(eq(adminUsers.role, 'owner')).limit(1);
@@ -59,7 +60,6 @@ async function authenticate(c: Context<AppEnv>): Promise<AdminSession> {
   if (!row.lastSeenAt || Date.now() - row.lastSeenAt.getTime() > 5 * 60_000) {
     await db.update(adminUsers).set({ lastSeenAt: sql`now()` }).where(eq(adminUsers.userId, userId));
   }
-  const s = await getSettings(db);
   return { userId, email: row.email, name: row.name, role: row.role, aal: String(claims.aal ?? 'aal1'), mfaRequired: s.requireMfa };
 }
 
