@@ -106,6 +106,9 @@ admin.put('/settings', requireRole('owner'), async (c) => {
     maxDownloads: z.number().int().min(1).max(100),
     downloadExpiryDays: z.number().int().min(0).max(3650),
     newsletterDailyLimit: z.number().int().min(1).max(10_000).optional(),
+    codEnabled: z.boolean().optional(),
+    /** Advance paid online for cash-on-delivery orders (paise). */
+    codAdvance: z.number().int().min(100).max(10_000_000).optional(),
   }).refine((v) => !v.gstin || v.gstin.startsWith(v.stateCode), { message: 'The GSTIN’s first two digits should match the business state code', path: ['gstin'] }));
   const [row] = await db.update(settings).set({ ...input, updatedAt: sql`now()` }).where(eq(settings.id, 1)).returning();
   await audit(c, 'settings.update', 'settings', 1, input);

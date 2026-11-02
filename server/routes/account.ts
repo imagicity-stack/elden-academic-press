@@ -15,7 +15,7 @@ import { orderToken } from '../services/orders.js';
 import { report, visitOf } from '../services/tracking.js';
 import { verifySupabaseToken } from './admin/auth.js';
 import { orderStatusLabel } from './orders.js';
-import { downloadLimit, fileLabel, filesForItems } from '../services/ebooks.js';
+import { downloadLimit, ebookAwaitsDelivery, fileLabel, filesForItems } from '../services/ebooks.js';
 
 export interface Customer { userId: string; email: string; name: string; avatar: string | null }
 
@@ -101,7 +101,9 @@ account.get('/', async (c) => {
     for (const i of items.filter((x) => x.orderId === o.id && (files.get(x.id)?.length ?? 0) > 0)) {
       const key = i.productId ?? i.id;
       if (library.has(key)) continue; // newest purchase of a title wins (orders are newest first)
-      const open = !expiresAt || expiresAt > now();
+      // Cash on delivery: the free e-book unlocks once the books are delivered.
+      const awaitingDelivery = ebookAwaitsDelivery(o);
+      const open = !awaitingDelivery && (!expiresAt || expiresAt > now());
       const fs = files.get(i.id) ?? [];
       const limit = downloadLimit(s, fs.length);
       const canDownload = open && i.downloadsUsed < limit;
@@ -110,6 +112,7 @@ account.get('/', async (c) => {
         orderNumber: o.number, purchasedAt: o.paidAt, expiresAt,
         downloadsLeft: Math.max(0, limit - i.downloadsUsed),
         canRead: open && fs.length > 0,
+        awaitingDelivery,
         downloadUrl: canDownload && fs.length ? `/api/orders/${o.number}/download/${i.id}?t=${token(o.id)}` : null,
         files: fs.map((f, k) => ({
           index: k, label: fileLabel(f, k, fs.length),
@@ -143,6 +146,7 @@ account.post('/library/:itemId/read', async (c) => {
     .innerJoin(orders, eq(orders.id, orderItems.orderId))
     .where(and(eq(orderItems.id, c.req.param('itemId')), eq(orders.email, me.email), inArray(orders.paymentStatus, ['paid', 'partially_refunded'])));
   if (!row || row.order.cancelledAt || !row.order.paidAt) throw notFound('This e-book isn’t in your library.');
+  if (ebookAwaitsDelivery(row.order)) throw new HttpError(403, 'Your free e-book unlocks once your books are delivered.', 'awaiting_delivery');
   if (s.downloadExpiryDays > 0 && row.order.paidAt.getTime() + s.downloadExpiryDays * 86400_000 < now().getTime()) {
     throw new HttpError(410, 'Access to this e-book has expired. Please contact us.');
   }

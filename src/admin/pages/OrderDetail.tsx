@@ -13,6 +13,7 @@ interface Detail {
     paymentStatus: string; fulfillmentStatus: string; razorpayOrderId: string | null; razorpayPaymentId: string | null; paymentMethod: string | null;
     invoiceNumber: string | null; courier: string | null; trackingNumber: string | null; trackingUrl: string | null; cancelledAt: string | null; cancelReason: string | null;
     customerNote: string; internalNote: string; needsAttention: boolean; attentionReason: string | null; customerId: string | null;
+    paymentMode?: 'online' | 'cod'; codAmount?: number; codCollectedAt?: string | null;
   };
   items: { id: string; title: string; formatLabel: string; sku: string | null; quantity: number; unitPrice: number; lineTotal: number; discount: number; taxAmount: number; isDigital: boolean; requiresShipping: boolean; downloadsUsed: number; productId: string | null }[];
   events: { id: number; type: string; message: string; actor: string; createdAt: string }[];
@@ -112,6 +113,11 @@ export default function OrderDetail() {
           }>
             <dl className="ad-kv">
               <div><dt>Status</dt><dd><PayBadge s={o.paymentStatus} /></dd></div>
+              {o.paymentMode === 'cod' && <>
+                <div><dt>Method</dt><dd><Badge tone="amber">Cash on delivery</Badge></dd></div>
+                <div><dt>Paid online (advance)</dt><dd>{inr(o.total - (o.codAmount ?? 0))}</dd></div>
+                <div><dt>{o.codCollectedAt ? 'Cash collected' : 'Cash to collect'}</dt><dd className="ad-strong">{inr(o.codAmount ?? 0)}{o.codCollectedAt ? ` · ${fmtDate(o.codCollectedAt)}` : ' on delivery'}</dd></div>
+              </>}
               {o.razorpayPaymentId && <div><dt>Razorpay payment</dt><dd><code>{o.razorpayPaymentId}</code></dd></div>}
               {o.razorpayOrderId && <div><dt>Razorpay order</dt><dd><code>{o.razorpayOrderId}</code></dd></div>}
               {o.invoiceNumber && <div><dt>Invoice</dt><dd>{o.invoiceNumber}</dd></div>}
@@ -192,7 +198,8 @@ function ShipDialog({ o, busy, onClose, onSave }: { o: Detail['order']; busy: bo
 }
 
 function RefundDialog({ o, busy, onClose, onSave }: { o: Detail['order']; busy: boolean; onClose: () => void; onSave: (b: unknown) => void }) {
-  const max = o.total - o.refundedAmount;
+  // Only what was paid online can be refunded through Razorpay (for cash on delivery, the advance).
+  const max = o.total - (o.codAmount ?? 0) - o.refundedAmount;
   const [amount, setAmount] = useState(String(max / 100));
   const [reason, setReason] = useState('');
   const [restock, setRestock] = useState(o.requiresShipping && ['unfulfilled', 'packed'].includes(o.fulfillmentStatus));

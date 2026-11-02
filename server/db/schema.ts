@@ -195,6 +195,11 @@ export const orders = pgTable('orders', {
   customerNote: text('customer_note').notNull().default(''),
   /** Ticked "email me about new books and offers" at checkout; subscribed once paid. */
   newsletterOptIn: boolean('newsletter_opt_in').notNull().default(false),
+  /** 'online' (paid in full) or 'cod' (an advance paid online, the rest in cash on delivery). */
+  paymentMode: text('payment_mode').notNull().default('online'),
+  /** Cash on delivery: the balance to collect when the books are delivered (0 for online orders). */
+  codAmount: integer('cod_amount').notNull().default(0),
+  codCollectedAt: timestamp('cod_collected_at', { withTimezone: true }),
   /** Accepted ad cookies when ordering: the purchase may be reported to Meta, with these browser details. */
   adConsent: boolean('ad_consent').notNull().default(false),
   fbp: text('fbp'),
@@ -342,6 +347,9 @@ export const settings = pgTable('settings', {
   downloadExpiryDays: integer('download_expiry_days').notNull().default(365),
   /** Newsletter emails sent per rolling 24 hours (Google Workspace allows about 2,000 a day in total). */
   newsletterDailyLimit: integer('newsletter_daily_limit').notNull().default(1500),
+  /** Cash on delivery for printed-book orders, with an advance paid online (paise). */
+  codEnabled: boolean('cod_enabled').notNull().default(true),
+  codAdvance: integer('cod_advance').notNull().default(6000),
   updatedAt: timestamps.updatedAt,
 }, (t) => [check('settings_singleton', sql`${t.id} = 1`)]);
 

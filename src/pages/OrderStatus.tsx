@@ -17,6 +17,12 @@ interface OrderView {
   email: string;
   items: { id: string; productId: string | null; title: string; format: string; kind: string; quantity: number; lineTotal: number; isDigital: boolean; downloadsLeft: number | null; canDownload: boolean; files?: { index: number; label: string }[] }[];
   downloadsExpireAt: string | null;
+  /** Cash on delivery: the free e-book unlocks once the books are delivered. */
+  ebooksAfterDelivery?: boolean;
+  paymentMode?: 'online' | 'cod';
+  paidOnline?: number;
+  codAmount?: number;
+  codCollected?: boolean;
   subtotal: number; discount: number; couponCode: string | null; shipping: number; tax: number; total: number; refundedAmount: number;
   requiresShipping: boolean;
   address: { name: string; line1: string; line2: string | null; city: string; state: string; pincode: string } | null;
@@ -93,7 +99,9 @@ export function OrderStatus() {
           <div className="order-thanks__tick" aria-hidden="true">✓</div>
           <div>
             <div className="order-thanks__title">Thank you, {order.name.split(' ')[0]}!</div>
-            <div className="order-thanks__text">Your payment was successful. A confirmation is on its way to {order.email}. Your private link to this page is in that email.</div>
+            <div className="order-thanks__text">{order.paymentMode === 'cod'
+              ? <>Your advance of {inr(order.paidOnline ?? 0)} was received. Please keep <b>{inr(order.codAmount ?? 0)}</b> in cash ready for the delivery. A confirmation is on its way to {order.email}.</>
+              : <>Your payment was successful. A confirmation is on its way to {order.email}. Your private link to this page is in that email.</>}</div>
           </div>
         </div>
       )}
@@ -123,7 +131,9 @@ export function OrderStatus() {
                 {digital.map((i) => {
                   const files = i.files ?? [];
                   const href = (f: number) => `/api/orders/${order.number}/download/${i.id}${q}&f=${f}`;
-                  const off = <span className="dl-list__off">Not available — <a href={`mailto:${cfg?.supportEmail ?? 'hello@eldenap.in'}`}>contact us</a></span>;
+                  const off = order.ebooksAfterDelivery
+                    ? <span className="dl-list__off">Unlocks when your books are delivered</span>
+                    : <span className="dl-list__off">Not available — <a href={`mailto:${cfg?.supportEmail ?? 'hello@eldenap.in'}`}>contact us</a></span>;
                   const left = `${i.downloadsLeft} download${i.downloadsLeft === 1 ? '' : 's'} left`;
                   if (files.length > 1) {
                     return (
@@ -148,7 +158,8 @@ export function OrderStatus() {
                   );
                 })}
               </ul>
-              {order.downloadsExpireAt && <p className="order-card__note">Downloads are available until {new Date(order.downloadsExpireAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}. Save the files to your device.</p>}
+              {order.ebooksAfterDelivery && <p className="order-card__note">Cash on delivery: your free e-book unlocks as soon as your books are delivered. We’ll email you the download links.</p>}
+              {order.downloadsExpireAt && !order.ebooksAfterDelivery && <p className="order-card__note">Downloads are available until {new Date(order.downloadsExpireAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}. Save the files to your device.</p>}
             </section>
           )}
 
@@ -176,6 +187,10 @@ export function OrderStatus() {
               {order.discount > 0 && <div className="sums__saving"><dt>Discount{order.couponCode ? ` (${order.couponCode})` : ''}</dt><dd>−{inr(order.discount)}</dd></div>}
               {order.requiresShipping && <div><dt>Shipping</dt><dd>{order.shipping ? inr(order.shipping) : 'Free'}</dd></div>}
               <div className="sums__total"><dt>Total</dt><dd>{inr(order.total)}</dd></div>
+              {order.paymentMode === 'cod' && <>
+                <div><dt>Paid online (advance)</dt><dd>{inr(order.paidOnline ?? 0)}</dd></div>
+                <div><dt>{order.codCollected ? 'Paid in cash on delivery' : 'To pay in cash on delivery'}</dt><dd>{inr(order.codAmount ?? 0)}</dd></div>
+              </>}
               {order.tax > 0 && <div className="sums__note"><dt>Includes GST</dt><dd>{inr(order.tax)}</dd></div>}
               {order.refundedAmount > 0 && <div className="sums__saving"><dt>Refunded</dt><dd>−{inr(order.refundedAmount)}</dd></div>}
             </dl>

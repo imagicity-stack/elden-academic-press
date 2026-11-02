@@ -31,6 +31,7 @@ store.get('/config', async (c) => {
     shipping: { flat: s.shippingFlat, freeAbove: s.freeShippingAbove },
     states: STATES,
     supportEmail: s.supportEmail,
+    cod: s.codEnabled ? { advance: s.codAdvance } : null,
   });
 });
 
@@ -80,6 +81,8 @@ const zCheckout = z.object({
   note: zText(500).optional(),
   /** "Email me about new books and offers": subscribed once the order is paid. */
   newsletter: z.boolean().optional(),
+  /** 'cod': pay the advance online now and the rest in cash on delivery (printed books only). */
+  paymentMode: z.enum(['online', 'cod']).default('online'),
   /** Honeypot: real people never fill this in. */
   website: z.string().max(0).optional(),
 });

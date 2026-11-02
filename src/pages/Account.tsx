@@ -212,12 +212,12 @@ function Library({ items }: { items: LibraryItem[] }) {
                         </li>
                       ))}
                     </ul>
-                    <div className="acct-book__muted">{i.downloadUrl ? `${i.downloadsLeft} downloads left` : i.canRead ? 'No downloads left' : 'Access ended'}</div>
+                    <div className="acct-book__muted">{i.awaitingDelivery ? 'Unlocks when your books are delivered' : i.downloadUrl ? `${i.downloadsLeft} downloads left` : i.canRead ? 'No downloads left' : 'Access ended'}</div>
                   </>
                 ) : (
                   <div className="acct-book__actions">
                     <button type="button" className="btn btn--accent btn--sm" disabled={!i.canRead} onClick={() => read(i)}>Read</button>
-                    {i.downloadUrl ? <a className="text-link" href={i.downloadUrl}>Download · {i.downloadsLeft} left</a> : <span className="acct-book__muted">{i.canRead ? 'No downloads left' : 'Access ended'}</span>}
+                    {i.downloadUrl ? <a className="text-link" href={i.downloadUrl}>Download · {i.downloadsLeft} left</a> : <span className="acct-book__muted">{i.awaitingDelivery ? 'Unlocks when your books are delivered' : i.canRead ? 'No downloads left' : 'Access ended'}</span>}
                   </div>
                 )}
                 {i.expiresAt && <div className="acct-book__muted">Available until {day(i.expiresAt)}</div>}

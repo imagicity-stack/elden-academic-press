@@ -94,6 +94,20 @@ export interface CheckoutInput {
   newsletter?: boolean;
   /** Set by the server from the request (not the body): ad consent and Meta's browser cookies. */
   tracking?: Visit;
+  /** 'cod': an advance online now, the rest in cash on delivery (printed books only). */
+  paymentMode?: 'online' | 'cod';
+}
+
+/** What the customer pays online: the full total, or the advance for cash on delivery. */
+export const onlineAmount = (o: Pick<Order, 'total' | 'codAmount'>) => o.total - o.codAmount;
+
+/** Why cash on delivery isn't possible for this cart, or null when it is. */
+export function codUnavailable(q: Pick<Quote, 'lines' | 'total' | 'requiresShipping'>, s: Pick<Settings, 'codEnabled' | 'codAdvance'>): string | null {
+  if (!s.codEnabled) return 'Cash on delivery isn’t available right now.';
+  if (q.lines.some((l) => l.isDigital)) return 'E-books can only be paid for online, so cash on delivery isn’t available for this cart.';
+  if (!q.requiresShipping) return 'Cash on delivery is only for printed books.';
+  if (q.total <= s.codAdvance) return 'This order is small enough to pay online in full.';
+  return null;
 }
 
 export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) {
@@ -103,6 +117,11 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
   const placeOfSupply = input.shipping.state;
   const { quote: q, settings: s } = await quote(db, { items: input.items, couponCode: input.couponCode, placeOfSupply }, deps.now());
   if (!q.ok) throw new HttpError(409, q.couponError ?? 'Some items in your cart need attention.', 'cart_changed', q);
+  const cod = input.paymentMode === 'cod';
+  if (cod) {
+    const why = codUnavailable(q, s);
+    if (why) throw new HttpError(400, why, 'cod_unavailable');
+  }
 
   if (q.coupon) {
     const [c] = await db.select().from(coupons).where(eq(coupons.code, q.coupon.code));
@@ -140,6 +159,8 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
       stockReserved: true,
       customerNote: input.note ?? '',
       newsletterOptIn: input.newsletter ?? false,
+      paymentMode: cod ? 'cod' : 'online',
+      codAmount: cod ? q.total - s.codAdvance : 0,
       ...(input.tracking?.consent ? { adConsent: true, fbp: input.tracking.fbp, fbc: input.tracking.fbc, userAgent: input.tracking.userAgent } : {}),
       ip,
     }).returning();
@@ -178,7 +199,7 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
 
   let rzpOrderId: string;
   try {
-    const r = await razorpay.createOrder({ amount: order.total, receipt: `EAP-${order.number}`, notes: { order_id: order.id, order_number: String(order.number) } });
+    const r = await razorpay.createOrder({ amount: onlineAmount(order), receipt: `EAP-${order.number}`, notes: { order_id: order.id, order_number: String(order.number), ...(cod ? { cash_on_delivery: String(order.codAmount) } : {}) } });
     rzpOrderId = r.id;
   } catch (e) {
     await db.transaction(async (tx) => {
@@ -193,7 +214,7 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
   return {
     order: { ...order, razorpayOrderId: rzpOrderId },
     token: orderToken(env.ORDER_LINK_SECRET, order.id),
-    razorpay: { keyId: razorpay.keyId, orderId: rzpOrderId, amount: order.total, currency: 'INR', simulated: razorpay.simulated },
+    razorpay: { keyId: razorpay.keyId, orderId: rzpOrderId, amount: onlineAmount(order), currency: 'INR', simulated: razorpay.simulated },
     quote: q as Quote,
   };
 }
@@ -244,9 +265,11 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
       return { order: o, newlyPaid: false };
     }
 
-    if (payment.amount !== o.total || (payment.currency && payment.currency !== 'INR')) {
-      await tx.update(orders).set({ needsAttention: true, attentionReason: `Payment amount ${payment.amount} does not match order total ${o.total}.`, updatedAt: sql`now()` }).where(eq(orders.id, o.id));
-      await logEvent(tx, o.id, 'amount_mismatch', `Payment ${payment.id} amount ${payment.amount} ≠ order total ${o.total}`, actor);
+    // Online orders pay the total; cash-on-delivery orders pay the advance.
+    const expected = onlineAmount(o);
+    if (payment.amount !== expected || (payment.currency && payment.currency !== 'INR')) {
+      await tx.update(orders).set({ needsAttention: true, attentionReason: `Payment amount ${payment.amount} does not match the amount due online ${expected}.`, updatedAt: sql`now()` }).where(eq(orders.id, o.id));
+      await logEvent(tx, o.id, 'amount_mismatch', `Payment ${payment.id} amount ${payment.amount} ≠ amount due online ${expected}`, actor);
       return { order: o, newlyPaid: false };
     }
 
@@ -381,8 +404,11 @@ export async function refundOrder(deps: Deps, orderId: string, args: { amount: n
   const [o] = await deps.db.select().from(orders).where(eq(orders.id, orderId));
   if (!o) throw new HttpError(404, 'Order not found');
   if (!['paid', 'partially_refunded'].includes(o.paymentStatus) || !o.razorpayPaymentId) throw new HttpError(409, 'Only paid orders can be refunded.');
-  const refundable = o.total - o.refundedAmount;
-  if (args.amount <= 0 || args.amount > refundable) throw new HttpError(400, `You can refund up to ₹${(refundable / 100).toFixed(2)}.`);
+  // Only what was paid online can go back through Razorpay (cash paid on delivery is refunded by hand).
+  const refundable = onlineAmount(o) - o.refundedAmount;
+  if (args.amount <= 0 || args.amount > refundable) {
+    throw new HttpError(400, `You can refund up to ₹${(refundable / 100).toFixed(2)} through Razorpay${o.codAmount ? ' (the advance paid online; refund cash paid on delivery by bank transfer)' : ''}.`);
+  }
 
   let refund: { id: string; status: string } = { id: '', status: 'processed' };
   if (o.total > 0 && !o.razorpayPaymentId.startsWith('free_')) {
@@ -393,7 +419,7 @@ export async function refundOrder(deps: Deps, orderId: string, args: { amount: n
   return deps.db.transaction(async (tx) => {
     const [cur] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
     const refunded = cur.refundedAmount + args.amount;
-    const full = refunded >= cur.total;
+    const full = refunded >= onlineAmount(cur);
     await tx.insert(refunds).values({
       orderId, razorpayRefundId: refund.id || null, razorpayPaymentId: cur.razorpayPaymentId!, amount: args.amount,
       status: refund.status === 'processed' ? 'processed' : 'pending', reason: args.reason, restocked: args.restock && cur.stockReserved, actor,

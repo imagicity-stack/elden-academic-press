@@ -139,7 +139,7 @@ Customers can sign in at **eldenap.in/account** with Google to read their e-book
 ## 6. Test purchase (test mode)
 
 1. Set `VITE_SITE_LIVE=true` temporarily on a **Preview** deployment, or test on production before announcing.
-2. Buy a printed book and an e-book. In Razorpay's test window use UPI ID `success@razorpay` (or a [test card](https://razorpay.com/docs/payments/payments/test-card-details/)).
+2. Buy a printed book and an e-book, and one printed book with cash on delivery (only the advance is charged). In Razorpay's test window use UPI ID `success@razorpay` (or a [test card](https://razorpay.com/docs/payments/payments/test-card-details/)).
 3. Check: the order page and e-book download work; both confirmation emails arrive; the order appears in the admin; mark it shipped (customer gets the tracking email); refund it (Razorpay test dashboard shows the refund).
 4. Open the browser console during the payment: if no “Content-Security-Policy” warnings appear, change the header name `Content-Security-Policy-Report-Only` to `Content-Security-Policy` in `vercel.json` to enforce it.
 
@@ -228,4 +228,5 @@ The website already sends everything Google needs; these are the settings on Goo
 - **Needs attention** also flags duplicate payments and amount mismatches — check the dashboard.
 - **GST**: prices include GST. Printed books are set to 0% and e-books to 18% by default (per product). A printed copy that includes the e-book free is charged and taxed as a printed book. Invoice numbers run per financial year (`EAP/27-28/00001`). Confirm rates, HSN/SAC codes (4901 / 998431) and the bundle split with your accountant.
 - **E-book protection**: files are private; buyers get links that expire after 5 minutes, limited downloads per purchase (default 10 per file, so a 3-file e-book allows 30) and a download period (default 1 year). E-books are never attached to emails; buyers download them from their order page, account or the email's buttons. Change these in Settings.
+- **Cash on delivery** (printed books only): the customer pays an advance online through Razorpay (default ₹60) and the rest in cash on delivery. It is not offered for e-books, for carts that include an e-book, or for orders that cost no more than the advance. Change the advance or switch it off in **Settings → Cash on delivery**. COD orders show a *COD* badge in Orders, and the order page shows the cash to collect. When you mark the order **Delivered**, the cash is recorded as collected and, if the book comes with a free e-book, it unlocks and the customer is emailed the download links (until then it is locked). Refunds through the admin cover only the advance paid online; refund any cash by bank transfer or UPI yourself.
 - **Backups**: Supabase Pro takes daily backups. Exports (orders, customers, products, enquiries) are in the admin as CSV.

@@ -25,7 +25,7 @@ export default function Settings() {
 interface S {
   storeName: string; legalName: string; gstin: string; address: string; stateCode: string; supportEmail: string; supportPhone: string;
   shippingFlat: number; freeShippingAbove: number; orderExpiryMinutes: number; invoicePrefix: string; notifyEmails: string[]; requireMfa: boolean;
-  lowStockThreshold: number; maxDownloads: number; downloadExpiryDays: number; newsletterDailyLimit: number; updatedAt: string;
+  lowStockThreshold: number; maxDownloads: number; downloadExpiryDays: number; newsletterDailyLimit: number; codEnabled: boolean; codAdvance: number; updatedAt: string;
 }
 
 function StoreSettings() {
@@ -39,6 +39,7 @@ function StoreSettings() {
     if (data) setF({
       ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])) as Record<string, string | boolean>,
       shippingFlat: rupees(data.shippingFlat), freeShippingAbove: rupees(data.freeShippingAbove), notifyEmails: data.notifyEmails.join(', '),
+      codAdvance: rupees(data.codAdvance),
     });
   }, [data]);
   if (error) return <ErrorBox error={error} retry={reload} />;
@@ -58,6 +59,7 @@ function StoreSettings() {
             notifyEmails: s('notifyEmails').split(/[,\s]+/).filter(Boolean), requireMfa: Boolean(f.requireMfa),
             lowStockThreshold: Number(s('lowStockThreshold')), maxDownloads: Number(s('maxDownloads')), downloadExpiryDays: Number(s('downloadExpiryDays')),
             newsletterDailyLimit: Number(s('newsletterDailyLimit')),
+            codEnabled: Boolean(f.codEnabled), codAdvance: toPaise(s('codAdvance') || '0'),
           },
         });
       } catch (e) { if (e instanceof ApiError) setErr(e); throw e; }
@@ -91,6 +93,15 @@ function StoreSettings() {
           <MoneyField label="Free shipping on orders from" hint="0 = never free" value={s('freeShippingAbove')} onChange={(e) => set('freeShippingAbove', e.target.value)} />
         </div>
         <p className="ad-muted">Customers pay {inr(toPaise(s('shippingFlat')) || 0)} on orders with printed books{toPaise(s('freeShippingAbove')) > 0 && `, free from ${inr(toPaise(s('freeShippingAbove')))}`}. E-book-only orders never pay shipping.</p>
+      </Card>
+      <Card title="Cash on delivery">
+        <Check label="Offer cash on delivery for printed books" hint="Buyers pay an advance online and the rest in cash when the books arrive. Not offered when the cart has an e-book. The free e-book with a printed copy unlocks once you mark the order Delivered."
+          checked={Boolean(f.codEnabled)} onChange={(v) => set('codEnabled', v)} />
+        {Boolean(f.codEnabled) && (
+          <div className="ad-form-grid">
+            <MoneyField label="Advance paid online" value={s('codAdvance')} onChange={(e) => set('codAdvance', e.target.value)} error={fe('codAdvance')} hint="Covers shipping if the parcel is refused." />
+          </div>
+        )}
       </Card>
       <Card title="Checkout & e-books">
         <div className="ad-form-grid">

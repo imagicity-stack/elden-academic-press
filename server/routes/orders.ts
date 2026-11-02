@@ -11,7 +11,7 @@ import { invoiceFileName, renderInvoicePdf } from '../services/invoicePdf.js';
 import { stateName } from '../lib/states.js';
 import { paymentMethodLabel } from '../lib/format.js';
 import { checkOrderToken, type Order } from '../services/orders.js';
-import { downloadLimit, downloadName, fileLabel, filesForItems } from '../services/ebooks.js';
+import { downloadLimit, downloadName, ebookAwaitsDelivery, fileLabel, filesForItems } from '../services/ebooks.js';
 
 
 export const customerOrders = new Hono<AppEnv>();
@@ -58,7 +58,9 @@ customerOrders.get('/:number', async (c) => {
     deps.db.select().from(orderEvents).where(eq(orderEvents.orderId, o.id)).orderBy(asc(orderEvents.createdAt)),
   ]);
   const expiry = o.paidAt && s.downloadExpiryDays > 0 ? new Date(o.paidAt.getTime() + s.downloadExpiryDays * 86400_000) : null;
-  const downloadsOpen = isPaid(o) && (!expiry || expiry > deps.now());
+  // Cash on delivery: the free e-book unlocks once the books are delivered.
+  const awaitingDelivery = ebookAwaitsDelivery(o);
+  const downloadsOpen = isPaid(o) && !awaitingDelivery && (!expiry || expiry > deps.now());
   const files = await filesForItems(deps.db, items);
   c.header('Cache-Control', 'no-store');
   return c.json({
@@ -81,6 +83,11 @@ customerOrders.get('/:number', async (c) => {
       };
     }),
     downloadsExpireAt: expiry,
+    ebooksAfterDelivery: awaitingDelivery,
+    paymentMode: o.paymentMode,
+    paidOnline: o.total - o.codAmount,
+    codAmount: o.codAmount,
+    codCollected: Boolean(o.codCollectedAt),
     subtotal: o.subtotal, discount: o.discount, couponCode: o.couponCode, shipping: o.shipping, tax: o.tax, total: o.total,
     refundedAmount: o.refundedAmount,
     requiresShipping: o.requiresShipping,
@@ -109,6 +116,7 @@ customerOrders.get('/:number/download/:itemId', async (c) => {
   await rateLimit(deps.db, `download:${o.id}`, 30, 3600);
   const s = await getSettings(deps.db);
   if (!isPaid(o)) throw new HttpError(403, 'Downloads are available once the order is paid.');
+  if (ebookAwaitsDelivery(o)) throw new HttpError(403, 'Your free e-book unlocks once your books are delivered.', 'awaiting_delivery');
   if (o.paidAt && s.downloadExpiryDays > 0 && o.paidAt.getTime() + s.downloadExpiryDays * 86400_000 < deps.now().getTime()) {
     throw new HttpError(410, 'This download link has expired. Please contact us.');
   }
