@@ -31,7 +31,7 @@ function item(b: CatalogItem, site: string): string | null {
   const print = b.formats.print;
   if (!print || !b.coverUrl) return null;
   const image = b.coverUrl.startsWith('/') ? site + b.coverUrl : b.coverUrl;
-  const title = clean(`${b.title}${b.classLabel ? ` — ${b.classLabel}` : ''} (Printed book)`, 150);
+  const title = clean(`${b.title}${b.classLabel ? ` — ${b.classLabel}` : ''} (${print.includesEbook ? 'Printed book + free e-book' : 'Printed book'})`, 150);
   const description = clean(b.description || b.blurb || b.title, 5000);
   const onSale = print.compareAt && print.compareAt > print.price;
   const gtin = b.isbn ? isbn13(b.isbn) : null;

@@ -67,6 +67,9 @@ export function useStoreConfig(): StoreConfig | null {
 /* ---------------- Product helpers ---------------- */
 
 export const FORMAT_LABEL: Record<Kind, string> = { print: 'Printed book', digital: 'E-book', bundle: 'E-book + printed copy' };
+/** A cart line's format name: printed copies of books with an e-book include it free. */
+export const formatLabel = (p: Product | undefined, kind: Kind) =>
+  (kind === 'print' && p?.formats.print?.includesEbook ? 'Printed book + free e-book' : FORMAT_LABEL[kind]);
 
 /** Lowest price the product can be bought for, or null if nothing is available. */
 export function fromPrice(p: Product): number | null {

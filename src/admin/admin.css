@@ -342,3 +342,4 @@
 .ad-files__err { color: var(--ad-red); font-style: normal; font-size: 13px; }
 .ad-files__add { align-self: flex-start; }
 @media (max-width: 640px) { .ad-files__row { grid-template-columns: 22px minmax(0, 1fr); } .ad-files__actions { grid-column: 2; } }
+.ad-free-ebook { margin-top: 12px; padding: 10px 12px; border-radius: 6px; background: #EEF6F0; }

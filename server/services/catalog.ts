@@ -16,7 +16,11 @@ export async function getSettings(db: Q): Promise<Settings> {
 }
 
 /** What the storefront may know about one way of buying a product. */
-export interface PublicFormat { price: number; compareAt: number | null; available: boolean; lowStock: number | null }
+export interface PublicFormat {
+  price: number; compareAt: number | null; available: boolean; lowStock: number | null;
+  /** Printed copy only: the e-book comes free with it. */
+  includesEbook?: boolean;
+}
 
 export interface CatalogItem {
   id: string;
@@ -46,17 +50,17 @@ export interface CatalogItem {
   formats: Partial<Record<Kind, PublicFormat>>;
 }
 
-export function publicFormats(variants: Variant[], lowStockThreshold: number): CatalogItem['formats'] {
+export function publicFormats(variants: Variant[], lowStockThreshold: number, ebookWithPrint = false): CatalogItem['formats'] {
   const v = (k: Kind) => variants.find((x) => x.kind === k && x.active);
   const print = v('print');
   const digital = v('digital');
-  const bundle = v('bundle');
   const printAvailable = Boolean(print && (!print.trackStock || print.stock > 0));
   const low = print && print.trackStock && print.stock > 0 && print.stock <= lowStockThreshold ? print.stock : null;
   const out: CatalogItem['formats'] = {};
-  if (print) out.print = { price: print.price, compareAt: print.compareAtPrice, available: printAvailable, lowStock: low };
   if (digital && digital.filePath) out.digital = { price: digital.price, compareAt: digital.compareAtPrice, available: true, lowStock: null };
-  if (bundle && print && out.digital) out.bundle = { price: bundle.price, compareAt: bundle.compareAtPrice, available: printAvailable, lowStock: low };
+  // Bundles are no longer sold; instead a book can include its e-book free with the printed copy.
+  const hasEbookFiles = Boolean(variants.find((x) => x.kind === 'digital')?.filePath);
+  if (print) out.print = { price: print.price, compareAt: print.compareAtPrice, available: printAvailable, lowStock: low, includesEbook: ebookWithPrint && hasEbookFiles };
   return out;
 }
 
@@ -97,7 +101,7 @@ export async function loadCatalog(db: Q, storage: Storage): Promise<{ items: Cat
       companion: p.hasCompanion,
       isNew: p.isNew,
       featured: p.featured,
-      formats: publicFormats(byProduct.get(p.id) ?? [], s.lowStockThreshold),
+      formats: publicFormats(byProduct.get(p.id) ?? [], s.lowStockThreshold, p.ebookWithPrint),
     }))
     .filter((it) => Object.keys(it.formats).length > 0);
   return { items, categories: cats };
@@ -108,7 +112,7 @@ export async function loadPricingProducts(db: Q, ids: string[]): Promise<Map<str
   const unique = [...new Set(ids)].filter((id) => /^[0-9a-f-]{36}$/i.test(id));
   if (!unique.length) return new Map();
   const [rows, vars] = await Promise.all([
-    db.select({ id: products.id, slug: products.slug, title: products.title, status: products.status }).from(products).where(inArray(products.id, unique)),
+    db.select({ id: products.id, slug: products.slug, title: products.title, status: products.status, ebookWithPrint: products.ebookWithPrint }).from(products).where(inArray(products.id, unique)),
     db.select().from(productVariants).where(inArray(productVariants.productId, unique)),
   ]);
   return new Map(rows.map((p) => [p.id, {

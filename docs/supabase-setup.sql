@@ -501,6 +501,11 @@ ALTER TABLE "product_variants" ADD COLUMN "files" jsonb DEFAULT '[]'::jsonb NOT 
 -- Existing e-books: their one file becomes the first (and only) entry of the list.
 UPDATE "product_variants" SET "files" = jsonb_build_array(jsonb_build_object('path', "file_path", 'name', coalesce("file_name", ''), 'title', '', 'size', "file_size")) WHERE "file_path" IS NOT NULL AND "files" = '[]'::jsonb;
 
+-- ===== 0006_ebook_with_print =====
+
+ALTER TABLE "order_items" ADD COLUMN "includes_ebook" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "products" ADD COLUMN "ebook_with_print" boolean DEFAULT false NOT NULL;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -511,7 +516,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('d551b96228e1cc509431a668ea8d88e5672d50239ed161f6d083b684cba35dbe', 1793366707702),
   ('a7c6aec2b7878ee57a12e1ff29aedca10c3defc0567e6aafee03cdfebcd7c937', 1793529577196),
   ('06e1e45bcfba4da04c42b09a0220e67611794880049f6b37c61e753680fe072f', 1793535992306),
-  ('e09910d8155217384a52e517b0e56a99ceda1c8858b5dfb47883570d1f693426', 1793551879678);
+  ('e09910d8155217384a52e517b0e56a99ceda1c8858b5dfb47883570d1f693426', 1793551879678),
+  ('190fb71cd0a34eb8490872de5172c4afd8d22a046b4ba373f174be7d054e4746', 1793634337644);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

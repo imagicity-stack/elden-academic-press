@@ -83,7 +83,8 @@ export function OrderStatus() {
   const fulfilIndex = ['unfulfilled', 'packed', 'shipped', 'delivered'].indexOf(order.fulfillmentStatus);
   const paid = ['paid', 'partially_refunded'].includes(order.paymentStatus);
   const q = `?t=${encodeURIComponent(token)}`;
-  const digital = order.items.filter((i) => i.isDigital);
+  // E-books bought, and e-books that came free with a printed copy.
+  const digital = order.items.filter((i) => i.isDigital || (i.files?.length ?? 0) > 0);
 
   return (
     <div className="wrap page-order">

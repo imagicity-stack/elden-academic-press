@@ -23,6 +23,8 @@ export interface ProductRow {
   slug: string;
   title: string;
   status: 'draft' | 'active' | 'archived';
+  /** The printed copy comes with the e-book free (when the book has e-book files). */
+  ebookWithPrint?: boolean;
   variants: VariantRow[];
 }
 
@@ -50,6 +52,8 @@ export interface CouponRow {
 export const MAX_QTY: Record<Kind, number> = { print: 50, digital: 1, bundle: 1 };
 
 export const FORMAT_LABEL: Record<Kind, string> = { print: 'Printed book', digital: 'E-book', bundle: 'E-book + printed copy' };
+/** A printed copy of a book that has an e-book: the e-book comes free with it. */
+export const PRINT_WITH_EBOOK = 'Printed book + free e-book';
 
 export type LineIssue =
   | { code: 'unavailable' }
@@ -73,6 +77,8 @@ export interface QuoteLine {
   taxRate: number;
   requiresShipping: boolean;
   isDigital: boolean;
+  /** A printed copy that includes the e-book free. */
+  includesEbook: boolean;
   weightGrams: number;
   issue: LineIssue | null;
 }
@@ -171,9 +177,11 @@ export function priceCart(args: {
     const digital = v('digital');
     let issue: LineIssue | null = null;
 
-    const sellable = p && p.status === 'active' && variant &&
-      (it.kind !== 'bundle' || (print && digital)) &&
+    // Bundles are no longer sold: every printed copy includes the e-book free.
+    const sellable = p && p.status === 'active' && variant && it.kind !== 'bundle' &&
       (it.kind === 'print' || (digital?.hasFile ?? true));
+    // The book's setting, and its e-book files (even when the e-book isn't sold on its own).
+    const freeEbook = it.kind === 'print' && Boolean(p?.ebookWithPrint) && Boolean(p?.variants.find((x) => x.kind === 'digital')?.hasFile);
     if (!sellable) issue = { code: 'unavailable' };
     else if (it.kind !== 'digital' && print!.trackStock) {
       const wanted = printWanted.get(it.productId)!;
@@ -188,7 +196,7 @@ export function priceCart(args: {
       slug: p?.slug ?? '',
       title: p?.title ?? 'Unavailable item',
       kind: it.kind,
-      formatLabel: FORMAT_LABEL[it.kind],
+      formatLabel: freeEbook ? PRINT_WITH_EBOOK : FORMAT_LABEL[it.kind],
       sku: variant?.sku ?? null,
       quantity: it.quantity,
       unitPrice,
@@ -200,6 +208,7 @@ export function priceCart(args: {
       taxRate: 0,
       requiresShipping: it.kind !== 'digital',
       isDigital: it.kind !== 'print',
+      includesEbook: freeEbook,
       weightGrams: weight,
       issue,
     };

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type InputHTMLAttributes } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ApiError, api, inr } from '../store/api';
-import { FORMAT_LABEL, useCatalog, useStoreConfig } from '../store/catalog';
+import { formatLabel, useCatalog, useStoreConfig } from '../store/catalog';
 import { useCart, useQuote } from '../store/cart';
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
@@ -226,7 +226,7 @@ export function Checkout() {
                 return (
                   <li key={l.productId + l.kind}>
                     <div className="co-lines__cover">{p && <BookCover book={p} />}<span className="co-lines__qty">{l.quantity}</span></div>
-                    <div className="co-lines__text"><strong>{p?.title ?? q?.title}</strong><span>{FORMAT_LABEL[l.kind]}</span>{q?.issue && <em>{issueText(q)}</em>}</div>
+                    <div className="co-lines__text"><strong>{p?.title ?? q?.title}</strong><span>{formatLabel(p, l.kind)}</span>{q?.issue && <em>{issueText(q)}</em>}</div>
                     <div className="co-lines__price">{q ? inr(q.lineTotal) : ''}</div>
                   </li>
                 );

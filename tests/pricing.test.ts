@@ -48,13 +48,17 @@ describe('priceCart', () => {
     expect(q.shipping).toBe(0);
   });
 
-  it('splits a bundle into a tax-free print part and a taxed e-book part', () => {
+  it('no longer sells bundles', () => {
     const q = priceCart({ items: [{ productId: A, kind: 'bundle', quantity: 1 }], products, settings });
-    const [line] = q.lines;
-    const ebookPart = Math.round(51900 * 24900 / (39500 + 24900));
-    expect(line.taxAmount).toBe(splitInclusive(ebookPart, 18).tax);
-    expect(line.taxableValue + line.taxAmount).toBe(51900);
-    expect(line.requiresShipping && line.isDigital).toBe(true);
+    expect(q.lines[0].issue).toEqual({ code: 'unavailable' });
+  });
+
+  it('names a printed copy that includes the e-book free, priced and taxed as a printed book', () => {
+    const plain = priceCart({ items: [{ productId: A, kind: 'print', quantity: 1 }], products, settings }).lines[0];
+    expect(plain).toMatchObject({ formatLabel: 'Printed book', includesEbook: false });
+    const withEbook = new Map([[A, { ...products.get(A)!, ebookWithPrint: true }]]);
+    const line = priceCart({ items: [{ productId: A, kind: 'print', quantity: 1 }], products: withEbook, settings }).lines[0];
+    expect(line).toMatchObject({ formatLabel: 'Printed book + free e-book', includesEbook: true, isDigital: false, lineTotal: 39500, taxAmount: 0 });
   });
 
   it('skips GST when the store has no GSTIN', () => {

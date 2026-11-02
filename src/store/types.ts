@@ -3,7 +3,11 @@ import type { LevelKey } from '../data';
 
 export type Kind = 'print' | 'digital' | 'bundle';
 
-export interface Format { price: number; compareAt: number | null; available: boolean; lowStock: number | null }
+export interface Format {
+  price: number; compareAt: number | null; available: boolean; lowStock: number | null;
+  /** Printed copy only: the e-book comes free with it. */
+  includesEbook?: boolean;
+}
 
 export interface Category { id: number; name: string; slug: string }
 

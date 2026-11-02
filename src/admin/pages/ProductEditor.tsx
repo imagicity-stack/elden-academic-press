@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { LV, PAL, type LevelKey } from '../../data';
-import { inr } from '../../store/api';
 import type { Product } from '../../store/types';
 import { BookCover } from '../../components/BookCover';
 import { adminApi, ApiError, fmtDate, rupees, toPaise, uploadFile, useAdmin } from '../api';
@@ -16,7 +15,7 @@ interface ProductRow {
   id: string; slug: string; title: string; series: string; author: string; blurb: string; description: string; categoryId: number | null;
   level: LevelKey; classLabel: string; grade: number | null; boards: string[]; subject: string; language: string; pages: number | null;
   edition: string; isbn: string; highlights: string[]; contents: string[]; coverPath: string | null; coverPalette: number; coverUrl: string | null;
-  hasCompanion: boolean; isNew: boolean; featured: boolean; sort: number; status: string; seoTitle: string; seoDescription: string; updatedAt: string;
+  hasCompanion: boolean; isNew: boolean; featured: boolean; ebookWithPrint?: boolean; sort: number; status: string; seoTitle: string; seoDescription: string; updatedAt: string;
 }
 interface Detail {
   product: ProductRow;
@@ -34,6 +33,8 @@ const emptyForm = () => ({
   pages: '', edition: '', isbn: '', highlights: '', contents: '',
   coverPath: null as string | null, coverUrl: null as string | null, coverPalette: 0,
   hasCompanion: false, isNew: true, featured: false, sort: '0', status: 'draft', seoTitle: '', seoDescription: '',
+  /** Buyers of the printed copy also get the e-book files free. */
+  ebookWithPrint: false,
   print: { enabled: true, price: '', compareAtPrice: '', sku: '', stock: '0', trackStock: true, weightGrams: '', taxRate: '0' },
   digital: { enabled: false, price: '', compareAtPrice: '', sku: '', taxRate: '18', files: [] as EbookFile[] },
   bundle: { enabled: false, price: '', compareAtPrice: '', sku: '' },
@@ -51,7 +52,7 @@ function fromDetail(d: Detail): Form {
     boards: p.boards, subject: p.subject, language: p.language, pages: p.pages ? String(p.pages) : '', edition: p.edition, isbn: p.isbn,
     highlights: p.highlights.join('\n'), contents: p.contents.join('\n'),
     coverPath: p.coverPath, coverUrl: d.product.coverUrl, coverPalette: p.coverPalette,
-    hasCompanion: p.hasCompanion, isNew: p.isNew, featured: p.featured, sort: String(p.sort), status: p.status, seoTitle: p.seoTitle, seoDescription: p.seoDescription,
+    hasCompanion: p.hasCompanion, isNew: p.isNew, featured: p.featured, ebookWithPrint: Boolean(p.ebookWithPrint), sort: String(p.sort), status: p.status, seoTitle: p.seoTitle, seoDescription: p.seoDescription,
     print: v.print ? { enabled: v.print.active, price: rupees(v.print.price), compareAtPrice: rupees(v.print.compareAtPrice), sku: v.print.sku ?? '', stock: String(v.print.stock), trackStock: v.print.trackStock, weightGrams: v.print.weightGrams ? String(v.print.weightGrams) : '', taxRate: String(v.print.taxRate) } : { ...f.print, enabled: false },
     digital: v.digital ? { enabled: v.digital.active, price: rupees(v.digital.price), compareAtPrice: rupees(v.digital.compareAtPrice), sku: v.digital.sku ?? '', taxRate: String(v.digital.taxRate),
       files: v.digital.files?.length ? v.digital.files : v.digital.filePath ? [{ path: v.digital.filePath, name: v.digital.fileName ?? '', title: '', size: v.digital.fileSize }] : [] } : f.digital,
@@ -69,10 +70,11 @@ function toPayload(f: Form, status = f.status) {
     categoryId: f.categoryId ? Number(f.categoryId) : null, level: f.level, classLabel: f.classLabel, grade: num(f.grade), boards: f.boards,
     subject: f.subject, language: f.language, pages: num(f.pages), edition: f.edition, isbn: f.isbn,
     highlights: lines(f.highlights), contents: lines(f.contents), coverPath: f.coverPath, coverPalette: f.coverPalette,
-    hasCompanion: f.hasCompanion, isNew: f.isNew, featured: f.featured, sort: Number(f.sort) || 0, status, seoTitle: f.seoTitle, seoDescription: f.seoDescription,
+    hasCompanion: f.hasCompanion, isNew: f.isNew, featured: f.featured, ebookWithPrint: f.print.enabled && f.ebookWithPrint, sort: Number(f.sort) || 0, status, seoTitle: f.seoTitle, seoDescription: f.seoDescription,
     print: { enabled: f.print.enabled, price: money(f.print.price) ?? 0, compareAtPrice: money(f.print.compareAtPrice), sku: f.print.sku, stock: Number(f.print.stock) || 0, trackStock: f.print.trackStock, weightGrams: num(f.print.weightGrams), taxRate: Number(f.print.taxRate) || 0 },
     digital: { enabled: f.digital.enabled, price: money(f.digital.price) ?? 0, compareAtPrice: money(f.digital.compareAtPrice), sku: f.digital.sku, taxRate: Number(f.digital.taxRate) || 0, files: f.digital.files },
-    bundle: { enabled: f.bundle.enabled && f.print.enabled && f.digital.enabled, price: money(f.bundle.price) ?? 0, compareAtPrice: money(f.bundle.compareAtPrice), sku: f.bundle.sku },
+    // Bundles are no longer sold (a printed copy can include the e-book free instead).
+    bundle: { enabled: false, price: money(f.bundle.price) ?? 0, compareAtPrice: money(f.bundle.compareAtPrice), sku: f.bundle.sku },
   };
 }
 
@@ -84,7 +86,6 @@ function problems(f: Form): Record<string, string> {
   const bad = (s: string) => s.trim() === '' || Number.isNaN(toPaise(s)) || toPaise(s) < 0;
   if (f.print.enabled && bad(f.print.price)) e.printPrice = 'Enter a price';
   if (f.digital.enabled && bad(f.digital.price)) e.digitalPrice = 'Enter a price';
-  if (f.bundle.enabled && f.print.enabled && f.digital.enabled && bad(f.bundle.price)) e.bundlePrice = 'Enter the bundle price';
   return e;
 }
 
@@ -182,8 +183,6 @@ export default function ProductEditor() {
   if (error) return <Page title="Product" back={{ to: '/admin/products', label: 'Products' }}><ErrorBox error={error} retry={reload} /></Page>;
   if (!isNew && !data) return <Page title="Product" back={{ to: '/admin/products', label: 'Products' }}><Loading /></Page>;
 
-  const bundleSaving = form.print.enabled && form.digital.enabled && form.bundle.price
-    ? toPaise(form.print.price) + toPaise(form.digital.price) - toPaise(form.bundle.price) : 0;
   const statusLabel = form.status === 'active' ? 'Live' : form.status === 'draft' ? 'Draft' : 'Archived';
 
   return (
@@ -229,17 +228,29 @@ export default function ProductEditor() {
                   <SelectField label="GST rate" value={form.print.taxRate} onChange={(e) => setV('print', { taxRate: e.target.value })}>{['0', '5', '12', '18'].map((r) => <option key={r} value={r}>{r}%{r === '0' ? ' (printed books)' : ''}</option>)}</SelectField>
                   <Check label="Track stock" hint="Stops selling at zero" checked={form.print.trackStock} onChange={(v) => setV('print', { trackStock: v })} />
                 </div>}
+                {form.print.enabled && (
+                  <div className="ad-free-ebook">
+                    <Check label="Include the e-book (PDF) free with every printed copy" hint="Buyers of the printed book also get the e-book files below, at no extra cost. The book page says so."
+                      checked={form.ebookWithPrint} onChange={(v) => set('ebookWithPrint', v)} />
+                  </div>
+                )}
               </div>
 
-              <div className={'ad-format' + (form.digital.enabled ? ' is-on' : '')}>
-                <div className="ad-format__head"><Toggle label="Sell the e-book" checked={form.digital.enabled} onChange={(v) => setV('digital', { enabled: v })} /><b>E-book</b></div>
-                {form.digital.enabled && <>
-                  <div className="ad-form-grid">
+              <div className={'ad-format' + (form.digital.enabled || (form.print.enabled && form.ebookWithPrint) ? ' is-on' : '')}>
+                <div className="ad-format__head"><Toggle label="Sell the e-book separately" checked={form.digital.enabled} onChange={(v) => setV('digital', { enabled: v })} /><b>E-book (PDF)</b></div>
+                {!form.digital.enabled && !(form.print.enabled && form.ebookWithPrint) && (
+                  <p className="ad-muted">Turn this on to sell the e-book on its own, or tick “Include the e-book free” on the printed book to give it with every printed copy.</p>
+                )}
+                {!form.digital.enabled && form.print.enabled && form.ebookWithPrint && (
+                  <p className="ad-muted">Not sold on its own: buyers get it free with the printed copy. Upload the files below.</p>
+                )}
+                {(form.digital.enabled || (form.print.enabled && form.ebookWithPrint)) && <>
+                  {form.digital.enabled && <div className="ad-form-grid">
                     <MoneyField label="Price" value={form.digital.price} onChange={(e) => setV('digital', { price: e.target.value })} error={show('digitalPrice')} />
                     <MoneyField label="Compare-at price" value={form.digital.compareAtPrice} onChange={(e) => setV('digital', { compareAtPrice: e.target.value })} />
                     <TextField label="SKU" value={form.digital.sku} onChange={(e) => setV('digital', { sku: e.target.value })} />
                     <SelectField label="GST rate" value={form.digital.taxRate} onChange={(e) => setV('digital', { taxRate: e.target.value })}>{['0', '5', '12', '18'].map((r) => <option key={r} value={r}>{r}%{r === '18' ? ' (e-books)' : ''}</option>)}</SelectField>
-                  </div>
+                  </div>}
                   <div className={'ad-files' + (serverMsg('digital') ? ' has-error' : '')}>
                     <div className="ad-files__head">
                       <b>E-book files</b>
@@ -272,19 +283,6 @@ export default function ProductEditor() {
                 </>}
               </div>
 
-              <div className={'ad-format' + (form.bundle.enabled && form.print.enabled && form.digital.enabled ? ' is-on' : '') + (!(form.print.enabled && form.digital.enabled) ? ' is-disabled' : '')}>
-                <div className="ad-format__head">
-                  <Toggle label="Offer the bundle" checked={form.bundle.enabled && form.print.enabled && form.digital.enabled} onChange={(v) => setV('bundle', { enabled: v })} />
-                  <b>E-book + printed copy</b>
-                </div>
-                {!(form.print.enabled && form.digital.enabled)
-                  ? <p className="ad-muted">Turn on both the printed book and the e-book to offer the “also send me the printed copy” option.</p>
-                  : form.bundle.enabled && <div className="ad-form-grid">
-                    <MoneyField label="Bundle price" value={form.bundle.price} onChange={(e) => setV('bundle', { price: e.target.value })} error={show('bundlePrice')}
-                      hint={bundleSaving > 0 ? `Customers save ${inr(bundleSaving)} vs buying both` : bundleSaving < 0 ? 'Costs more than buying both separately' : undefined} />
-                    <TextField label="SKU" value={form.bundle.sku} onChange={(e) => setV('bundle', { sku: e.target.value })} />
-                  </div>}
-              </div>
             </div>
           </Card>
 

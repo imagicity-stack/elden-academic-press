@@ -64,6 +64,8 @@ export const products = pgTable('products', {
   hasCompanion: boolean('has_companion').notNull().default(false),
   isNew: boolean('is_new').notNull().default(false),
   featured: boolean('featured').notNull().default(false),
+  /** Buyers of the printed copy also get the e-book files free (set per book). */
+  ebookWithPrint: boolean('ebook_with_print').notNull().default(false),
   sort: integer('sort').notNull().default(0),
   status: productStatus('status').notNull().default('draft'),
   seoTitle: text('seo_title').notNull().default(''),
@@ -230,6 +232,8 @@ export const orderItems = pgTable('order_items', {
   isDigital: boolean('is_digital').notNull(),
   weightGrams: integer('weight_grams').notNull().default(0),
   downloadsUsed: integer('downloads_used').notNull().default(0),
+  /** A printed copy that came with the e-book free (decided at purchase, kept if the book's setting changes). */
+  includesEbook: boolean('includes_ebook').notNull().default(false),
 }, (t) => [index('order_items_order_idx').on(t.orderId)]);
 
 export const orderEvents = pgTable('order_events', {

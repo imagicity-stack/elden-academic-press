@@ -33,7 +33,7 @@ export function BookSchema({ book }: { book: Product }) {
 
   const gtin = book.isbn ? isbn13(book.isbn) : null;
   const image = book.coverUrl ? new URL(book.coverUrl, SITE).href : undefined;
-  const offers = ([['print', 'Printed book'], ['digital', 'E-book']] as const).flatMap(([k, name]) => {
+  const offers = ([['print', book.formats.print?.includesEbook ? 'Printed book + free e-book' : 'Printed book'], ['digital', 'E-book']] as const).flatMap(([k, name]) => {
     const f = book.formats[k];
     return f ? [{
       '@type': 'Offer', name, url, priceCurrency: 'INR', price: (f.price / 100).toFixed(2),

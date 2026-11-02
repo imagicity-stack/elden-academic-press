@@ -98,7 +98,7 @@ account.get('/', async (c) => {
   for (const o of mine) {
     if (o.paymentStatus === 'refunded' || o.cancelledAt || !o.paidAt) continue;
     const expiresAt = s.downloadExpiryDays > 0 ? new Date(o.paidAt.getTime() + s.downloadExpiryDays * 86400_000) : null;
-    for (const i of items.filter((x) => x.orderId === o.id && x.isDigital)) {
+    for (const i of items.filter((x) => x.orderId === o.id && (files.get(x.id)?.length ?? 0) > 0)) {
       const key = i.productId ?? i.id;
       if (library.has(key)) continue; // newest purchase of a title wins (orders are newest first)
       const open = !expiresAt || expiresAt > now();
@@ -141,7 +141,7 @@ account.post('/library/:itemId/read', async (c) => {
   const s = await getSettings(db);
   const [row] = await db.select({ item: orderItems, order: orders }).from(orderItems)
     .innerJoin(orders, eq(orders.id, orderItems.orderId))
-    .where(and(eq(orderItems.id, c.req.param('itemId')), eq(orderItems.isDigital, true), eq(orders.email, me.email), inArray(orders.paymentStatus, ['paid', 'partially_refunded'])));
+    .where(and(eq(orderItems.id, c.req.param('itemId')), eq(orders.email, me.email), inArray(orders.paymentStatus, ['paid', 'partially_refunded'])));
   if (!row || row.order.cancelledAt || !row.order.paidAt) throw notFound('This e-book isn’t in your library.');
   if (s.downloadExpiryDays > 0 && row.order.paidAt.getTime() + s.downloadExpiryDays * 86400_000 < now().getTime()) {
     throw new HttpError(410, 'Access to this e-book has expired. Please contact us.');
