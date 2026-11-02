@@ -184,7 +184,7 @@ function Refunds() {
         <ul>
           <li><strong>Printed books:</strong> you can cancel any time before your order is dispatched, for a full refund including delivery charges. Once dispatched, it can no longer be cancelled.</li>
           <li><strong>E-books:</strong> you can cancel within {P.ebookCancelDays} days of purchase for a full refund, as long as the e-book has not been downloaded. Once downloaded, an e-book cannot be cancelled or refunded, except as described in section 3.</li>
-          <li><strong>E-book + printed copy:</strong> each part follows its own rule above. If only one part can be cancelled, we refund that part’s share of the bundle price.</li>
+          <li><strong>Printed books with a free e-book:</strong> the printed book follows the rule above; if it is cancelled or returned, access to the free e-book ends with it.</li>
         </ul>
         <p>To cancel, email <Mail /> with your order number.</p>
       </Section>

@@ -960,3 +960,6 @@ select.input { appearance: none; padding-right: 42px; background: #FFFFFF url("d
 .acct-files li span { flex: 1; min-width: 0; font-weight: 500; }
 .acct-files .text-link { font-size: 13.5px; padding: 0; }
 .acct-files .text-link:disabled { opacity: .4; cursor: default; }
+.buy__free { padding: 10px 14px; background: #E5F5EC; font: 400 14px/1.45 var(--f-text); color: var(--ink); }
+.buy__free span { font-weight: 700; color: var(--ok); }
+.buy__free b { font-weight: 600; color: var(--ok); }

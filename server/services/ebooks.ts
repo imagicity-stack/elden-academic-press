@@ -14,11 +14,16 @@ export function ebookFiles(v: Pick<Variant, 'files' | 'filePath' | 'fileName' | 
   return v.filePath ? [{ path: v.filePath, name: v.fileName ?? '', title: '', size: v.fileSize ?? null }] : [];
 }
 
-/** Each digital order item's files (from its product's e-book), by order item id. */
-export async function filesForItems(db: Q, items: { id: string; productId: string | null; isDigital: boolean }[]) {
-  const ids = [...new Set(items.filter((i) => i.isDigital && i.productId).map((i) => i.productId!))];
+type ItemRef = { id: string; productId: string | null; isDigital: boolean; includesEbook?: boolean };
+
+/** E-books come with e-book purchases, and with printed copies of books that include it free. */
+export const comesWithEbook = (i: ItemRef) => i.isDigital || Boolean(i.includesEbook);
+
+/** The e-book files each order item gives access to, by order item id (empty when none). */
+export async function filesForItems(db: Q, items: ItemRef[]) {
+  const ids = [...new Set(items.filter((i) => comesWithEbook(i) && i.productId).map((i) => i.productId!))];
   const vars = ids.length ? await db.select().from(productVariants).where(and(inArray(productVariants.productId, ids), eq(productVariants.kind, 'digital'))) : [];
-  return new Map(items.map((i) => [i.id, i.isDigital ? ebookFiles(vars.find((v) => v.productId === i.productId)) : []]));
+  return new Map(items.map((i) => [i.id, comesWithEbook(i) ? ebookFiles(vars.find((v) => v.productId === i.productId)) : []]));
 }
 
 /** Downloads allowed for one purchased e-book: the setting, once per file. */

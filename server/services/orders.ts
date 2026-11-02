@@ -159,6 +159,7 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
       taxRate: l.taxRate,
       requiresShipping: l.requiresShipping,
       isDigital: l.isDigital,
+      includesEbook: l.includesEbook,
       weightGrams: l.weightGrams,
     })));
     const wanted = printQuantities(q.lines.map((l) => ({ productId: l.productId, requiresShipping: l.requiresShipping, quantity: l.quantity })));

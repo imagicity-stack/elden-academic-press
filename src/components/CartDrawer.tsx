@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { inr } from '../store/api';
-import { FORMAT_LABEL, useCatalog } from '../store/catalog';
+import { formatLabel, useCatalog } from '../store/catalog';
 import { MAX_QTY, useCart, useQuote } from '../store/cart';
 import type { Quote, QuoteLine } from '../store/types';
 import { BookCover } from './BookCover';
@@ -65,7 +65,7 @@ export function CartDrawer() {
                           <div className="cart-line__cover">{p ? <BookCover book={p} /> : <div className="cover" />}</div>
                           <div className="cart-line__body">
                             <Link to={p ? '/books/' + p.slug : '/catalogue'} className="cart-line__title" onClick={cart.closeDrawer}>{p?.title ?? q?.title ?? 'Item'}</Link>
-                            <div className="cart-line__fmt">{FORMAT_LABEL[l.kind]}</div>
+                            <div className="cart-line__fmt">{formatLabel(p, l.kind)}</div>
                             {q?.issue && <div className="cart-line__issue">{issueText(q)}</div>}
                             <div className="cart-line__row">
                               {MAX_QTY[l.kind] > 1 ? (

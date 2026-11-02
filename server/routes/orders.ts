@@ -75,8 +75,8 @@ customerOrders.get('/:number', async (c) => {
       const limit = downloadLimit(s, fs.length);
       return {
         id: i.id, productId: i.productId, title: i.title, format: i.formatLabel, kind: i.variantKind, quantity: i.quantity, lineTotal: i.lineTotal, isDigital: i.isDigital,
-        downloadsLeft: i.isDigital ? Math.max(limit - i.downloadsUsed, 0) : null,
-        canDownload: i.isDigital && downloadsOpen && i.downloadsUsed < limit && fs.length > 0,
+        downloadsLeft: fs.length ? Math.max(limit - i.downloadsUsed, 0) : null,
+        canDownload: fs.length > 0 && downloadsOpen && i.downloadsUsed < limit,
         files: fs.map((f, k) => ({ index: k, label: fileLabel(f, k, fs.length) })),
       };
     }),
@@ -113,7 +113,7 @@ customerOrders.get('/:number/download/:itemId', async (c) => {
     throw new HttpError(410, 'This download link has expired. Please contact us.');
   }
   const itemId = c.req.param('itemId');
-  const [found] = await deps.db.select().from(orderItems).where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, o.id), eq(orderItems.isDigital, true)));
+  const [found] = await deps.db.select().from(orderItems).where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, o.id)));
   if (!found) throw notFound('This e-book isn’t in this order.');
   // ?f= picks one of the e-book's files (0 = the first).
   const fs = (await filesForItems(deps.db, [found])).get(found.id) ?? [];

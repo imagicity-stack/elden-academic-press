@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { eq } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
-import { adminUsers, orders, productVariants, settings, subscribers } from '../db/schema.js';
+import { adminUsers, orders, products, productVariants, settings, subscribers } from '../db/schema.js';
 
 type Check = 'ok' | 'missing' | 'error';
 export interface Health {
@@ -63,6 +63,7 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
       }],
       ['0004_meta_tracking', () => db.select({ v: orders.adConsent }).from(orders).limit(1)],
       ['0005_ebook_files', () => db.select({ v: productVariants.files }).from(productVariants).limit(1)],
+      ['0006_ebook_with_print', () => db.select({ v: products.ebookWithPrint }).from(products).limit(1)],
     ];
     checks.database = 'ok';
     for (const [file, probe] of updates) {

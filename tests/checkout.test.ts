@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { hmacHex } from '../server/lib/crypto.js';
+import { orderToken } from '../server/services/orders.js';
 import { inventoryMovements, orders, productVariants, products } from '../server/db/schema.js';
 import { address, contact, setup, WEBHOOK_SECRET } from './helpers.js';
 
@@ -34,7 +35,9 @@ describe('catalogue', () => {
     const m8 = r.json.items.find((i: any) => i.slug === 'mathematics-today');
     expect(m8.formats.print.price).toBe(39500);
     expect(m8.formats.digital.price).toBe(24900);
-    expect(m8.formats.bundle.price).toBeGreaterThan(39500);
+    // Bundles are no longer sold; this book doesn't include its e-book with the printed copy.
+    expect(m8.formats.bundle).toBeUndefined();
+    expect(m8.formats.print.includesEbook).toBe(false);
     expect(r.json.categories.length).toBe(6);
     // Seeded out-of-stock title shows as unavailable in print
     const out = r.json.items.find((i: any) => i.formats.print && !i.formats.print.available);
@@ -52,7 +55,7 @@ describe('catalogue', () => {
 describe('checkout and payment', () => {
   it('quotes a cart', async () => {
     const p = await productBySlug('mathematics-today');
-    const r = await t.call('POST', '/cart/quote', { body: { items: [{ productId: p.id, kind: 'bundle', quantity: 1 }], couponCode: 'WELCOME10' } });
+    const r = await t.call('POST', '/cart/quote', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }], couponCode: 'WELCOME10' } });
     expect(r.status).toBe(200);
     expect(r.json.quote.discount).toBeGreaterThan(0);
     expect(r.json.quote.coupon.code).toBe('WELCOME10');
@@ -206,10 +209,15 @@ describe('Razorpay webhooks', () => {
   });
 });
 
+async function orderTokenFor(number: number) {
+  const [o] = await t.db.select().from(orders).where(eq(orders.number, number));
+  return orderToken('order-link-secret-for-tests-0123456789', o.id);
+}
+
 describe('after purchase', () => {
   async function paidOrder() {
     const p = await productBySlug('mathematics-today');
-    const r = await checkout([{ productId: p.id, kind: 'bundle', quantity: 1 }]);
+    const r = await checkout([{ productId: p.id, kind: 'digital', quantity: 1 }]);
     await pay(r.json.razorpay.orderId);
     return r.json as { number: number; token: string; orderId: string };
   }
@@ -220,7 +228,7 @@ describe('after purchase', () => {
     expect((await t.call('GET', `/orders/${o.number}?t=wrong`)).status).toBe(404);
     const r = await t.call('GET', `/orders/${o.number}?t=${o.token}`);
     expect(r.status).toBe(200);
-    expect(r.json.status).toBe('Confirmed');
+    expect(r.json.status).toBe('Complete');
     expect(r.json.items[0].canDownload).toBe(true);
     expect(r.json.timeline.map((e: any) => [e.type, e.message])).toEqual([['created', 'Order placed'], ['paid', 'Payment received · UPI']]);
   });
@@ -235,6 +243,42 @@ describe('after purchase', () => {
     for (let i = 1; i < 10; i++) await t.call('GET', `/orders/${o.number}/download/${itemId}?t=${o.token}`);
     const over = await t.call('GET', `/orders/${o.number}/download/${itemId}?t=${o.token}`);
     expect(over.status).toBe(403);
+  });
+
+  it('gives the e-book free with printed copies of books set that way, and not otherwise', async () => {
+    const p = await productBySlug('mathematics-today');
+    const buyPrint = async () => {
+      const r = await checkout([{ productId: p.id, kind: 'print', quantity: 1 }]);
+      await pay(r.json.razorpay.orderId);
+      return (await t.call('GET', `/orders/${r.json.number}?t=${r.json.token}`)).json;
+    };
+    // Not set: a printed copy is just a printed copy.
+    const plain = await buyPrint();
+    expect(plain.items[0]).toMatchObject({ format: 'Printed book', files: [], canDownload: false });
+
+    await t.db.update(products).set({ ebookWithPrint: true }).where(eq(products.id, p.id));
+    const catalog = await t.call('GET', '/catalog');
+    expect(catalog.json.items.find((i: any) => i.id === p.id).formats.print.includesEbook).toBe(true);
+    const quote = await t.call('POST', '/cart/quote', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }] } });
+    expect(quote.json.quote.lines[0]).toMatchObject({ formatLabel: 'Printed book + free e-book', includesEbook: true, isDigital: false });
+    expect(quote.json.quote.tax).toBe(0); // still a printed book for GST
+
+    t.mailer.sent.length = 0;
+    const withEbook = await buyPrint();
+    expect(withEbook.items[0]).toMatchObject({ format: 'Printed book + free e-book', canDownload: true, downloadsLeft: 10 });
+    expect(withEbook.items[0].files).toHaveLength(1);
+    const token = await orderTokenFor(withEbook.number);
+    const dl = await t.call('GET', `/orders/${withEbook.number}/download/${withEbook.items[0].id}?t=${token}`);
+    expect(dl.status).toBe(302);
+    expect(dl.headers.get('location')).toContain('/ebooks/');
+    const mail = t.mailer.sent.find((m) => m.to === contact.email)!;
+    expect(mail.html).toContain('Free with your printed copy');
+    expect(mail.attachments!.map((a) => a.filename)).toEqual([expect.stringMatching(/^Elden-invoice-/)]);
+
+    // Turning the setting off later doesn't take the e-book away from that buyer.
+    await t.db.update(products).set({ ebookWithPrint: false }).where(eq(products.id, p.id));
+    const again = await t.call('GET', `/orders/${withEbook.number}?t=${token}`);
+    expect(again.json.items[0].canDownload).toBe(true);
   });
 
   it('serves every file of an e-book in parts, with the limit per file', async () => {
@@ -279,7 +323,7 @@ describe('after purchase', () => {
     const o = await paidOrder();
     const byPhone = await t.call('POST', '/orders/lookup', { body: { number: o.number, contact: '+91 98765 43210' } });
     expect(byPhone.status).toBe(200);
-    expect(byPhone.json.status).toBe('Confirmed');
+    expect(byPhone.json.status).toBe('Complete');
     expect((await t.call('POST', '/orders/lookup', { body: { number: o.number, contact: 'someone@else.com' } })).status).toBe(404);
     const sent = t.mailer.sent.length;
     expect((await t.call('POST', '/orders/resend', { body: { number: o.number, contact: 'ASHA@example.com' } })).status).toBe(200);

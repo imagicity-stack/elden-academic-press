@@ -152,7 +152,25 @@ describe('products', () => {
     const ok = await t.call('PUT', `/admin/products/${r.json.product.id}`, { headers: h, body: { ...draft, status: 'active', digital: { ...draft.digital, filePath: '2027/x/clm.pdf', fileName: 'clm.pdf' } } });
     expect(ok.status).toBe(200);
     const catalog = await t.call('GET', '/catalog');
-    expect(catalog.json.items.find((i: any) => i.slug === 'chemistry-lab-manual').formats.bundle.price).toBe(39900);
+    const item = catalog.json.items.find((i: any) => i.slug === 'chemistry-lab-manual');
+    expect(item.formats.digital.price).toBe(19900);
+    expect(item.formats.bundle).toBeUndefined(); // bundles are no longer sold
+  });
+
+  it('gives the e-book free with the printed copy, sold on its own or not', async () => {
+    const h = await as(OWNER);
+    const files = [{ path: '2027/x/clm.pdf', name: 'clm.pdf', title: '', size: 1000 }];
+    const body = { ...draft, status: 'active', ebookWithPrint: true, digital: { ...draft.digital, enabled: false, files: [] }, bundle: { enabled: false, price: 0 } };
+    const noFile = await t.call('POST', '/admin/products', { headers: h, body });
+    expect(noFile.status).toBe(400);
+    expect(noFile.json.details.digital[0]).toMatch(/free with the printed copy/);
+    const r = await t.call('POST', '/admin/products', { headers: h, body: { ...body, digital: { ...body.digital, files } } });
+    expect(r.status).toBe(201);
+    expect(r.json.product.ebookWithPrint).toBe(true);
+    expect(r.json.variants.digital).toMatchObject({ active: false, files, filePath: '2027/x/clm.pdf' });
+    const item = (await t.call('GET', '/catalog')).json.items.find((i: any) => i.slug === 'chemistry-lab-manual');
+    expect(item.formats.digital).toBeUndefined(); // not sold on its own
+    expect(item.formats.print.includesEbook).toBe(true);
   });
 
   it('saves an e-book with several labelled files, in order', async () => {

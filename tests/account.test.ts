@@ -23,13 +23,13 @@ describe('customer accounts', () => {
   });
 
   it('shows the customer’s own orders and e-book library', async () => {
-    const mine = await buy('bundle');
+    const mine = await buy('digital');
     await buy('print', 'someone@else.in');
     const r = await t.call('GET', '/account', { headers: await auth('ASHA@example.com') });
     expect(r.status).toBe(200);
     expect(r.json.customer).toMatchObject({ email: contact.email, name: 'Asha Verma' });
     expect(r.json.orders.map((o: any) => o.number)).toEqual([mine.number]);
-    expect(r.json.orders[0]).toMatchObject({ status: 'Confirmed', token: mine.token });
+    expect(r.json.orders[0]).toMatchObject({ status: 'Complete', token: mine.token });
     expect(r.json.library).toHaveLength(1);
     expect(r.json.library[0]).toMatchObject({ title: 'Mathematics Today', orderNumber: mine.number, canRead: true, downloadsLeft: 10 });
     expect(r.json.library[0].downloadUrl).toContain(`/api/orders/${mine.number}/download/`);

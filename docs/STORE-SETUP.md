@@ -132,7 +132,7 @@ Customers can sign in at **eldenap.in/account** with Google to read their e-book
 1. Go to `https://eldenap.in/admin` and sign in. Scan the QR code with an authenticator app (Google Authenticator, Microsoft Authenticator, Authy) and enter the code. You're now the owner.
 2. **Settings → Store**: GSTIN (if registered), legal name, address, support email/phone, shipping charge and free-shipping threshold, who gets order alerts.
 3. **Settings → Categories**: adjust the categories.
-4. **Products**: add products one by one, or **Import** a spreadsheet (export first to get the column layout). For each e-book, upload the PDF/EPUB in the product; a book in parts can have several files (**Add another file**), each with a label such as "Part 1" or "Answer key", in the order buyers see them. Upload covers (or pick typeset colours).
+4. **Products**: add products one by one, or **Import** a spreadsheet (export first to get the column layout). For each e-book, upload the PDF/EPUB in the product; a book in parts can have several files (**Add another file**), each with a label such as "Part 1" or "Answer key", in the order buyers see them. To give the e-book free with the printed copy, tick **Include the e-book (PDF) free with every printed copy** under the printed book; the e-book can still be sold on its own as well (**Sell the e-book separately**), or not. The choice is kept with each order, so changing it later doesn't affect people who already bought. Upload covers (or pick typeset colours).
 5. **Study Hub**: upload the free PDFs.
 6. **Settings → Staff**: invite team members as *Staff* (orders, packing, enquiries) or *Manager* (also products, prices, discounts, refunds).
 
@@ -226,6 +226,6 @@ The website already sends everything Google needs; these are the settings on Goo
 
 - **Unpaid checkouts** hold printed stock for 30 minutes (Settings), then a job every 10 minutes releases it. If someone pays late, the stock is re-taken, or the order is flagged *Needs attention* if it sold out meanwhile.
 - **Needs attention** also flags duplicate payments and amount mismatches — check the dashboard.
-- **GST**: prices include GST. Printed books are set to 0% and e-books to 18% by default (per product). In a bundle, the price is split between the printed and e-book parts in proportion to their own prices. Invoice numbers run per financial year (`EAP/27-28/00001`). Confirm rates, HSN/SAC codes (4901 / 998431) and the bundle split with your accountant.
+- **GST**: prices include GST. Printed books are set to 0% and e-books to 18% by default (per product). A printed copy that includes the e-book free is charged and taxed as a printed book. Invoice numbers run per financial year (`EAP/27-28/00001`). Confirm rates, HSN/SAC codes (4901 / 998431) and the bundle split with your accountant.
 - **E-book protection**: files are private; buyers get links that expire after 5 minutes, limited downloads per purchase (default 10 per file, so a 3-file e-book allows 30) and a download period (default 1 year). E-books are never attached to emails; buyers download them from their order page, account or the email's buttons. Change these in Settings.
 - **Backups**: Supabase Pro takes daily backups. Exports (orders, customers, products, enquiries) are in the admin as CSV.

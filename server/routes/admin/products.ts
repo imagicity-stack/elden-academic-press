@@ -51,6 +51,8 @@ const zProduct = z.object({
   hasCompanion: z.boolean().default(false),
   isNew: z.boolean().default(false),
   featured: z.boolean().default(false),
+  /** The printed copy comes with the e-book files free. */
+  ebookWithPrint: z.boolean().default(false),
   sort: z.number().int().default(0),
   status: z.enum(['draft', 'active', 'archived']).default('draft'),
   seoTitle: zText(120).default(''),
@@ -77,7 +79,8 @@ const zProduct = z.object({
   bundle: zVariant,
 }).refine((p) => p.print.enabled || p.digital.enabled, { message: 'Turn on at least one format', path: ['print'] })
   .refine((p) => !p.bundle.enabled || (p.print.enabled && p.digital.enabled), { message: 'A bundle needs both print and e-book', path: ['bundle'] })
-  .refine((p) => !(p.status === 'active' && p.digital.enabled && !(p.digital.files?.length || p.digital.filePath)), { message: 'Upload the e-book file before publishing', path: ['digital'] });
+  .refine((p) => !(p.status === 'active' && p.digital.enabled && !(p.digital.files?.length || p.digital.filePath)), { message: 'Upload the e-book file before publishing', path: ['digital'] })
+  .refine((p) => !(p.status === 'active' && p.print.enabled && p.ebookWithPrint && !(p.digital.files?.length || p.digital.filePath)), { message: 'Upload the e-book file: it comes free with the printed copy', path: ['digital'] });
 
 type ProductInput = z.infer<typeof zProduct>;
 
@@ -109,11 +112,12 @@ async function saveVariants(tx: Q, productId: string, p: ProductInput, actor: st
   ];
   for (const [kind, values, enabled] of sets) {
     const cur = find(kind);
-    if (!cur && !enabled) continue;
+    // The e-book's files are kept even when it isn't sold on its own (it may come free with the printed copy).
+    if (!cur && !enabled && !(kind === 'digital' && files.length)) continue;
     if (cur) {
       await tx.update(productVariants).set({ ...values, active: enabled, updatedAt: sql`now()` }).where(eq(productVariants.id, cur.id));
     } else {
-      const [created] = await tx.insert(productVariants).values({ productId, kind, price: values.price!, ...values, active: true, stock: 0 }).returning();
+      const [created] = await tx.insert(productVariants).values({ productId, kind, price: values.price!, ...values, active: enabled, stock: 0 }).returning();
       existing.push(created);
     }
   }
@@ -228,7 +232,7 @@ adminProducts.post('/import', requireRole('manager'), async (c) => {
         categoryId: catId ?? existing?.categoryId ?? null, level, classLabel: r.class ?? '', grade: r.grade ? Number(r.grade) : null,
         boards: (r.boards ?? '').split(/[;|]/).map((b) => b.trim()).filter(Boolean), subject: r.subject ?? '', language: r.language || 'English',
         pages: r.pages ? Number(r.pages) : null, edition: r.edition ?? '', isbn: r.isbn ?? '',
-        highlights: existing?.highlights ?? [], contents: existing?.contents ?? [], coverPath: existing?.coverPath ?? null, coverPalette: existing?.coverPalette ?? 0,
+        highlights: existing?.highlights ?? [], contents: existing?.contents ?? [], coverPath: existing?.coverPath ?? null, coverPalette: existing?.coverPalette ?? 0, ebookWithPrint: existing?.ebookWithPrint ?? false,
         print: { enabled: !Number.isNaN(pp), price: Number.isNaN(pp) ? old('print')?.price ?? 0 : pp, sku: r.print_sku || old('print')?.sku, stock: r.stock ? Number(r.stock) : old('print')?.stock ?? 0, weightGrams: r.weight_g ? Number(r.weight_g) : old('print')?.weightGrams ?? null, taxRate: old('print')?.taxRate ?? 0 },
         digital: { enabled: !Number.isNaN(ep), price: Number.isNaN(ep) ? old('digital')?.price ?? 0 : ep, sku: r.ebook_sku || old('digital')?.sku, taxRate: old('digital')?.taxRate ?? 18, filePath: old('digital')?.filePath, fileName: old('digital')?.fileName, fileSize: old('digital')?.fileSize, files: old('digital')?.files?.length ? old('digital')!.files : undefined },
         bundle: { enabled: !Number.isNaN(bp), price: Number.isNaN(bp) ? old('bundle')?.price ?? 0 : bp, sku: old('bundle')?.sku },

@@ -37,10 +37,9 @@ function BookView({ book }: { book: Product }) {
   const related = relatedTo(products, book);
   const cart = useCart();
   const navigate = useNavigate();
-  const { print, digital, bundle } = book.formats;
+  const { print, digital } = book.formats;
   const [tab, setTab] = useState<(typeof TABS)[number]>('Overview');
   const [format, setFormat] = useState<'print' | 'digital'>(print?.available || !digital ? 'print' : 'digital');
-  const [withPrint, setWithPrint] = useState(false);
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
 
@@ -52,19 +51,17 @@ function BookView({ book }: { book: Product }) {
     if (price) ga('view_item', { currency: 'INR', value: price / 100, items: [gaItem(book.id, book.title, k, price, 1, book.category?.name)] });
   }, [book.id]);
 
-  const kind: Kind = format === 'digital' && withPrint && bundle ? 'bundle' : format;
+  const kind: Kind = format;
   const chosen = book.formats[kind];
   const available = Boolean(chosen?.available);
   const total = chosen ? chosen.price * (kind === 'print' ? qty : 1) : 0;
 
-  // Meta CustomizeProduct: the visitor switches between e-book, print and both.
-  const chooseFormat = (f: 'print' | 'digital', both: boolean) => {
-    if (f === format && both === withPrint) return;
+  // Meta CustomizeProduct: the visitor switches between print and e-book.
+  const chooseFormat = (f: 'print' | 'digital') => {
+    if (f === format) return;
     setFormat(f);
-    setWithPrint(both);
-    const k: Kind = f === 'digital' && both && bundle ? 'bundle' : f;
-    const price = book.formats[k]?.price;
-    track('CustomizeProduct', { content_ids: [book.id], content_name: book.title, content_type: 'product', format: formatName(k), ...(price ? { value: price / 100, currency: 'INR' } : {}) });
+    const price = book.formats[f]?.price;
+    track('CustomizeProduct', { content_ids: [book.id], content_name: book.title, content_type: 'product', format: formatName(f), ...(price ? { value: price / 100, currency: 'INR' } : {}) });
   };
 
   const addToCart = (go: boolean) => {
@@ -127,7 +124,7 @@ function BookView({ book }: { book: Product }) {
               {print && digital && (
                 <div className="seg" role="radiogroup" aria-label="Format">
                   {([['print', 'Printed book', print], ['digital', 'E-book (PDF)', digital]] as const).map(([k, label, f]) => (
-                    <button key={k} type="button" role="radio" aria-checked={format === k} className={'seg__opt' + (format === k ? ' is-on' : '')} onClick={() => chooseFormat(k, withPrint)}>
+                    <button key={k} type="button" role="radio" aria-checked={format === k} className={'seg__opt' + (format === k ? ' is-on' : '')} onClick={() => chooseFormat(k)}>
                       {format === k && <motion.span layoutId="pd-format" className="seg__bg" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
                       <span>{label}</span><b>{inr(f.price)}</b>
                     </button>
@@ -135,16 +132,8 @@ function BookView({ book }: { book: Product }) {
                 </div>
               )}
 
-              {format === 'digital' && bundle && print && (
-                <label className={'buy__bundle' + (bundle.available ? '' : ' is-disabled')}>
-                  <input type="checkbox" checked={withPrint} disabled={!bundle.available} onChange={(e) => chooseFormat(format, e.target.checked)} />
-                  <span className="buy__check" aria-hidden="true" />
-                  <span>
-                    {bundle.available
-                      ? <>Add the printed copy for <b>{inr(Math.max(bundle.price - digital!.price, 0))}</b> more{print.price + digital!.price > bundle.price && <em> · save {inr(print.price + digital!.price - bundle.price)}</em>}</>
-                      : 'Printed copy out of stock'}
-                  </span>
-                </label>
+              {format === 'print' && print?.includesEbook && (
+                <div className="buy__free"><span aria-hidden="true">+</span> <b>E-book (PDF) included free</b>, ready to download as soon as you pay.</div>
               )}
 
               <div className="buy__actions">

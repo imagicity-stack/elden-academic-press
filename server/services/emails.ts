@@ -90,7 +90,9 @@ export async function sendOrderConfirmation(deps: Deps, o: Order, items: Item[],
   const link = orderLink(deps, o);
   const token = orderToken(deps.env.ORDER_LINK_SECRET, o.id);
   const site = deps.env.SITE_URL.replace(/\/$/, '');
-  const digital = items.filter((i) => i.isDigital);
+  // E-books bought, and the e-books that come free with printed copies.
+  const files = await filesForItems(deps.db, items);
+  const digital = items.filter((i) => i.isDigital || (files.get(i.id)?.length ?? 0) > 0);
   const first = esc(o.name.split(' ')[0]);
 
   // Only the invoice is attached; e-books are downloaded from the private links below.
@@ -102,13 +104,13 @@ export async function sendOrderConfirmation(deps: Deps, o: Order, items: Item[],
   }
 
   // One download button per file (a book can have several: Part 1, Part 2, Answer key…).
-  const files = await filesForItems(deps.db, digital);
   const ebookRows = digital.flatMap((i) => {
     const fs = files.get(i.id) ?? [];
-    const rows = fs.length ? fs.map((f, k) => ({ title: fs.length > 1 ? `${i.title}: ${fileLabel(f, k, fs.length)}` : i.title, href: `${site}/api/orders/${o.number}/download/${i.id}?t=${token}&f=${k}` }))
-      : [{ title: i.title, href: link }];
+    const note = i.isDigital ? 'Ready to download' : 'Free with your printed copy · ready to download';
+    const rows = fs.length ? fs.map((f, k) => ({ title: fs.length > 1 ? `${i.title}: ${fileLabel(f, k, fs.length)}` : i.title, note, href: `${site}/api/orders/${o.number}/download/${i.id}?t=${token}&f=${k}` }))
+      : [{ title: i.title, note, href: link }];
     return rows.map((r) => `<tr>
-<td style="padding:14px 0;border-top:1px solid rgba(255,255,255,0.14);font:600 15px/1.35 ${FONT};color:#FFFFFF">${esc(r.title)}<div style="margin-top:3px;font:400 12.5px/1.4 ${FONT};color:#A9B0BC">Ready to download</div></td>
+<td style="padding:14px 0;border-top:1px solid rgba(255,255,255,0.14);font:600 15px/1.35 ${FONT};color:#FFFFFF">${esc(r.title)}<div style="margin-top:3px;font:400 12.5px/1.4 ${FONT};color:#A9B0BC">${esc(r.note)}</div></td>
 <td align="right" style="padding:14px 0 14px 12px;border-top:1px solid rgba(255,255,255,0.14)"><a href="${esc(r.href)}" style="display:inline-block;background:${YELLOW};padding:10px 14px;font:700 13px/1 ${FONT};color:${INK};text-decoration:none;white-space:nowrap">Download</a></td></tr>`);
   }).join('');
   const limitNote = digital.some((i) => (files.get(i.id)?.length ?? 0) > 1)
