@@ -236,6 +236,23 @@ describe('campaigns', () => {
     expect((await t.call('GET', '/cron/newsletter')).status).toBe(401);
   });
 
+  it('adds older sign-ups that never confirmed by email to the list, when staff choose to', async () => {
+    await t.db.insert(subscribers).values([
+      { email: 'old1@example.com', status: 'pending', source: 'footer', createdAt: new Date('2026-09-01') },
+      { email: 'old2@example.com', status: 'pending', source: 'footer' },
+      { email: 'left@example.com', status: 'unsubscribed', source: 'footer' },
+    ]);
+    const h = await admin();
+    expect((await t.call('GET', '/admin/newsletter/summary', { headers: h })).json).toMatchObject({ pending: 2, unsubscribed: 1 });
+    const r = await t.call('POST', '/admin/newsletter/subscribers/add-unconfirmed', { headers: h });
+    expect(r.json).toEqual({ added: 2 });
+    const [old] = await t.db.select().from(subscribers).where(eq(subscribers.email, 'old1@example.com'));
+    expect(old).toMatchObject({ status: 'subscribed' });
+    expect(old.consentAt?.toISOString()).toBe(new Date('2026-09-01').toISOString());
+    expect(await status('left@example.com')).toBe('unsubscribed'); // people who left stay out
+    expect((await t.call('GET', '/admin/newsletter/summary', { headers: h })).json).toMatchObject({ pending: 0, subscribed: 2 });
+  });
+
   it('drafts an announcement from a product', async () => {
     const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
     const r = await t.call('POST', `/admin/newsletter/campaigns/from-product/${p.id}`, { headers: await admin() });
@@ -259,6 +276,9 @@ describe('campaigns', () => {
     ]);
     expect(summary.json.accounts).toBe(2);
     expect(list.json.items.map((a: any) => a.email).sort()).toEqual([contact.email, 'neha@example.com']);
+    // Accounts that aren't on the list are counted, so the send dialog can say who is left out.
+    expect(summary.json.accountsNotSubscribed).toBe(list.json.items.filter((a: any) => a.newsletter !== 'subscribed').length);
+    expect(summary.json.accountsNotSubscribed).toBeGreaterThan(0);
     const asha = list.json.items.find((a: any) => a.email === contact.email);
     expect(asha.phone).toBe('9876543210'); // what the customer added is kept
     expect(list.json.items.find((a: any) => a.email === 'neha@example.com')).toMatchObject({ name: 'Neha Gupta', phone: '', newsletter: null });

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { count } from 'drizzle-orm';
-import { getDb, type DB } from './db/client.js';
+import { afterConnectionsClose, getDb, type DB } from './db/client.js';
 import { products, productVariants, resources } from './db/schema.js';
 import { samplePdf, seedDemo } from './db/seed.js';
 import { loadEnv, type Env } from './env.js';
@@ -63,7 +63,7 @@ async function buildDeps(env: Env): Promise<Deps> {
   const authUsers = sbAdmin ? supabaseAuthUsers(...sbAdmin) : undefined;
   const authUser = sbAdmin ? supabaseAuthUser(...sbAdmin) : undefined;
   const meta = env.VITE_META_PIXEL_ID && env.META_CAPI_TOKEN ? metaHttp(env.VITE_META_PIXEL_ID, env.META_CAPI_TOKEN, env.META_TEST_EVENT_CODE) : null;
-  return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task) : undefined };
+  return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task.finally(afterConnectionsClose)) : undefined };
 }
 
 /** First local run: fill the embedded database with the demo catalogue and sample files. */

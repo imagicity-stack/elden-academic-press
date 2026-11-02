@@ -7,6 +7,7 @@ import type { AppEnv } from '../../app.js';
 import { adminUsers, auditLog, enquiries, orderItems, orders, productVariants, products, settings } from '../../db/schema.js';
 import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
 import { isStateCode } from '../../lib/states.js';
+import { clearCatalogCache } from '../../lib/cdn.js';
 import { getSettings } from '../../services/catalog.js';
 import { orderStatusLabel } from '../orders.js';
 import { audit, requireAdmin, requireRole } from './auth.js';
@@ -26,6 +27,11 @@ admin.get('/me', requireAdmin({ allowAal1: true }), (c) => {
 });
 
 admin.use('*', requireAdmin());
+// After saving books, categories, files or settings, the store shows the change on the next reload.
+admin.use('*', async (c, next) => {
+  await next();
+  if (c.req.method !== 'GET' && c.res.status < 400 && /\/admin\/(products|categories|inventory|uploads|resources|settings)\b/.test(c.req.path)) await clearCatalogCache();
+});
 
 admin.route('/orders', adminOrders);
 admin.route('/products', adminProducts);

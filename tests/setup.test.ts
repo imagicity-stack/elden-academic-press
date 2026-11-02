@@ -4,12 +4,13 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { sql } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
-import { MIGRATIONS_DIR, type DB } from '../server/db/client.js';
+import { describe, expect, it, vi } from 'vitest';
+import { IDLE_SECONDS, MIGRATIONS_DIR, stayUpUntilConnectionsClose, type DB } from '../server/db/client.js';
 import * as schema from '../server/db/schema.js';
 import { buildSetupSql, buildUpdateSqls, FIRST_UPDATE } from '../server/db/setup-sql.js';
 import { verifySupabaseToken } from '../server/routes/admin/auth.js';
 import { healthCheck } from '../server/services/health.js';
+import { createApp } from '../server/app.js';
 import { loadEnv, siteUrl } from '../server/env.js';
 import { JWT_SECRET, SUPABASE_URL, setup, supabaseToken } from './helpers.js';
 
@@ -49,6 +50,18 @@ describe('/api/health', () => {
     const res = await call('GET', '/health');
     expect(res.status).toBe(200);
     expect(res.json).toMatchObject({ ok: true, payments: true, simulated: true, checks: { database: 'ok' } });
+    expect(res.json.speed).toMatchObject({ firstQueryMs: expect.any(Number), queryMs: expect.any(Number) });
+  });
+
+  it('answers a dropped database connection with a retryable 503, not a crash', async () => {
+    const { deps } = await setup({ seed: false });
+    const dropped = Object.assign(new Error('write CONNECTION_CLOSED'), { code: 'CONNECTION_CLOSED' });
+    const db = new Proxy(deps.db, { get: (t, k) => (k === 'select' ? () => { throw dropped; } : Reflect.get(t, k)) });
+    const app = createApp(async () => ({ ...deps, db }));
+    const res = await app.request('/api/catalog');
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: 'db_unavailable' });
+    expect(res.headers.get('Retry-After')).toBe('1');
   });
 
   it('lists every missing Vercel setting at once', async () => {
@@ -63,6 +76,27 @@ describe('/api/health', () => {
     const h = await healthCheck(async () => ({ ...deps, db: empty }), {});
     expect(h.checks.database).toBe('missing');
     expect(h.todo.join(' ')).toMatch(/supabase-setup\.sql/);
+  });
+});
+
+describe('database connections on Vercel', () => {
+  it('keeps the instance running until idle connections have closed, restarting the wait on each request', async () => {
+    vi.useFakeTimers();
+    try {
+      const held: Promise<unknown>[] = [];
+      const done: boolean[] = [];
+      const waitUntil = (p: Promise<unknown>) => { const i = held.push(p) - 1; done[i] = false; void p.then(() => { done[i] = true; }); };
+      stayUpUntilConnectionsClose(waitUntil);
+      await vi.advanceTimersByTimeAsync(IDLE_SECONDS * 1000 - 1000);
+      expect(done).toEqual([false]);
+      stayUpUntilConnectionsClose(waitUntil); // a second request: the first wait hands over to it
+      await vi.advanceTimersByTimeAsync(0);
+      expect(done).toEqual([true, false]);
+      await vi.advanceTimersByTimeAsync(IDLE_SECONDS * 1000 + 500);
+      expect(done).toEqual([true, true]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

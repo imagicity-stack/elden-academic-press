@@ -1,6 +1,6 @@
 // Admin: newsletter subscribers, signed-up accounts and email campaigns.
 import { Hono, type Context } from 'hono';
-import { and, count, desc, eq, gte, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../../app.js';
 import { accounts, campaignSends, campaigns, products, productVariants, subscribers } from '../../db/schema.js';
@@ -36,31 +36,53 @@ function syncAccounts(deps: AppEnv['Variables']['deps']): Promise<void> {
 
 async function copyCustomers(deps: AppEnv['Variables']['deps']) {
   const customers = (await deps.authUsers!()).filter((u) => u.email && u.providers.includes('google'));
-  for (const u of customers) {
-    await deps.db.insert(accounts).values({ userId: u.id, email: u.email, name: u.name, avatarUrl: u.avatar, createdAt: u.createdAt, lastSeenAt: u.lastSignInAt ?? u.createdAt })
-      .onConflictDoUpdate({
-        target: accounts.userId,
-        set: {
-          email: u.email,
-          name: sql`case when ${u.name} <> '' then ${u.name} else ${accounts.name} end`,
-          avatarUrl: sql`coalesce(${u.avatar}, ${accounts.avatarUrl})`,
-          lastSeenAt: sql`greatest(${accounts.lastSeenAt}, ${u.lastSignInAt ?? u.createdAt})`,
-        },
-      });
+  // A few hundred rows per statement, instead of one round trip per person.
+  for (let i = 0; i < customers.length; i += 500) {
+    const rows = customers.slice(i, i + 500).map((u) => ({ userId: u.id, email: u.email, name: u.name, avatarUrl: u.avatar, createdAt: u.createdAt, lastSeenAt: u.lastSignInAt ?? u.createdAt }));
+    await deps.db.insert(accounts).values(rows).onConflictDoUpdate({
+      target: accounts.userId,
+      set: {
+        email: sql`excluded.email`,
+        name: sql`case when excluded.name <> '' then excluded.name else ${accounts.name} end`,
+        avatarUrl: sql`coalesce(excluded.avatar_url, ${accounts.avatarUrl})`,
+        lastSeenAt: sql`greatest(${accounts.lastSeenAt}, excluded.last_seen_at)`,
+      },
+    });
   }
 }
 
 adminNewsletter.get('/summary', async (c) => {
-  const { db, now } = c.get('deps');
-  await syncAccounts(c.get('deps'));
+  const deps = c.get('deps');
+  const { db, now } = deps;
+  // Copying new Google sign-ups from Supabase can take a moment: on the live site it runs after the reply.
+  if (deps.defer) deps.defer(syncAccounts(deps)); else await syncAccounts(deps);
   const s = await getSettings(db);
-  const [byStatus, [{ n: accountsCount }], [{ n: sentToday }]] = await Promise.all([
+  const [byStatus, [{ n: accountsCount }], [{ n: accountsNotSubscribed }], [{ n: sentToday }]] = await Promise.all([
     db.select({ status: subscribers.status, n: count() }).from(subscribers).groupBy(subscribers.status),
     db.select({ n: count() }).from(accounts),
+    // Signed in with Google but not on the list (and never unsubscribed): they don't get campaigns.
+    db.select({ n: count() }).from(accounts).leftJoin(subscribers, eq(subscribers.email, accounts.email))
+      .where(or(isNull(subscribers.id), eq(subscribers.status, 'pending'))),
     db.select({ n: count() }).from(campaignSends).where(and(eq(campaignSends.status, 'sent'), gte(campaignSends.sentAt, new Date(now().getTime() - 86400_000)))),
   ]);
   const by = Object.fromEntries(byStatus.map((r) => [r.status, r.n]));
-  return c.json({ subscribed: by.subscribed ?? 0, pending: by.pending ?? 0, unsubscribed: by.unsubscribed ?? 0, accounts: accountsCount, sentToday, dailyLimit: s.newsletterDailyLimit });
+  return c.json({
+    subscribed: by.subscribed ?? 0, pending: by.pending ?? 0, unsubscribed: by.unsubscribed ?? 0,
+    accounts: accountsCount, accountsNotSubscribed, sentToday, dailyLimit: s.newsletterDailyLimit,
+  });
+});
+
+/**
+ * People who filled in the sign-up form while it still asked them to confirm by email, and
+ * never clicked the link. The form now subscribes straight away, so they join the list too.
+ */
+adminNewsletter.post('/subscribers/add-unconfirmed', requireRole('manager'), async (c) => {
+  const { db } = c.get('deps');
+  const rows = await db.update(subscribers)
+    .set({ status: 'subscribed', consentAt: sql`coalesce(${subscribers.consentAt}, ${subscribers.createdAt})`, updatedAt: sql`now()` })
+    .where(eq(subscribers.status, 'pending')).returning({ email: subscribers.email });
+  await audit(c, 'subscriber.add_unconfirmed', 'subscriber', `${rows.length} people`);
+  return c.json({ added: rows.length });
 });
 
 /* ---------------- Subscribers ---------------- */

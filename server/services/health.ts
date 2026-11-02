@@ -1,7 +1,7 @@
 // /api/health: what's connected and what still needs setting up. Names
 // settings that are missing or wrong, never their values.
 import { createClient } from '@supabase/supabase-js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
 import { adminUsers, orders, products, productVariants, settings, subscribers } from '../db/schema.js';
 
@@ -12,6 +12,8 @@ export interface Health {
   payments: boolean;
   simulated: boolean;
   checks: Record<'config' | 'database' | 'storage' | 'adminSignIn' | 'payments' | 'email', Check>;
+  /** Milliseconds for one small database query (the first may include connecting), and where the server runs. */
+  speed?: { firstQueryMs: number; queryMs: number; serverRegion: string | null };
   todo: string[];
 }
 
@@ -23,6 +25,16 @@ export const pgCode = (e: unknown): string | undefined => {
   const err = e as { code?: string; cause?: { code?: string } };
   return err.code ?? err.cause?.code;
 };
+
+const LOST = new Set(['CONNECTION_CLOSED', 'CONNECTION_ENDED', 'CONNECTION_DESTROYED', 'CONNECT_TIMEOUT',
+  'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN', '57P01', '08000', '08003', '08006']);
+/** The database couldn't be reached or the connection dropped (not a problem with the query). */
+export function connectionLost(e: unknown): boolean {
+  const code = pgCode(e);
+  if (code && LOST.has(code)) return true;
+  const msg = String((e as { cause?: { message?: string } })?.cause?.message ?? (e as Error)?.message ?? '');
+  return /max client connections|too many clients|connection terminated|Connection terminated/i.test(msg);
+}
 
 export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<string, string | undefined> = process.env): Promise<Health> {
   const todo: string[] = [];
@@ -51,7 +63,15 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
   }
 
   let hasOwner = false;
+  let speed: Health['speed'];
   try {
+    const t0 = Date.now();
+    await db.execute(sql`select 1`);
+    const t1 = Date.now();
+    await db.execute(sql`select 1`);
+    speed = { firstQueryMs: t1 - t0, queryMs: Date.now() - t1, serverRegion: source.VERCEL_REGION ?? null };
+    // In the same region (Mumbai) a query takes a few milliseconds; ~100+ means the database is far away.
+    if (env.onVercel && speed.queryMs > 80) todo.push(`Each database query takes ${speed.queryMs} ms: the Supabase project is probably not in Mumbai (ap-south-1), or the server isn’t (vercel.json regions: bom1)`);
     const [row] = await db.select({ id: settings.id }).from(settings).where(eq(settings.id, 1));
     if (!row) throw Object.assign(new Error('settings row missing'), { code: '42P01' });
     hasOwner = (await db.select({ id: adminUsers.userId }).from(adminUsers).where(eq(adminUsers.role, 'owner')).limit(1)).length > 0;
@@ -139,6 +159,7 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
     payments: Boolean(razorpay),
     simulated: razorpay?.simulated ?? false,
     checks,
+    speed,
     todo,
   };
 }

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { isStaff } from '../consent';
 import { api } from './api';
 import type { Category, Kind, Product, Resource, StoreConfig } from './types';
 
@@ -18,7 +19,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Catalog['status']>('loading');
   const load = useCallback(() => {
     setStatus((s) => (s === 'ready' ? s : 'loading'));
-    api<{ items: Product[]; categories: Category[] }>('/catalog')
+    // Staff (signed in to the admin in this browser) skip the cache, so their edits show straight away.
+    api<{ items: Product[]; categories: Category[] }>('/catalog' + (isStaff() ? `?fresh=${Date.now()}` : ''))
       .then((d) => { setData(d); setStatus('ready'); })
       .catch(() => setStatus((s) => (s === 'ready' ? s : 'error')));
   }, []);
