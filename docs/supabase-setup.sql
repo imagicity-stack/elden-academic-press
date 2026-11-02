@@ -514,6 +514,10 @@ ALTER TABLE "orders" ADD COLUMN "cod_collected_at" timestamp with time zone;--> 
 ALTER TABLE "settings" ADD COLUMN "cod_enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
 ALTER TABLE "settings" ADD COLUMN "cod_advance" integer DEFAULT 6000 NOT NULL;
 
+-- ===== 0008_product_images =====
+
+ALTER TABLE "products" ADD COLUMN "images" jsonb DEFAULT '[]'::jsonb NOT NULL;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -526,7 +530,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('06e1e45bcfba4da04c42b09a0220e67611794880049f6b37c61e753680fe072f', 1793535992306),
   ('e09910d8155217384a52e517b0e56a99ceda1c8858b5dfb47883570d1f693426', 1793551879678),
   ('190fb71cd0a34eb8490872de5172c4afd8d22a046b4ba373f174be7d054e4746', 1793634337644),
-  ('dc197dfbe066549b82b7d32fa81540df32d8d6d5d434dc434617fae1aba99c6c', 1793635408554);
+  ('dc197dfbe066549b82b7d32fa81540df32d8d6d5d434dc434617fae1aba99c6c', 1793635408554),
+  ('07532e555727a1411c522379409a1d69d133aec32b14593ad6b91d8f39a07580', 1793642571956);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

@@ -6,6 +6,8 @@ import {
 
 /** One file of an e-book: where it's stored, its file name, and a label for buyers ("Part 1"). */
 export interface EbookFile { path: string; name: string; title: string; size: number | null }
+/** An extra photo of a product (inside pages, back cover…), in the covers bucket. The cover stays separate. */
+export interface ProductImage { path: string; alt: string }
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -61,6 +63,7 @@ export const products = pgTable('products', {
   contents: text('contents').array().notNull().default(sql`'{}'::text[]`),
   coverPath: text('cover_path'),
   coverPalette: smallint('cover_palette').notNull().default(0),
+  images: jsonb('images').$type<ProductImage[]>().notNull().default([]),
   hasCompanion: boolean('has_companion').notNull().default(false),
   isNew: boolean('is_new').notNull().default(false),
   featured: boolean('featured').notNull().default(false),

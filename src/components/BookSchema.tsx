@@ -32,7 +32,9 @@ export function BookSchema({ book }: { book: Product }) {
   }, [description]);
 
   const gtin = book.isbn ? isbn13(book.isbn) : null;
-  const image = book.coverUrl ? new URL(book.coverUrl, SITE).href : undefined;
+  // The cover first, then any more photos.
+  const images = [book.coverUrl, ...(book.images ?? []).map((i) => i.url)].filter((u): u is string => Boolean(u)).map((u) => new URL(u, SITE).href);
+  const image = images.length > 1 ? images : images[0];
   const offers = ([['print', book.formats.print?.includesEbook ? 'Printed book + free e-book' : 'Printed book'], ['digital', 'E-book']] as const).flatMap(([k, name]) => {
     const f = book.formats[k];
     return f ? [{
