@@ -19,6 +19,10 @@ import { Approve } from './pages/Approve';
 import { Invite } from './pages/Invite';
 import { Onboarding } from './pages/Onboarding';
 import { Students } from './pages/Students';
+import { CompetitionList } from './pages/CompetitionList';
+import { CompetitionDetail } from './pages/CompetitionDetail';
+import { CompetitionRegister, RegistrationDone } from './pages/CompetitionRegister';
+import { MyEntries } from './pages/MyEntries';
 import { BookDetail } from './pages/BookDetail';
 import { Catalogue } from './pages/Catalogue';
 import { Checkout } from './pages/Checkout';
@@ -73,6 +77,11 @@ export function App() {
           <Route path="track" element={<Track />} />
           <Route path="account" element={<Account />} />
           <Route path="account/students" element={<Students />} />
+          <Route path="account/competitions" element={<MyEntries />} />
+          <Route path="competitions" element={<CompetitionList />} />
+          <Route path="competitions/:slug" element={<CompetitionDetail />} />
+          <Route path="competitions/:slug/register" element={<CompetitionRegister />} />
+          <Route path="competitions/:slug/registered/:id" element={<RegistrationDone />} />
           <Route path="onboarding" element={<Onboarding />} />
           <Route path="approve/:token" element={<Approve />} />
           <Route path="invite/:token" element={<Invite />} />
