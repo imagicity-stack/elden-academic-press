@@ -217,33 +217,19 @@ The website already sends everything Google needs; these are the settings on Goo
 
 ---
 
-## 11. Competitions
+## 11. Competitions and profiles
 
-Drawing, writing and other competitions for students, run from **Admin → Competitions** (the store owner's login only). No new service and no new Vercel variables: it uses the same database, storage, Google sign-in and email as the store.
+**One-time:** run these in the SQL Editor, oldest first, skipping any you've already run: [`0009_competitions.sql`](supabase-updates/0009_competitions.sql), [`0010_newsletter_everyone_subscribed.sql`](supabase-updates/0010_newsletter_everyone_subscribed.sql), [`0011_simple_competitions.sql`](supabase-updates/0011_simple_competitions.sql). They only add things; `/api/health` lists any that are missing. (0009 also created tables for an earlier, more complicated competitions system. That system has been removed; its tables stay unused so nothing saved is lost.)
 
-**One-time:** run [`0009_competitions.sql`](supabase-updates/0009_competitions.sql), then [`0010_newsletter_everyone_subscribed.sql`](supabase-updates/0010_newsletter_everyone_subscribed.sql) in the SQL Editor (and `0008_product_images.sql` first, if you haven't yet). They only add tables, columns and three storage buckets; nothing existing is changed or removed (0010 subscribes people who never confirmed the old sign-up email, and accounts that weren't on the list). `/api/health` confirms them.
+**Profile.** On the account page, everyone is asked once to *Complete your profile*: full name, WhatsApp number, city, state, and *I am a* Student / Parent / Teacher / Other. Shopping never needs it; registering for a competition does. No approval from anyone.
 
-| Bucket | What's in it | Who can see it |
-|---|---|---|
-| `competition-entries` | children's uploaded entries (up to 50 MB a file) | private: the family and you, through links that expire in minutes |
-| `competition-files` | resources for registered families, email attachments | private: download links only |
-| `competition-media` | banners, thumbnails, judges' photos, public resources | public |
+**Competitions** are built on request: ask Claude for a competition (title, dates, description, prizes, rules, who can enter, and what the registration form asks; individual, group or both). It's added to `src/shared/competitions.ts` and, once merged, it:
+- appears on **/competitions** (open ones first) with its own page at `/competitions/<name>`, a countdown, and a link preview when shared on WhatsApp;
+- takes registrations from signed-in people with a completed profile: one person at a time, or a group with its name and members (a teacher or parent can register several, up to 10 by default);
+- emails each registration a confirmation, and lists it under **Competitions** on their account page;
+- shows in **Admin → Competitions** (store owner only) with every registration, who made it (name, I am a, email, WhatsApp, city, state) and **Export CSV** (one row per person; exports are recorded in Settings → Activity).
 
-**Families** (all at `/competitions`, sign-in with Google):
-- A **parent** fills in their details once and adds each child: first and last name, class (3–12), school, city, state. Three consents per child, asked once: taking part (required), showing entries with first name and city (optional), book news by email to the parent (optional). They can change them on **Account → Students**.
-- A **student** who signs in on their own enters their details and their parent's WhatsApp and email. The parent gets an approval link (email, plus WhatsApp share and QR code on the student's screen), valid 7 days. Nothing can be registered or uploaded until a parent approves. Requests nobody approves are deleted after 14 days (scheduled job every 15 minutes, or **Competitions → Student accounts → Purge expired requests**).
-- A parent can also invite their child to have their own login from **Account → Students**.
-- Then: register (the group is picked from the class), upload the entry from a phone (photos are shrunk and cleaned of location data first), submit with the "own work" declaration, change it until the deadline, or withdraw. Receipts go to the parent, and to the student if they have a login.
-
-**Making a competition:** **New competition** (title and type) → **Create draft** → fill the tabs and **Save** (one Save covers every tab) → **Preview as parent / student** → **Publish** (it lists anything missing). Every time is India time (IST). A "closes" time includes that whole minute, and *grace minutes* add a little extra for uploads that started in time. **Duplicate** copies everything (groups, questions, prizes, resources and emails) with the dates cleared. Drafts with no registrations can be deleted; otherwise archive.
-
-**Emails tab:** the *registration confirmed* and *entry received* emails, each in a Parent and a Student version: subject, preview text, banner, text with merge tags (click a tag to insert it), buttons, boxes (key details, prizes, rules, resources, referral link, book suggestion), up to 2 attachments. The live preview shows desktop and phone widths with sample details; **Send test email to me** uses what's on screen; **Reset to default** brings back the original wording. The Student version never carries the referral link or book suggestions, whatever is ticked. **Sent emails** at the bottom lists every send; failures are retried automatically every 15 minutes for 3 days, or straight away with **Try failed ones again**. A failed email never undoes a registration or entry.
-
-**Entries tab:** the numbers at the top (registrations, entries, rate, by group, by who registered, how they heard, UTM source, resource downloads, students waiting for a parent), then every registration with filters and search (name, entry code or parent's WhatsApp). Click one to see the entries (private previews for 10 minutes), the parent's contacts, answers, consents and history, and to flag, add a private note, hide from public, disqualify with a reason or reinstate. **Export CSV** exports what the filters show; parents' contact details only if you tick the box. Opening an entry, every change and every export is recorded in **Settings → Activity**.
-
-**Sharing:** each competition's link (`eldenap.in/competitions/<slug>`) shows its title, description and picture when pasted into WhatsApp or social media. Links with `?utm_source=…` (and `utm_medium`, `utm_campaign`) are counted in the Entries tab; every registration also gets a referral link for the parent's email.
-
-**Privacy built in:** nothing public shows a child's last name, school, phone or email; while a student is signed in, Google Analytics, Tag Manager and the Meta Pixel are not loaded and no server event goes to Meta; children's files are never attached to emails. A parent can delete a child's profile from their account: the files are deleted at once and the competition records become anonymous "withdrawn" lines.
+Registration opens and closes at the times set for the competition, in India time, checked by the server. A competition can be published *unlisted* (reachable by its link only) to check its page before announcing it.
 
 ## Running costs
 
@@ -263,4 +249,4 @@ Drawing, writing and other competitions for students, run from **Admin → Compe
 - **Book photos**: the **Cover** is the book's picture everywhere in the store. **More photos** (in the product editor, under the cover) adds up to 20 extra pictures — inside pages, the back cover, a sample chapter — with an optional description each. They appear as a row under the cover on the book's page and open full screen; they're also sent to Google Merchant Center as extra images. Pick several at once, reorder with the arrows, and save to keep them.
 - **Cash on delivery** (printed books only): the customer pays an advance online through Razorpay (default ₹60) and the rest in cash on delivery. It is not offered for e-books, for carts that include an e-book, or for orders that cost no more than the advance. Change the advance or switch it off in **Settings → Cash on delivery**. COD orders show a *COD* badge in Orders, and the order page shows the cash to collect. When you mark the order **Delivered**, the cash is recorded as collected and, if the book comes with a free e-book, it unlocks and the customer is emailed the download links (until then it is locked). Refunds through the admin cover only the advance paid online; refund any cash by bank transfer or UPI yourself.
 - **Speed**: the server must run in the same region as the Supabase project, because each page makes several database queries and the distance is paid on every one. `"regions"` in `vercel.json` sets the server's region (now `cdg1`, Paris, next to the Supabase project in eu-west-3). `/api/health` shows `speed.queryMs` (one small database query: a few milliseconds when they're together, ~100 between India and Europe), `serverRegion` and `databaseRegion`, and its `todo` names the right region if they don't match. Database connections are closed before Vercel pauses the server, so the first visit after a quiet spell doesn't hang; if a load still fails, the website retries once by itself. The store's book list is cached by Vercel for a minute and cleared whenever you save in the admin; while you're signed in to the admin, your browser always gets the latest.
-- **Backups**: Supabase Pro takes daily backups. Exports (orders, customers, products, enquiries, competition entries) are in the admin as CSV.
+- **Backups**: Supabase Pro takes daily backups. Exports (orders, customers, products, enquiries, competition registrations) are in the admin as CSV.

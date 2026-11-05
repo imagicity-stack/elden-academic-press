@@ -112,7 +112,7 @@ describe('accounts and checkout', () => {
     expect(t.mailer.sent.filter((m) => /Welcome/.test(m.subject))).toHaveLength(1);
 
     expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '12345' } })).status).toBe(400);
-    expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '098765 43210' } })).json).toEqual({ phone: '9876543210' });
+    expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '098765 43210' } })).json).toMatchObject({ phone: '9876543210', completed: false });
     expect((await t.db.select().from(subscribers).where(eq(subscribers.email, contact.email)))[0].phone).toBe('9876543210');
 
     await t.call('PUT', '/account/newsletter', { headers: h, body: { subscribed: false } });

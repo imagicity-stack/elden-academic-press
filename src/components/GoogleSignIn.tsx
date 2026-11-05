@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { accountsDevMode, accountsEnabled, devSignIn, googleButtonAvailable, renderGoogleButton, signInWithGoogle } from '../store/account';
 
-/** Google sign-in for any page (approval link, invite, competitions). Stays on this page. */
+/** Google sign-in on any page (e.g. a competition). Stays on this page. */
 export function GoogleSignIn({ onDone, note }: { onDone: () => void; note?: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);

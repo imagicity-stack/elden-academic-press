@@ -14,9 +14,6 @@ import { sendEnquiryNotice } from '../services/emails.js';
 import { processNewsletter } from '../services/newsletter.js';
 import { expireOrders } from '../services/orders.js';
 import { eventIdHeader, report, visitOf } from '../services/tracking.js';
-import { notify, retryFailed } from '../services/notify.js';
-import { purgeExpiredRequests } from '../services/students.js';
-import '../services/studentEmails.js';
 
 /* ---------------- Enquiry forms ---------------- */
 
@@ -70,13 +67,6 @@ cron.use('*', async (c, next) => {
 
 cron.get('/expire-orders', async (c) => c.json({ expired: await expireOrders(c.get('deps')) }));
 cron.get('/newsletter', async (c) => c.json(await processNewsletter(c.get('deps'))));
-/** Every 15 minutes: retry failed competition emails; drop student requests nobody approved in 14 days. */
-cron.get('/competitions', async (c) => {
-  const deps = c.get('deps');
-  const purge = await purgeExpiredRequests(deps);
-  await notify(deps, purge.emails.map((e) => ({ template: 'request_expired', to: e.to, userId: e.userId, payload: { firstName: e.firstName } })));
-  return c.json({ purged: purge.purged, ...(await retryFailed(deps)) });
-});
 
 /* ---------------- Local development only ---------------- */
 

@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { catalogueHref } from '../catalogue';
 import { errorMessage, inr } from '../store/api';
 import { useCatalog } from '../store/catalog';
-import { accountApi, accountsDevMode, accountsEnabled, devSignIn, googleButtonAvailable, renderGoogleButton, signInWithGoogle, signOut, useAccount, type AccountData, type LibraryItem, type NewsletterStatus } from '../store/account';
+import { accountApi, accountsDevMode, accountsEnabled, devSignIn, googleButtonAvailable, renderGoogleButton, signInWithGoogle, signOut, useAccount, type AccountData, type LibraryItem, type MyCompetition, type NewsletterStatus, type Profile } from '../store/account';
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem } from '../components/motion';
 import { rememberUser, track } from '../meta';
 import { ga } from '../ga';
-import { noteAccountType, profileApi, type ProfileData } from '../store/profile';
+import { ProfileForm } from '../components/ProfileForm';
+import { accountTypeLabel } from '../shared/competitions';
 
 const day = (s: string | null) => (s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
@@ -106,11 +107,13 @@ function SignIn({ onDone }: { onDone: () => void }) {
 
 /* ---------------- Signed in ---------------- */
 
-type Tab = 'library' | 'orders' | 'details';
+type Tab = 'library' | 'orders' | 'competitions' | 'details';
+const TABS: Tab[] = ['library', 'orders', 'competitions', 'details'];
 
 function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => void }) {
-  const [tab, setTab] = useState<Tab>(data.library.length ? 'library' : 'orders');
-  const [phone, setPhone] = useState(data.profile.phone);
+  const asked = new URLSearchParams(location.search).get('tab') as Tab | null;
+  const [tab, setTab] = useState<Tab>(asked && TABS.includes(asked) ? asked : data.library.length ? 'library' : 'orders');
+  const [profile, setProfile] = useState<Profile>(data.profile);
   const [news, setNews] = useState<NewsletterStatus>(data.newsletter);
   useEffect(() => {
     rememberUser({ email: data.customer.email, name: data.customer.name, phone: data.profile.phone });
@@ -140,15 +143,16 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
       </section>
 
       <div className="wrap">
-        {!phone && tab !== 'details' && (
-          <div className="acct-nudge">
-            <div><b>Add your mobile number.</b> We use it for delivery and to reach you about your orders.</div>
-            <PhoneForm phone={phone} onSaved={setPhone} compact />
-          </div>
+        {!profile.completed && tab !== 'details' && (
+          <section className="acct-nudge acct-profile">
+            <div>
+              <b>Complete your profile.</b> It takes a minute, and you only do it once.
+            </div>
+            <ProfileForm profile={profile} name={data.customer.name} onSaved={setProfile} />
+          </section>
         )}
-        <CompetitionsCard />
         <div className="tabs" role="tablist">
-          {([['library', `Library · ${data.library.length}`], ['orders', `Orders · ${data.orders.length}`], ['details', 'Details & emails']] as const).map(([k, label]) => (
+          {([['library', `Library · ${data.library.length}`], ['orders', `Orders · ${data.orders.length}`], ['competitions', `Competitions · ${data.competitions.length}`], ['details', 'Profile & emails']] as const).map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={tab === k} className={'tab' + (tab === k ? ' is-on' : '')} onClick={() => setTab(k)}>
               {label}
               {tab === k && <motion.span layoutId="acct-tab" className="tab__line" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
@@ -159,7 +163,8 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
           <motion.div key={tab} className="acct__panel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: EASE }}>
             {tab === 'library' ? <Library items={data.library} />
               : tab === 'orders' ? <Orders data={data} />
-              : <Details data={data} phone={phone} onPhone={setPhone} news={news} onNews={setNews} />}
+              : tab === 'competitions' ? <Competitions items={data.competitions} />
+              : <Details data={data} profile={profile} onProfile={setProfile} news={news} onNews={setNews} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -167,32 +172,31 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
   );
 }
 
-/** Competitions: complete the profile (once), then children and entries. Shopping never needs it. */
-function CompetitionsCard() {
-  const [p, setP] = useState<ProfileData | null>(null);
-  useEffect(() => { profileApi('').then((d) => { noteAccountType(d.account.type); setP(d); }).catch(() => {}); }, []);
-  if (!p) return null;
-  const a = p.account;
-  const own = p.students.find((s) => s.relation === 'self');
-  const kids = p.students.filter((s) => s.relation === 'parent');
-  let text: ReactNode, links: [string, string][];
-  if (!a.type || !a.completed) {
-    text = <><b>Competitions for students.</b> Complete your profile once (parent or student) to take part.</>;
-    links = [['/onboarding', 'Complete my profile']];
-  } else if (a.type === 'parent') {
-    text = <><b>Competitions.</b> {kids.length ? `${kids.length} ${kids.length === 1 ? 'child' : 'children'} added.` : 'Add your child to take part.'}</>;
-    links = [['/account/students', kids.length ? 'Children' : 'Add a child'], ['/account/competitions', 'My entries'], ['/competitions', 'Competitions']];
-  } else if (own && own.approvalStatus !== 'approved') {
-    text = <><b>Waiting for your parent’s approval.</b> Send them the link again if needed.</>;
-    links = [['/onboarding', 'See approval']];
-  } else {
-    text = <><b>Competitions.</b> You’re approved to take part.</>;
-    links = [['/account/competitions', 'My entries'], ['/competitions', 'Competitions'], ['/account/students', 'My profile']];
-  }
+/** The competitions this account registered for (each registration: one person or a group). */
+function Competitions({ items }: { items: MyCompetition[] }) {
   return (
-    <div className="acct-nudge cp-acct">
-      <div>{text}</div>
-      <div className="cp-actions">{links.map(([to, label], i) => <Link key={to} to={to} className={i === 0 ? 'btn btn--ink btn--sm' : 'text-link'}>{label}</Link>)}</div>
+    <div className="acct-comps">
+      {items.length === 0 ? (
+        <div className="acct-empty">
+          <p>You haven’t registered for a competition yet.</p>
+          <Link to="/competitions" className="btn btn--ink btn--md">See competitions <Arrow /></Link>
+        </div>
+      ) : (
+        <>
+          <ul className="acct-comps__list">
+            {items.map((x) => (
+              <li key={x.id}>
+                <Link to={`/competitions/${x.slug}`} className="acct-comps__item">
+                  <span className="acct-comps__title">{x.title}</span>
+                  <span className="acct-comps__who">{x.mode === 'group' ? `Group: ${x.groupName} · ${x.people.length} members` : x.people.join(', ')}</span>
+                  <span className="acct-comps__date">Registered {day(x.createdAt)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Link to="/competitions" className="text-link">All competitions</Link>
+        </>
+      )}
     </div>
   );
 }
@@ -295,40 +299,7 @@ function Orders({ data }: { data: AccountData }) {
 
 /* ---------------- Details & emails ---------------- */
 
-function PhoneForm({ phone, onSaved, compact = false }: { phone: string; onSaved: (p: string) => void; compact?: boolean }) {
-  const [value, setValue] = useState(phone);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true); setErr(null); setSaved(false);
-    try {
-      const r = await accountApi<{ phone: string }>('/profile', { method: 'PUT', body: { phone: value } });
-      setValue(r.phone);
-      setSaved(true);
-      onSaved(r.phone);
-    } catch (e2) {
-      setErr(errorMessage(e2));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <form className={'acct-phone' + (compact ? ' acct-phone--compact' : '')} onSubmit={save}>
-      <label className="field">
-        {!compact && 'Mobile number'}
-        <input className="input input--white" type="tel" inputMode="tel" autoComplete="tel-national" placeholder="10-digit mobile number" aria-label="Mobile number"
-          value={value} onChange={(e) => { setValue(e.target.value); setSaved(false); }} required maxLength={16} />
-      </label>
-      <button type="submit" className="btn btn--ink btn--md" disabled={busy || !value.trim()}>{busy ? 'Saving…' : 'Save'}</button>
-      {err && <div className="field__error" role="alert">{err}</div>}
-      {saved && !compact && <div className="acct-saved" role="status">Saved.</div>}
-    </form>
-  );
-}
-
-function Details({ data, phone, onPhone, news, onNews }: { data: AccountData; phone: string; onPhone: (p: string) => void; news: NewsletterStatus; onNews: (s: NewsletterStatus) => void }) {
+function Details({ data, profile, onProfile, news, onNews }: { data: AccountData; profile: Profile; onProfile: (p: Profile) => void; news: NewsletterStatus; onNews: (s: NewsletterStatus) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const on = news === 'subscribed';
@@ -346,13 +317,13 @@ function Details({ data, phone, onPhone, news, onNews }: { data: AccountData; ph
   return (
     <div className="acct-details">
       <section className="acct-card">
-        <h2 className="acct-card__title">Your details</h2>
+        <h2 className="acct-card__title">Your profile</h2>
         <dl className="acct-dl">
-          <div><dt>Name</dt><dd>{data.customer.name || '—'}</dd></div>
           <div><dt>Email</dt><dd>{data.customer.email}</dd></div>
+          {profile.completed && <div><dt>I am a</dt><dd>{accountTypeLabel(profile.type)}</dd></div>}
         </dl>
-        <PhoneForm phone={phone} onSaved={onPhone} />
-        <p className="acct-card__note">Your name and email come from your Google account.</p>
+        <ProfileForm profile={profile} name={data.customer.name} onSaved={onProfile} />
+        <p className="acct-card__note">Your email comes from your Google account. We use your WhatsApp number for deliveries and competitions.</p>
       </section>
       <section className="acct-card">
         <h2 className="acct-card__title">Newsletter</h2>

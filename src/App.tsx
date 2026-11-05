@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import './fonts';
 import './interior.css';
@@ -15,15 +15,7 @@ import { Footer } from './components/Footer';
 import { Header, TopBar } from './components/Header';
 import { About } from './pages/About';
 import { Account } from './pages/Account';
-import { Approve } from './pages/Approve';
-import { Invite } from './pages/Invite';
-import { Onboarding } from './pages/Onboarding';
-import { Students } from './pages/Students';
-import { CompetitionList } from './pages/CompetitionList';
-import { CompetitionDetail } from './pages/CompetitionDetail';
-import { CompetitionRegister, RegistrationDone } from './pages/CompetitionRegister';
-import { MyEntries } from './pages/MyEntries';
-import { EntryPage } from './pages/EntryPage';
+import { CompetitionPage, CompetitionsPage } from './pages/Competitions';
 import { BookDetail } from './pages/BookDetail';
 import { Catalogue } from './pages/Catalogue';
 import { Checkout } from './pages/Checkout';
@@ -60,6 +52,12 @@ function Layout() {
   );
 }
 
+/** /competitions/<slug>/anything → the competition's page. */
+function ToCompetition() {
+  const { slug = '' } = useParams();
+  return <Navigate to={`/competitions/${slug}`} replace />;
+}
+
 export function App() {
   return (
     <MotionConfig reducedMotion="user">
@@ -77,16 +75,12 @@ export function App() {
           <Route path="order/:number" element={<OrderStatus />} />
           <Route path="track" element={<Track />} />
           <Route path="account" element={<Account />} />
-          <Route path="account/students" element={<Students />} />
-          <Route path="account/competitions" element={<MyEntries />} />
-          <Route path="competitions" element={<CompetitionList />} />
-          <Route path="competitions/:slug" element={<CompetitionDetail />} />
-          <Route path="competitions/:slug/register" element={<CompetitionRegister />} />
-          <Route path="competitions/:slug/registered/:id" element={<RegistrationDone />} />
-          <Route path="competitions/:slug/entry/:id" element={<EntryPage />} />
-          <Route path="onboarding" element={<Onboarding />} />
-          <Route path="approve/:token" element={<Approve />} />
-          <Route path="invite/:token" element={<Invite />} />
+          <Route path="account/competitions" element={<Navigate to="/account?tab=competitions" replace />} />
+          <Route path="competitions" element={<CompetitionsPage />} />
+          <Route path="competitions/:slug" element={<CompetitionPage />} />
+          <Route path="competitions/:slug/*" element={<ToCompetition />} />
+          {/* Addresses from the earlier competitions system (links in old emails). */}
+          {['account/students', 'onboarding', 'approve/:token', 'invite/:token'].map((p) => <Route key={p} path={p} element={<Navigate to="/account" replace />} />)}
           <Route path="newsletter" element={<Newsletter />} />
           <Route path="study-hub" element={<StudyHub />} />
           <Route path="about" element={<About />} />

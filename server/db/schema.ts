@@ -387,7 +387,8 @@ export const rateLimits = pgTable('rate_limits', {
 /* ---------------- Accounts & newsletter ---------------- */
 
 /** Customers who signed in on the website (Google), with the mobile number they add. */
-export const accountType = pgEnum('account_type', ['parent', 'student']);
+/** "I am a…" on the profile. */
+export const accountType = pgEnum('account_type', ['parent', 'student', 'teacher', 'other']);
 
 export const accounts = pgTable('accounts', {
   userId: uuid('user_id').primaryKey(),
@@ -396,16 +397,17 @@ export const accounts = pgTable('accounts', {
   phone: text('phone').notNull().default(''),
   avatarUrl: text('avatar_url'),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
-  /** Who uses this account (competitions); null until they complete their profile. Shopping works either way. */
+  /** The profile ("Complete your profile" on the account page). Shopping never needs it; competitions do.
+   *  The mobile (WhatsApp) number is `phone` above. */
   accountType: accountType('account_type'),
   onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
   fullName: text('full_name').notNull().default(''),
-  /** Parents only: 10-digit WhatsApp number. */
+  /** Not used (the earlier competitions system); the number is in `phone`. */
   whatsapp: text('whatsapp').notNull().default(''),
   city: text('city').notNull().default(''),
   /** GST state code, as at checkout. */
   state: text('state').notNull().default(''),
-  /** Set once the account is linked to a child or parent; then only an admin can change the type. */
+  /** Not used (the earlier competitions system). */
   typeLockedAt: timestamp('type_locked_at', { withTimezone: true }),
   ...timestamps,
 }, (t) => [index('accounts_email_idx').on(t.email)]);
@@ -462,9 +464,31 @@ export const campaignSends = pgTable('campaign_sends', {
 
 
 /* ======================= Competitions ======================= */
-// Every student is treated as a minor: a student profile holds only first and last
-// name, class, school, city and state, and needs a linked parent's approval before
-// it can take part. Consents are given by a linked parent only.
+// Each competition is built in code (src/shared/competitions.ts); people who register
+// are stored here, one row per registration (one person, or a group with its members).
+
+export const signupMode = pgEnum('signup_mode', ['individual', 'group']);
+
+export const competitionSignups = pgTable('competition_signups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** The competition's slug in src/shared/competitions.ts. */
+  competitionSlug: text('competition_slug').notNull(),
+  userId: uuid('user_id').notNull(),
+  /** The account's email when they registered. */
+  email: text('email').notNull(),
+  mode: signupMode('mode').notNull(),
+  /** Groups only. */
+  groupName: text('group_name').notNull().default(''),
+  /** Answers to the competition's questions for the whole registration. */
+  answers: jsonb('answers').$type<Record<string, string>>().notNull().default({}),
+  /** One entry per person taking part (just one for an individual registration). */
+  participants: jsonb('participants').$type<Record<string, string>[]>().notNull().default([]),
+  createdAt: timestamps.createdAt,
+}, (t) => [index('signup_competition_idx').on(t.competitionSlug, t.createdAt), index('signup_user_idx').on(t.userId)]);
+
+/* ---- The earlier competitions system (switched off, November 2026) ----
+ * Parent approval, children, per-competition editor and entries. Its tables stay so that
+ * nothing already saved is lost; nothing in the website or the admin uses them now. */
 
 export const approvalStatus = pgEnum('approval_status', ['pending', 'approved', 'declined', 'expired']);
 export const competitionType = pgEnum('competition_type', ['comic', 'story', 'essay', 'drawing', 'poem', 'quiz', 'video', 'photo', 'live_event', 'other']);

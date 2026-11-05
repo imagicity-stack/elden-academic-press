@@ -4,7 +4,7 @@
 // competition's title, description and image filled in. The app then loads as usual.
 import type { Deps } from '../deps.js';
 import { esc } from '../lib/format.js';
-import { isListed, loadFull, mediaUrl } from '../services/competitions.js';
+import { findCompetition } from '../../src/shared/competitions.js';
 
 let cached: { at: number; origin: string; html: string } | null = null;
 
@@ -26,13 +26,13 @@ const setMeta = (html: string, attr: 'name' | 'property', key: string, value: st
 /** The page with this competition's tags, or null to fall back to the plain app. */
 export async function competitionPage(deps: Deps, slug: string, origin: string): Promise<string | null> {
   if (!/^[a-z0-9-]{1,80}$/.test(slug)) return null;
-  const f = await loadFull(deps.db, { slug });
-  if (!f || !isListed(f.c, deps.now())) return null;
+  const comp = findCompetition(slug);
+  if (!comp) return null;
   const site = deps.env.SITE_URL.replace(/\/$/, '');
-  const title = f.c.seoTitle || `${f.c.title} — Elden Academic Press`;
-  const description = (f.c.seoDescription || f.c.tagline || f.c.prompt || `A competition by ${f.c.organiserName}.`).slice(0, 200);
-  const image = mediaUrl(deps, f.c.ogImageKey ?? f.c.banner16x9Key ?? f.c.image1x1Key);
-  const url = `${site}/competitions/${f.c.slug}`;
+  const title = `${comp.title} — Elden Academic Press`;
+  const description = (comp.tagline || 'A competition by Elden Academic Press.').slice(0, 200);
+  const image = comp.image ? (/^https:\/\//.test(comp.image) ? comp.image : `${site}${comp.image.startsWith('/') ? '' : '/'}${comp.image}`) : null;
+  const url = `${site}/competitions/${comp.slug}`;
   let html = await indexHtml(origin);
   html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`);
   html = setMeta(html, 'name', 'description', description);
@@ -41,6 +41,7 @@ export async function competitionPage(deps: Deps, slug: string, origin: string):
   html = setMeta(html, 'property', 'og:url', url);
   if (image) html = setMeta(html, 'property', 'og:image', image);
   html = setMeta(html, 'name', 'twitter:card', image ? 'summary_large_image' : 'summary');
+  if (comp.unlisted) html = html.replace('</head>', '    <meta name="robots" content="noindex" />\n  </head>');
   html = html.replace('</head>', `    <link rel="canonical" href="${esc(url)}" />\n  </head>`);
   return html;
 }

@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { eq, sql } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
-import { accounts, adminUsers, competitions, orders, products, productVariants, settings, subscribers } from '../db/schema.js';
+import { accounts, adminUsers, competitionSignups, orders, products, productVariants, settings, subscribers } from '../db/schema.js';
 
 type Check = 'ok' | 'missing' | 'error';
 export interface Health {
@@ -109,10 +109,9 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
       ['0006_ebook_with_print', () => db.select({ v: products.ebookWithPrint }).from(products).limit(1)],
       ['0007_cash_on_delivery', () => db.select({ v: orders.codAmount }).from(orders).limit(1)],
       ['0008_product_images', () => db.select({ v: products.images }).from(products).limit(1)],
-      ['0009_competitions', async () => {
-        await db.select({ v: accounts.accountType }).from(accounts).limit(1);
-        await db.select({ v: competitions.id }).from(competitions).limit(1);
-      }],
+      // The profile's columns on accounts (and the earlier competitions tables, kept unused).
+      ['0009_competitions', () => db.select({ v: accounts.accountType }).from(accounts).limit(1)],
+      ['0011_simple_competitions', () => db.select({ v: competitionSignups.id }).from(competitionSignups).limit(1)],
     ];
     checks.database = 'ok';
     for (const [file, probe] of updates) {

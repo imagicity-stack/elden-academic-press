@@ -913,6 +913,34 @@ FROM "accounts" a
 WHERE a."email" <> '' AND NOT EXISTS (SELECT 1 FROM "subscribers" s WHERE s."email" = lower(a."email"))
 ON CONFLICT ("email") DO NOTHING;
 
+-- ===== 0011_simple_competitions =====
+
+CREATE TYPE "public"."signup_mode" AS ENUM('individual', 'group');--> statement-breakpoint
+ALTER TYPE "public"."account_type" ADD VALUE 'teacher';--> statement-breakpoint
+ALTER TYPE "public"."account_type" ADD VALUE 'other';--> statement-breakpoint
+CREATE TABLE "competition_signups" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_slug" text NOT NULL,
+	"user_id" uuid NOT NULL,
+	"email" text NOT NULL,
+	"mode" "signup_mode" NOT NULL,
+	"group_name" text DEFAULT '' NOT NULL,
+	"answers" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"participants" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX "signup_competition_idx" ON "competition_signups" USING btree ("competition_slug","created_at");--> statement-breakpoint
+CREATE INDEX "signup_user_idx" ON "competition_signups" USING btree ("user_id");--> statement-breakpoint
+-- Only the store's server reads this table: lock it against Supabase's public API keys.
+ALTER TABLE public.competition_signups ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON public.competition_signups FROM anon, authenticated;
+  END IF;
+END $$;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -928,7 +956,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('dc197dfbe066549b82b7d32fa81540df32d8d6d5d434dc434617fae1aba99c6c', 1793635408554),
   ('07532e555727a1411c522379409a1d69d133aec32b14593ad6b91d8f39a07580', 1793642571956),
   ('ab97a53bc5fb3d387de329e63003afe600dfe515c7b514957112ceabf20608cb', 1793889211762),
-  ('1a5897f0da323e1f734702bbbd3a84d2b6e97939b93b98b60b9ceee6df9b1e40', 1793889801033);
+  ('1a5897f0da323e1f734702bbbd3a84d2b6e97939b93b98b60b9ceee6df9b1e40', 1793889801033),
+  ('eb2aca73b402e91f1681d3967203712ba529f8785b8d68e4e47e9704ccef2790', 1793906418992);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

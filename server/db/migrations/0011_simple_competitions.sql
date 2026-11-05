@@ -1,0 +1,25 @@
+CREATE TYPE "public"."signup_mode" AS ENUM('individual', 'group');--> statement-breakpoint
+ALTER TYPE "public"."account_type" ADD VALUE 'teacher';--> statement-breakpoint
+ALTER TYPE "public"."account_type" ADD VALUE 'other';--> statement-breakpoint
+CREATE TABLE "competition_signups" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_slug" text NOT NULL,
+	"user_id" uuid NOT NULL,
+	"email" text NOT NULL,
+	"mode" "signup_mode" NOT NULL,
+	"group_name" text DEFAULT '' NOT NULL,
+	"answers" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"participants" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX "signup_competition_idx" ON "competition_signups" USING btree ("competition_slug","created_at");--> statement-breakpoint
+CREATE INDEX "signup_user_idx" ON "competition_signups" USING btree ("user_id");--> statement-breakpoint
+-- Only the store's server reads this table: lock it against Supabase's public API keys.
+ALTER TABLE public.competition_signups ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON public.competition_signups FROM anon, authenticated;
+  END IF;
+END $$;
