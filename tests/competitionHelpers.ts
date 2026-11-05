@@ -34,3 +34,15 @@ export async function createCompetition(tt: T, overrides: Record<string, unknown
   return { id: d.competition.id as string, h, save };
 }
 
+const enc = (s: string) => [...new TextEncoder().encode(s)];
+const seg = (marker: number, payload: number[]) => [0xff, marker, (payload.length + 2) >> 8, (payload.length + 2) & 0xff, ...payload];
+
+/** A phone photo: JFIF, an EXIF block with a GPS location, 200 × 100, then the image data. */
+export const geotaggedJpeg = () => Uint8Array.from([
+  0xff, 0xd8,
+  ...seg(0xe0, [...enc('JFIF\0'), 1, 1, 0, 0, 1, 0, 1, 0, 0]),
+  ...seg(0xe1, [...enc('Exif\0\0'), ...enc('GPSLatitude 23.9925 N GPSLongitude 85.3637 E Hazaribagh')]),
+  ...seg(0xc0, [8, 0, 100, 0, 200, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]),
+  ...seg(0xda, [3, 1, 0, 2, 0x11, 3, 0x11, 0, 0x3f, 0]),
+  1, 2, 3, 4, 5, 0xff, 0xd9,
+]);

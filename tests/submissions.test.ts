@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { submissionFiles } from '../server/db/schema.js';
 import { hasPhotoMetadata, imageSize, sniff, stripImageMetadata } from '../server/lib/fileCheck.js';
 import { setup, supabaseToken } from './helpers.js';
-import { createCompetition, ist } from './competitionHelpers.js';
+import { createCompetition, geotaggedJpeg, ist } from './competitionHelpers.js';
 
 let t: Awaited<ReturnType<typeof setup>>;
 beforeEach(async () => { t = await setup(); });
@@ -11,19 +11,6 @@ beforeEach(async () => { t = await setup(); });
 const PARENT = { sub: 'a1111111-1111-4111-8111-111111111111', email: 'meera@example.com', name: 'Meera Sharma' };
 const OTHER = { sub: 'c3333333-3333-4333-8333-333333333333', email: 'vikram@example.com', name: 'Vikram Rao' };
 const as = async (u: { sub: string; email: string; name: string }) => ({ Authorization: `Bearer ${await supabaseToken({ ...u, provider: 'google' })}` });
-const enc = (s: string) => [...new TextEncoder().encode(s)];
-const seg = (marker: number, payload: number[]) => [0xff, marker, (payload.length + 2) >> 8, (payload.length + 2) & 0xff, ...payload];
-
-/** A phone photo: JFIF, an EXIF block with a GPS location, 200 × 100, then the image data. */
-export const geotaggedJpeg = () => Uint8Array.from([
-  0xff, 0xd8,
-  ...seg(0xe0, [...enc('JFIF\0'), 1, 1, 0, 0, 1, 0, 1, 0, 0]),
-  ...seg(0xe1, [...enc('Exif\0\0'), ...enc('GPSLatitude 23.9925 N GPSLongitude 85.3637 E Hazaribagh')]),
-  ...seg(0xc0, [8, 0, 100, 0, 200, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]),
-  ...seg(0xda, [3, 1, 0, 2, 0x11, 3, 0x11, 0, 0x3f, 0]),
-  1, 2, 3, 4, 5, 0xff, 0xd9,
-]);
-
 describe('photo metadata', () => {
   it('removes EXIF (with GPS) from a JPEG without touching the picture', () => {
     const photo = geotaggedJpeg();
