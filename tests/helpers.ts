@@ -16,14 +16,17 @@ export const JWT_SECRET = 'test-jwt-secret-that-is-long-enough-123456';
 export const SUPABASE_URL = 'https://test.supabase.co';
 export const WEBHOOK_SECRET = 'whsec_test';
 
-export function memoryStorage(): Storage {
+export function memoryStorage(): Storage & { files: Map<string, Uint8Array> } {
+  const files = new Map<string, Uint8Array>();
   return {
     publicUrl: (b, p) => `https://files.test/public/${b}/${p}`,
     signedDownloadUrl: async (b, p, s) => `https://files.test/signed/${b}/${p}?expires=${s}`,
     signedUploadUrl: async (b, p) => ({ url: `https://files.test/upload/${b}/${p}`, token: 'tok', path: p }),
     remove: async () => {},
-    read: async () => new TextEncoder().encode('%PDF-1.4 sample e-book'),
-  };
+    read: async (b, p) => files.get(`${b}/${p}`) ?? new TextEncoder().encode('%PDF-1.4 sample e-book'),
+    write: async (b, p, data) => { files.set(`${b}/${p}`, data); },
+    files,
+  } as Storage & { files: Map<string, Uint8Array> };
 }
 
 // One migrated (and one seeded) database per test file, cloned for each test.

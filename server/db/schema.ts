@@ -387,6 +387,8 @@ export const rateLimits = pgTable('rate_limits', {
 /* ---------------- Accounts & newsletter ---------------- */
 
 /** Customers who signed in on the website (Google), with the mobile number they add. */
+export const accountType = pgEnum('account_type', ['parent', 'student']);
+
 export const accounts = pgTable('accounts', {
   userId: uuid('user_id').primaryKey(),
   email: text('email').notNull(),
@@ -394,6 +396,17 @@ export const accounts = pgTable('accounts', {
   phone: text('phone').notNull().default(''),
   avatarUrl: text('avatar_url'),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  /** Who uses this account (competitions); null until they complete their profile. Shopping works either way. */
+  accountType: accountType('account_type'),
+  onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
+  fullName: text('full_name').notNull().default(''),
+  /** Parents only: 10-digit WhatsApp number. */
+  whatsapp: text('whatsapp').notNull().default(''),
+  city: text('city').notNull().default(''),
+  /** GST state code, as at checkout. */
+  state: text('state').notNull().default(''),
+  /** Set once the account is linked to a child or parent; then only an admin can change the type. */
+  typeLockedAt: timestamp('type_locked_at', { withTimezone: true }),
   ...timestamps,
 }, (t) => [index('accounts_email_idx').on(t.email)]);
 
@@ -446,3 +459,342 @@ export const campaignSends = pgTable('campaign_sends', {
   index('campaign_sends_queue_idx').on(t.status, t.createdAt),
   index('campaign_sends_sent_idx').on(t.sentAt),
 ]);
+
+
+/* ======================= Competitions ======================= */
+// Every student is treated as a minor: a student profile holds only first and last
+// name, class, school, city and state, and needs a linked parent's approval before
+// it can take part. Consents are given by a linked parent only.
+
+export const approvalStatus = pgEnum('approval_status', ['pending', 'approved', 'declined', 'expired']);
+export const competitionType = pgEnum('competition_type', ['comic', 'story', 'essay', 'drawing', 'poem', 'quiz', 'video', 'photo', 'live_event', 'other']);
+export const publishState = pgEnum('publish_state', ['draft', 'published', 'archived']);
+export const regionScope = pgEnum('region_scope', ['pan_india', 'states']);
+export const participationMode = pgEnum('participation_mode', ['individual', 'team']);
+export const formFieldType = pgEnum('form_field_type', ['text', 'textarea', 'select', 'multiselect', 'checkbox', 'number']);
+export const resourceVisibility = pgEnum('resource_visibility', ['public', 'registered_only']);
+export const prizeType = pgEnum('prize_type', ['physical', 'voucher', 'digital', 'certificate']);
+export const compEmailType = pgEnum('comp_email_type', ['registration_confirmed', 'submission_received']);
+export const emailAudience = pgEnum('email_audience', ['parent', 'student']);
+export const consentType = pgEnum('consent_type', ['data_processing', 'publication', 'marketing']);
+export const registrationStatus = pgEnum('registration_status', ['registered', 'withdrawn', 'disqualified']);
+export const submissionStatus = pgEnum('submission_status', ['draft', 'submitted', 'withdrawn', 'under_review', 'shortlisted', 'winner', 'disqualified']);
+export const fileKind = pgEnum('file_kind', ['main', 'extra']);
+export const notifyChannel = pgEnum('notify_channel', ['email', 'whatsapp']);
+export const notifyStatus = pgEnum('notify_status', ['queued', 'sent', 'failed']);
+
+export const studentProfiles = pgTable('student_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** The student's own login, if they have one. */
+  studentUserId: uuid('student_user_id'),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  classGrade: smallint('class_grade').notNull(),
+  schoolName: text('school_name').notNull(),
+  city: text('city').notNull(),
+  state: text('state').notNull(),
+  approvalStatus: approvalStatus('approval_status').notNull().default('pending'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  /** Class confirmed for the academic session (asked again each April). */
+  classConfirmedAt: timestamp('class_confirmed_at', { withTimezone: true }).notNull().defaultNow(),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  ...timestamps,
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (t) => [
+  uniqueIndex('student_user_idx').on(t.studentUserId).where(sql`student_user_id IS NOT NULL AND deleted_at IS NULL`),
+  index('student_status_idx').on(t.approvalStatus, t.createdAt),
+  check('student_class_range', sql`class_grade BETWEEN 3 AND 12`),
+]);
+
+export const studentGuardians = pgTable('student_guardians', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  studentProfileId: uuid('student_profile_id').notNull().references(() => studentProfiles.id, { onDelete: 'cascade' }),
+  parentUserId: uuid('parent_user_id').notNull(),
+  relation: text('relation').notNull().default(''),
+  isPrimary: boolean('is_primary').notNull().default(true),
+  linkedAt: timestamp('linked_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex('guardian_pair_idx').on(t.studentProfileId, t.parentUserId), index('guardian_parent_idx').on(t.parentUserId)]);
+
+export const parentApprovalRequests = pgTable('parent_approval_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  studentProfileId: uuid('student_profile_id').notNull().references(() => studentProfiles.id, { onDelete: 'cascade' }),
+  parentName: text('parent_name').notNull(),
+  parentWhatsapp: text('parent_whatsapp').notNull(),
+  parentEmail: text('parent_email').notNull(),
+  /** SHA-256 of the link's token; the token itself is never stored. */
+  tokenHash: text('token_hash').notNull().unique(),
+  status: approvalStatus('status').notNull().default('pending'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  approvedByUserId: uuid('approved_by_user_id'),
+  createdAt: timestamps.createdAt,
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+}, (t) => [index('approval_student_idx').on(t.studentProfileId), index('approval_status_idx').on(t.status, t.createdAt)]);
+
+export const studentLoginInvites = pgTable('student_login_invites', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  studentProfileId: uuid('student_profile_id').notNull().references(() => studentProfiles.id, { onDelete: 'cascade' }),
+  createdByParentUserId: uuid('created_by_parent_user_id').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  claimedByUserId: uuid('claimed_by_user_id'),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }),
+  createdAt: timestamps.createdAt,
+});
+
+/** Append-only: a change of mind is a new row, never an edit. */
+export const consentRecords = pgTable('consent_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  studentProfileId: uuid('student_profile_id').notNull(),
+  /** Always a linked parent. */
+  givenByUserId: uuid('given_by_user_id').notNull(),
+  /** Null in Phase 1: consents are for the account, not one competition. */
+  competitionId: uuid('competition_id'),
+  consentType: consentType('consent_type').notNull(),
+  textVersion: text('text_version').notNull(),
+  granted: boolean('granted').notNull(),
+  ip: text('ip'),
+  userAgent: text('user_agent'),
+  createdAt: timestamps.createdAt,
+}, (t) => [index('consent_student_idx').on(t.studentProfileId, t.consentType, t.createdAt)]);
+
+export interface CompetitionFaq { question: string; answer: string }
+export interface CompetitionJudge { name: string; role: string; photoKey: string | null }
+export interface ExtraFileSpec { key: string; label: string; helpText: string; required: boolean }
+export interface UpsellRule { classMin: number; classMax: number; productId: string | null; url: string | null; headline: string }
+export type SubmissionKind = 'file' | 'text' | 'link';
+
+export const competitions = pgTable('competitions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slug: text('slug').notNull().unique(),
+  /** 2–4 capital letters at the start of every entry code (ABC-A-0042). */
+  entryCodePrefix: text('entry_code_prefix').notNull().unique(),
+  title: text('title').notNull(),
+  tagline: text('tagline').notNull().default(''),
+  type: competitionType('type').notNull().default('other'),
+  prompt: text('prompt').notNull().default(''),
+  description: text('description').notNull().default(''),
+  rulesContent: text('rules_content').notNull().default(''),
+  rulesPdfKey: text('rules_pdf_key'),
+  disclaimer: text('disclaimer').notNull().default(''),
+  thumbnail9x16Key: text('thumbnail_9x16_key'),
+  image1x1Key: text('image_1x1_key'),
+  banner16x9Key: text('banner_16x9_key'),
+  languages: text('languages').array().notNull().default(sql`'{English}'::text[]`),
+  organiserName: text('organiser_name').notNull().default('Elden Academic Press'),
+  faqs: jsonb('faqs').$type<CompetitionFaq[]>().notNull().default([]),
+  judges: jsonb('judges').$type<CompetitionJudge[]>().notNull().default([]),
+  regionScope: regionScope('region_scope').notNull().default('pan_india'),
+  states: text('states').array().notNull().default(sql`'{}'::text[]`),
+  participationMode: participationMode('participation_mode').notNull().default('individual'),
+  teamMin: smallint('team_min'),
+  teamMax: smallint('team_max'),
+  maxEntriesPerStudent: smallint('max_entries_per_student').notNull().default(1),
+  isPaid: boolean('is_paid').notNull().default(false),
+  feeAmountInr: integer('fee_amount_inr'),
+  seatCap: integer('seat_cap'),
+  announceAt: timestamp('announce_at', { withTimezone: true }),
+  registrationOpensAt: timestamp('registration_opens_at', { withTimezone: true }),
+  registrationClosesAt: timestamp('registration_closes_at', { withTimezone: true }),
+  submissionOpensAt: timestamp('submission_opens_at', { withTimezone: true }),
+  submissionClosesAt: timestamp('submission_closes_at', { withTimezone: true }),
+  submissionGraceMinutes: smallint('submission_grace_minutes').notNull().default(0),
+  judgingStartsAt: timestamp('judging_starts_at', { withTimezone: true }),
+  shortlistAt: timestamp('shortlist_at', { withTimezone: true }),
+  votingOpensAt: timestamp('voting_opens_at', { withTimezone: true }),
+  votingClosesAt: timestamp('voting_closes_at', { withTimezone: true }),
+  resultsAt: timestamp('results_at', { withTimezone: true }),
+  submissionRequired: boolean('submission_required').notNull().default(true),
+  allowedSubmissionTypes: text('allowed_submission_types').array().$type<SubmissionKind[]>().notNull().default(sql`'{file}'::text[]`),
+  allowedMimeTypes: text('allowed_mime_types').array().notNull().default(sql`'{image/jpeg,image/png,application/pdf}'::text[]`),
+  maxFileSizeMb: smallint('max_file_size_mb').notNull().default(10),
+  maxMainFiles: smallint('max_main_files').notNull().default(1),
+  extraFiles: jsonb('extra_files').$type<ExtraFileSpec[]>().notNull().default([]),
+  minWords: integer('min_words'),
+  maxWords: integer('max_words'),
+  allowEditUntilDeadline: boolean('allow_edit_until_deadline').notNull().default(true),
+  allowWithdraw: boolean('allow_withdraw').notNull().default(true),
+  declarationText: text('declaration_text').notNull().default(''),
+  consentTextVersion: text('consent_text_version').notNull().default('v1'),
+  termsVersion: text('terms_version').notNull().default('v1'),
+  upsellRules: jsonb('upsell_rules').$type<UpsellRule[]>().notNull().default([]),
+  seoTitle: text('seo_title').notNull().default(''),
+  seoDescription: text('seo_description').notNull().default(''),
+  ogImageKey: text('og_image_key'),
+  publishState: publishState('publish_state').notNull().default('draft'),
+  resultsPublished: boolean('results_published').notNull().default(false),
+  createdBy: text('created_by').notNull().default(''),
+  ...timestamps,
+}, (t) => [check('entry_prefix_format', sql`entry_code_prefix ~ '^[A-Z]{2,4}$'`), index('competitions_state_idx').on(t.publishState)]);
+
+export const competitionGroups = pgTable('competition_groups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionId: uuid('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  /** A, B, C… used in entry codes. */
+  letter: text('letter').notNull(),
+  classMin: smallint('class_min').notNull(),
+  classMax: smallint('class_max').notNull(),
+  formatNote: text('format_note').notNull().default(''),
+  minWords: integer('min_words'),
+  maxWords: integer('max_words'),
+  maxMainFiles: smallint('max_main_files'),
+  /** Next number for this group's entry codes (taken atomically). */
+  nextEntryNo: integer('next_entry_no').notNull().default(1),
+  sortOrder: smallint('sort_order').notNull().default(0),
+}, (t) => [uniqueIndex('group_letter_idx').on(t.competitionId, t.letter), check('group_class_range', sql`class_min BETWEEN 3 AND 12 AND class_max BETWEEN class_min AND 12`)]);
+
+export const competitionFormFields = pgTable('competition_form_fields', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionId: uuid('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+  key: text('key').notNull(),
+  label: text('label').notNull(),
+  type: formFieldType('type').notNull(),
+  options: text('options').array().notNull().default(sql`'{}'::text[]`),
+  required: boolean('required').notNull().default(false),
+  helpText: text('help_text').notNull().default(''),
+  sortOrder: smallint('sort_order').notNull().default(0),
+}, (t) => [uniqueIndex('form_field_key_idx').on(t.competitionId, t.key)]);
+
+export const competitionResources = pgTable('competition_resources', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionId: uuid('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  /** Public files are in competition-media; registered-only ones in the private competition-files. */
+  fileKey: text('file_key').notNull(),
+  fileName: text('file_name').notNull().default(''),
+  visibility: resourceVisibility('visibility').notNull().default('registered_only'),
+  sortOrder: smallint('sort_order').notNull().default(0),
+});
+
+export const resourceDownloads = pgTable('resource_downloads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  resourceId: uuid('resource_id').notNull().references(() => competitionResources.id, { onDelete: 'cascade' }),
+  registrationId: uuid('registration_id'),
+  userId: uuid('user_id'),
+  downloadedAt: timestamp('downloaded_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('resource_downloads_idx').on(t.resourceId)]);
+
+export const prizes = pgTable('prizes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionId: uuid('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+  /** Null: every group. */
+  groupId: uuid('group_id'),
+  /** Null: a special award. */
+  rankFrom: smallint('rank_from'),
+  rankTo: smallint('rank_to'),
+  awardName: text('award_name').notNull(),
+  description: text('description').notNull().default(''),
+  prizeType: prizeType('prize_type').notNull().default('certificate'),
+  sortOrder: smallint('sort_order').notNull().default(0),
+});
+
+export interface EmailBlocks { showDetails: boolean; showPrizes: boolean; showRules: boolean; showResources: boolean; showReferral: boolean; showUpsell: boolean }
+
+export const competitionEmailTemplates = pgTable('competition_email_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionId: uuid('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+  templateType: compEmailType('template_type').notNull(),
+  audience: emailAudience('audience').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  subject: text('subject').notNull(),
+  preheader: text('preheader').notNull().default(''),
+  /** In competition-media; empty = the competition's 16:9 banner. */
+  bannerImageKey: text('banner_image_key'),
+  bannerAlt: text('banner_alt').notNull().default(''),
+  heading: text('heading').notNull(),
+  bodyContent: text('body_content').notNull(),
+  primaryCtaLabel: text('primary_cta_label').notNull().default(''),
+  primaryCtaUrl: text('primary_cta_url').notNull().default(''),
+  secondaryCtaLabel: text('secondary_cta_label').notNull().default(''),
+  secondaryCtaUrl: text('secondary_cta_url').notNull().default(''),
+  blocks: jsonb('blocks').$type<EmailBlocks>().notNull(),
+  /** In competition-files (private); at most 2 files, 5 MB together. */
+  attachmentKeys: text('attachment_keys').array().notNull().default(sql`'{}'::text[]`),
+  updatedBy: text('updated_by').notNull().default(''),
+  updatedAt: timestamps.updatedAt,
+}, (t) => [uniqueIndex('comp_email_idx').on(t.competitionId, t.templateType, t.audience)]);
+
+export const registrations = pgTable('registrations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionId: uuid('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+  groupId: uuid('group_id').notNull().references(() => competitionGroups.id),
+  studentProfileId: uuid('student_profile_id').notNull().references(() => studentProfiles.id),
+  registeredByUserId: uuid('registered_by_user_id').notNull(),
+  registeredByType: accountType('registered_by_type').notNull(),
+  /** Class when they registered (the profile's class can change later). */
+  classAtRegistration: smallint('class_at_registration').notNull(),
+  status: registrationStatus('status').notNull().default('registered'),
+  disqualifyReason: text('disqualify_reason').notNull().default(''),
+  customAnswers: jsonb('custom_answers').$type<Record<string, unknown>>().notNull().default({}),
+  howHeard: text('how_heard').notNull().default(''),
+  utmSource: text('utm_source').notNull().default(''),
+  utmMedium: text('utm_medium').notNull().default(''),
+  utmCampaign: text('utm_campaign').notNull().default(''),
+  utmContent: text('utm_content').notNull().default(''),
+  utmTerm: text('utm_term').notNull().default(''),
+  referralCode: text('referral_code').notNull().unique(),
+  referredByCode: text('referred_by_code').notNull().default(''),
+  createdAt: timestamps.createdAt,
+}, (t) => [
+  uniqueIndex('registration_once_idx').on(t.competitionId, t.studentProfileId),
+  index('registration_comp_idx').on(t.competitionId, t.createdAt),
+  index('registration_student_idx').on(t.studentProfileId),
+]);
+
+export const submissions = pgTable('submissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  registrationId: uuid('registration_id').notNull().references(() => registrations.id, { onDelete: 'cascade' }),
+  entryCode: text('entry_code').notNull().unique(),
+  title: text('title').notNull().default(''),
+  language: text('language').notNull().default(''),
+  textContent: text('text_content').notNull().default(''),
+  linkUrl: text('link_url').notNull().default(''),
+  status: submissionStatus('status').notNull().default('draft'),
+  submittedByUserId: uuid('submitted_by_user_id'),
+  lastEditedByUserId: uuid('last_edited_by_user_id'),
+  declarationAcceptedAt: timestamp('declaration_accepted_at', { withTimezone: true }),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }),
+  /** suspected_ai, possibly_copied, content_issue */
+  adminFlags: text('admin_flags').array().notNull().default(sql`'{}'::text[]`),
+  adminNotes: text('admin_notes').notNull().default(''),
+  hiddenFromPublic: boolean('hidden_from_public').notNull().default(false),
+  ...timestamps,
+}, (t) => [index('submission_registration_idx').on(t.registrationId)]);
+
+export const submissionFiles = pgTable('submission_files', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  submissionId: uuid('submission_id').notNull().references(() => submissions.id, { onDelete: 'cascade' }),
+  kind: fileKind('kind').notNull(),
+  extraKey: text('extra_key'),
+  /** In the private competition-entries bucket, under a random key. */
+  storageKey: text('storage_key').notNull(),
+  thumbnailKey: text('thumbnail_key'),
+  mimeType: text('mime_type').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  originalName: text('original_name').notNull().default(''),
+  /** Set once the server has checked the file's type and removed photo metadata (location). */
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  sortOrder: smallint('sort_order').notNull().default(0),
+  uploadedByUserId: uuid('uploaded_by_user_id').notNull(),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('submission_files_idx').on(t.submissionId)]);
+
+export const notificationLog = pgTable('notification_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id'),
+  toAddress: text('to_address').notNull(),
+  studentProfileId: uuid('student_profile_id'),
+  registrationId: uuid('registration_id'),
+  template: text('template').notNull(),
+  channel: notifyChannel('channel').notNull().default('email'),
+  status: notifyStatus('status').notNull().default('queued'),
+  attempts: smallint('attempts').notNull().default(0),
+  /** What's needed to build the email again for a retry (ids, never the HTML). */
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+  error: text('error'),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  createdAt: timestamps.createdAt,
+}, (t) => [index('notification_retry_idx').on(t.status, t.createdAt), index('notification_registration_idx').on(t.registrationId)]);

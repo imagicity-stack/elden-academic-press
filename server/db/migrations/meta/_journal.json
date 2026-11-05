@@ -64,6 +64,13 @@
       "when": 1793642571956,
       "tag": "0008_product_images",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793889211762,
+      "tag": "0009_competitions",
+      "breakpoints": true
     }
   ]
 }
