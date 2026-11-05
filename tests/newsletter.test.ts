@@ -129,18 +129,18 @@ describe('accounts and checkout', () => {
     expect((await t.db.select().from(accounts)).length).toBe(1);
   });
 
-  it('never re-adds someone who unsubscribed, and leaves older accounts alone', async () => {
+  it('never re-adds someone who unsubscribed, and subscribes older accounts too', async () => {
     await addSubscribers([contact.email]);
     await t.call('POST', '/newsletter/unsubscribe', { body: { email: contact.email, token: newsletterToken(SECRET, contact.email) } });
     t.mailer.sent.length = 0;
     expect((await t.call('GET', '/account', { headers: await customer() })).json.newsletter).toBe('unsubscribed');
     expect(t.mailer.sent).toHaveLength(0);
 
-    // Signed up last month, first visit to the account page today: not a new sign-up.
+    // Signed up last month, first visit to the account page today: on the list too, with a welcome email.
     t.deps.authUser = async (id) => ({ id, email: 'old@example.com', name: 'Old Timer', avatar: null, providers: ['google'], createdAt: new Date(Date.now() - 30 * 86400_000), lastSignInAt: null });
     const old = { authorization: `Bearer ${await supabaseToken({ sub: '66666666-6666-4666-8666-666666666666', email: 'old@example.com', provider: 'google', name: 'Old Timer' })}` };
-    expect((await t.call('GET', '/account', { headers: old })).json.newsletter).toBeNull();
-    expect(t.mailer.sent).toHaveLength(0);
+    expect((await t.call('GET', '/account', { headers: old })).json.newsletter).toBe('subscribed');
+    expect(t.mailer.sent.map((m) => m.to)).toEqual(['old@example.com']);
   });
 
   it('subscribes buyers who ticked the box, once they have paid', async () => {

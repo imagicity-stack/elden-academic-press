@@ -899,6 +899,20 @@ BEGIN
   END IF;
 END $$;
 
+-- ===== 0010_newsletter_everyone_subscribed =====
+
+-- The newsletter has no confirmation-email step any more: everyone who signed up
+-- is subscribed. Changes subscriber statuses only; nobody who unsubscribed is touched.
+-- 1. People waiting for a confirmation email they never clicked: subscribed now.
+UPDATE "subscribers" SET "status" = 'subscribed', "consent_at" = COALESCE("consent_at", "created_at"), "updated_at" = now()
+WHERE "status" = 'pending';--> statement-breakpoint
+-- 2. Signed-up accounts not on the list at all (they never unsubscribed): subscribed now.
+INSERT INTO "subscribers" ("email", "name", "phone", "status", "source", "consent_at")
+SELECT lower(a."email"), a."name", a."phone", 'subscribed', 'signup', a."created_at"
+FROM "accounts" a
+WHERE a."email" <> '' AND NOT EXISTS (SELECT 1 FROM "subscribers" s WHERE s."email" = lower(a."email"))
+ON CONFLICT ("email") DO NOTHING;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -913,7 +927,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('190fb71cd0a34eb8490872de5172c4afd8d22a046b4ba373f174be7d054e4746', 1793634337644),
   ('dc197dfbe066549b82b7d32fa81540df32d8d6d5d434dc434617fae1aba99c6c', 1793635408554),
   ('07532e555727a1411c522379409a1d69d133aec32b14593ad6b91d8f39a07580', 1793642571956),
-  ('ab97a53bc5fb3d387de329e63003afe600dfe515c7b514957112ceabf20608cb', 1793889211762);
+  ('ab97a53bc5fb3d387de329e63003afe600dfe515c7b514957112ceabf20608cb', 1793889211762),
+  ('1a5897f0da323e1f734702bbbd3a84d2b6e97939b93b98b60b9ceee6df9b1e40', 1793889801033);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

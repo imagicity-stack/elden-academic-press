@@ -24,7 +24,7 @@ newsletter.post('/subscribe', async (c) => {
     website: z.string().max(0).optional(),
   }));
   await rateLimit(deps.db, `subscribe:${c.get('ip')}`, 10, 3600);
-  const r = await subscribe(deps, { email: input.email, phone: input.phone, name: input.name, source: input.source, ip: c.get('ip'), confirmed: true });
+  const r = await subscribe(deps, { email: input.email, phone: input.phone, name: input.name, source: input.source, ip: c.get('ip') });
   if (!r.already) {
     await welcome(deps, r.row, 'newsletter');
     const visit = visitOf(c);

@@ -6,6 +6,8 @@ import type { Deps } from './deps.js';
 import { clientIp, HttpError } from './lib/http.js';
 import { RazorpayError } from './lib/razorpay.js';
 import { account, type Customer } from './routes/account.js';
+import { approvals, invites } from './routes/approvals.js';
+import { profile } from './routes/profile.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
 import { meta } from './routes/meta.js';
@@ -87,6 +89,9 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/webhooks', webhooks);
   app.route('/admin', admin);
   app.route('/account', account);
+  app.route('/profile', profile);
+  app.route('/approvals', approvals);
+  app.route('/invites', invites);
   app.route('/newsletter', newsletter);
   app.route('/meta', meta);
   app.route('/cron', cron);

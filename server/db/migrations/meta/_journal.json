@@ -71,6 +71,13 @@
       "when": 1793889211762,
       "tag": "0009_competitions",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793889801033,
+      "tag": "0010_newsletter_everyone_subscribed",
+      "breakpoints": true
     }
   ]
 }
