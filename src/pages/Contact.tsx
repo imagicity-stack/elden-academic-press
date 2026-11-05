@@ -41,7 +41,7 @@ export function Contact() {
         <div className="contact__text">
           <div className="t-label">Contact</div>
           <h1 className="t-display contact__title"><SplitWords text="Talk to" /> <span className="serif-i">us.</span></h1>
-          <Reveal delay={0.3}><p className="t-lead">Questions about a title, school orders, sample copies or publishing: send a note and the right team will reply.</p></Reveal>
+          <Reveal delay={0.3}><p className="t-lead">Questions about a title, school orders or publishing: send a note and the right team will reply.</p></Reveal>
           <Stagger className="contact__lines">
             {CONTACT_LINES.map((l) => (
               <StaggerItem key={l.k} className="contact__line"><span className="t-label">{l.k}</span><span className="contact__v">{l.k === 'Email' ? <a href={`mailto:${l.v}`}>{l.v}</a> : l.v}</span></StaggerItem>

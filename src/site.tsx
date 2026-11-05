@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { AnimatePresence } from 'motion/react';
 import { EnquiryModal } from './components/EnquiryModal';
 
-export type ModalKind = 'sample' | 'bulk' | 'teacher' | 'dist';
+export type ModalKind = 'bulk' | 'teacher' | 'dist';
 
 interface Site {
   openModal: (kind: ModalKind, bookId?: string) => void;
