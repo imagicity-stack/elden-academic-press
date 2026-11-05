@@ -3,6 +3,7 @@ import { Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import './fonts';
 import './interior.css';
+import './competitions.css';
 import { config } from './config';
 import { SiteProvider } from './site';
 import { CartProvider } from './store/cart';
@@ -14,6 +15,10 @@ import { Footer } from './components/Footer';
 import { Header, TopBar } from './components/Header';
 import { About } from './pages/About';
 import { Account } from './pages/Account';
+import { Approve } from './pages/Approve';
+import { Invite } from './pages/Invite';
+import { Onboarding } from './pages/Onboarding';
+import { Students } from './pages/Students';
 import { BookDetail } from './pages/BookDetail';
 import { Catalogue } from './pages/Catalogue';
 import { Checkout } from './pages/Checkout';
@@ -67,6 +72,10 @@ export function App() {
           <Route path="order/:number" element={<OrderStatus />} />
           <Route path="track" element={<Track />} />
           <Route path="account" element={<Account />} />
+          <Route path="account/students" element={<Students />} />
+          <Route path="onboarding" element={<Onboarding />} />
+          <Route path="approve/:token" element={<Approve />} />
+          <Route path="invite/:token" element={<Invite />} />
           <Route path="newsletter" element={<Newsletter />} />
           <Route path="study-hub" element={<StudyHub />} />
           <Route path="about" element={<About />} />

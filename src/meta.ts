@@ -1,7 +1,7 @@
 // Meta Pixel. Loads only after the visitor accepts cookies, never on the admin or for staff.
 // Each event has an id; the server sends the same event with the same id (Conversions API),
 // so Meta counts it once even when one of the two is blocked.
-import { getConsent, isStaff, syncConsent, type Consent } from './consent';
+import { getConsent, isStaff, isStudentSession, syncConsent, type Consent } from './consent';
 import { forgetUser, knownUser, phoneDigits, type MatchUser } from './visitor';
 
 export { rememberUser } from './visitor';
@@ -30,7 +30,8 @@ export const formatName = (kind: string) => (kind === 'digital' ? 'ebook' : kind
 export const formatList = (kinds: string[]) => [...new Set(kinds.map(formatName))].sort().join(',');
 
 const onAdmin = () => /^\/admin(\/|$)/.test(location.pathname);
-const active = () => Boolean(PIXEL) && getConsent() === 'all' && !isStaff() && !onAdmin();
+// Never for staff, the admin, or a signed-in student.
+const active = () => Boolean(PIXEL) && getConsent() === 'all' && !isStaff() && !onAdmin() && !isStudentSession();
 
 export const newEventId = () =>
   (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -83,7 +84,7 @@ function pixelMatch(u: MatchUser | null): Record<string, string> {
 
 let loaded = false;
 function load() {
-  if (loaded || !PIXEL) return;
+  if (loaded || !PIXEL || isStudentSession()) return;
   loaded = true;
   setMetaCookies();
   // Meta's standard loader, written out so no inline script is needed.

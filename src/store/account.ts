@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, api } from './api';
+import { setStudentSession } from '../consent';
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -70,9 +71,9 @@ export async function accountToken(): Promise<string | null> {
 }
 
 /** Fallback when Google's button can't load: Supabase's redirect sign-in (Google then names the Supabase address). */
-export async function signInWithGoogle() {
+export async function signInWithGoogle(returnTo = '/account') {
   const sb = await authClient();
-  const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}/account` } });
+  const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}${returnTo}` } });
   if (error) throw error;
 }
 
@@ -118,7 +119,33 @@ export async function renderGoogleButton(el: HTMLElement, onSignedIn: () => void
 
 export function devSignIn(email: string) { localStorage.setItem(DEV_KEY, email.trim().toLowerCase()); }
 
+/** Calls the API with the signed-in customer's token when there is one (pages anyone can open). */
+export async function optionalAuthApi<T>(path: string, init: { method?: string; body?: unknown } = {}) {
+  const token = await accountToken();
+  return api<T>(path, { ...init, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+}
+
+/** Calls the API as the signed-in customer. */
+export async function authApi<T>(path: string, init: { method?: string; body?: unknown } = {}) {
+  const token = await accountToken();
+  if (!token) throw new ApiError(401, 'Please sign in.', 'unauthenticated');
+  return api<T>(path, { ...init, headers: { Authorization: `Bearer ${token}` } });
+}
+
+/** Re-run `fn` whenever someone signs in or out on this page. */
+export function onAuthChange(fn: () => void): () => void {
+  if (!accountsEnabled) return () => {};
+  let unsub = () => {};
+  let live = true;
+  authClient().then((sb) => {
+    if (!live) return;
+    unsub = sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') fn(); }).data.subscription.unsubscribe;
+  });
+  return () => { live = false; unsub(); };
+}
+
 export async function signOut() {
+  setStudentSession(false);
   try { localStorage.removeItem(DEV_KEY); } catch { /* ignore */ }
   if (accountsEnabled) await (await authClient()).auth.signOut();
 }

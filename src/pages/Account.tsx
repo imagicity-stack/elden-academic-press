@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { catalogueHref } from '../catalogue';
@@ -10,6 +10,7 @@ import { BookCover } from '../components/BookCover';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem } from '../components/motion';
 import { rememberUser, track } from '../meta';
 import { ga } from '../ga';
+import { noteAccountType, profileApi, type ProfileData } from '../store/profile';
 
 const day = (s: string | null) => (s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
@@ -145,6 +146,7 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
             <PhoneForm phone={phone} onSaved={setPhone} compact />
           </div>
         )}
+        <CompetitionsCard />
         <div className="tabs" role="tablist">
           {([['library', `Library · ${data.library.length}`], ['orders', `Orders · ${data.orders.length}`], ['details', 'Details & emails']] as const).map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={tab === k} className={'tab' + (tab === k ? ' is-on' : '')} onClick={() => setTab(k)}>
@@ -161,6 +163,36 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
           </motion.div>
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+/** Competitions: complete the profile (once), then children and entries. Shopping never needs it. */
+function CompetitionsCard() {
+  const [p, setP] = useState<ProfileData | null>(null);
+  useEffect(() => { profileApi('').then((d) => { noteAccountType(d.account.type); setP(d); }).catch(() => {}); }, []);
+  if (!p) return null;
+  const a = p.account;
+  const own = p.students.find((s) => s.relation === 'self');
+  const kids = p.students.filter((s) => s.relation === 'parent');
+  let text: ReactNode, links: [string, string][];
+  if (!a.type || !a.completed) {
+    text = <><b>Competitions for students.</b> Complete your profile once (parent or student) to take part.</>;
+    links = [['/onboarding', 'Complete my profile']];
+  } else if (a.type === 'parent') {
+    text = <><b>Competitions.</b> {kids.length ? `${kids.length} ${kids.length === 1 ? 'child' : 'children'} added.` : 'Add your child to take part.'}</>;
+    links = [['/account/students', kids.length ? 'Children' : 'Add a child'], ['/account/competitions', 'My entries'], ['/competitions', 'Competitions']];
+  } else if (own && own.approvalStatus !== 'approved') {
+    text = <><b>Waiting for your parent’s approval.</b> Send them the link again if needed.</>;
+    links = [['/onboarding', 'See approval']];
+  } else {
+    text = <><b>Competitions.</b> You’re approved to take part.</>;
+    links = [['/account/competitions', 'My entries'], ['/competitions', 'Competitions'], ['/account/students', 'My profile']];
+  }
+  return (
+    <div className="acct-nudge cp-acct">
+      <div>{text}</div>
+      <div className="cp-actions">{links.map(([to, label], i) => <Link key={to} to={to} className={i === 0 ? 'btn btn--ink btn--sm' : 'text-link'}>{label}</Link>)}</div>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 // index.html loads with Consent Mode: until the visitor accepts cookies, Google receives
 // only cookie-free signals. Staff (signed in to the admin) send no shopping events, and
 // their page views are marked as internal traffic.
-import { isStaff } from './consent';
+import { isStaff, isStudentSession } from './consent';
 import { knownUser, phoneDigits } from './visitor';
 
 const BRAND = 'Elden Academic Press';
@@ -19,7 +19,7 @@ export const gaItem = (id: string, name: string, kind: string, unitPaise: number
 });
 
 export function ga(name: string, params: Record<string, unknown> = {}) {
-  if (isStaff() || /^\/admin(\/|$)/.test(location.pathname)) return;
+  if (isStaff() || isStudentSession() || /^\/admin(\/|$)/.test(location.pathname)) return;
   gtag('event', name, params);
 }
 

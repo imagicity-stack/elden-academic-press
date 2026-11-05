@@ -56,3 +56,25 @@ export function syncConsent() { writeCookie(getConsent()); }
 
 /** Show the cookie choice again (footer link). */
 export const openConsent = () => window.dispatchEvent(new Event('elden:consent-open'));
+
+/* ---------------- No tracking for students ---------------- */
+// While a student account is signed in on this browser, no analytics or ad scripts
+// load (index.html checks the same flag before loading Google Tag Manager), the
+// Meta Pixel stays off and no events are sent. Signing out clears it.
+
+const STUDENT = 'elden-student';
+
+export function isStudentSession() {
+  try { return localStorage.getItem(STUDENT) === '1'; } catch { return false; }
+}
+
+export function setStudentSession(on: boolean) {
+  try {
+    if (on) localStorage.setItem(STUDENT, '1'); else localStorage.removeItem(STUDENT);
+  } catch { /* ignore */ }
+  if (on) {
+    // Anything already loaded on this page stops collecting.
+    window.gtag?.('consent', 'update', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied' });
+    (window as { fbq?: (...a: unknown[]) => void }).fbq?.('consent', 'revoke');
+  }
+}
