@@ -19,7 +19,7 @@ import { formatName, track } from '../meta';
 import { ga, gaItem } from '../ga';
 import { BookSchema } from '../components/BookSchema';
 
-const TABS = ['Overview', 'Contents', 'For teachers'] as const;
+const TABS = ['Overview', 'Contents'] as const;
 
 export function BookDetail() {
   const { slug } = useParams();
@@ -215,13 +215,6 @@ function BookView({ book }: { book: Product }) {
                     ))}
                   </ol>
                 ) : <p className="body">The table of contents will be added soon.</p>
-              )}
-              {tab === 'For teachers' && (
-                <div className="stack-16 align-start">
-                  <h3 className="t-h3">Teacher resources</h3>
-                  <p className="body">Teacher’s manual, chapter-wise answer keys, lesson plans and question banks are available to registered schools adopting this title.</p>
-                  <button type="button" className="btn btn--ink btn--md" onClick={() => openModal('teacher', book.id)}>Request teacher access <Arrow /></button>
-                </div>
               )}
             </motion.div>
           </AnimatePresence>
