@@ -38,7 +38,8 @@ export function isStaff() {
 }
 
 function writeCookie(c: Consent | null) {
-  const v = c && (isStaff() ? 'staff' : c);
+  // A signed-in student is never reported to Meta from the server either.
+  const v = c && (isStaff() ? 'staff' : isStudentSession() ? 'essential' : c);
   const secure = location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = v ? `elden_consent=${v}; Path=/; Max-Age=31536000; SameSite=Lax${secure}` : 'elden_consent=; Path=/; Max-Age=0';
 }
@@ -72,6 +73,7 @@ export function setStudentSession(on: boolean) {
   try {
     if (on) localStorage.setItem(STUDENT, '1'); else localStorage.removeItem(STUDENT);
   } catch { /* ignore */ }
+  syncConsent();
   if (on) {
     // Anything already loaded on this page stops collecting.
     window.gtag?.('consent', 'update', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied' });

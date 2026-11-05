@@ -119,6 +119,7 @@ function Privacy() {
           <li><strong>If you sign in with Google:</strong> your name, email address and profile picture from your Google account, and the mobile number if you add one to your account. We use them to show your orders and e-books in your account and to contact you about your orders; we never see your Google password.</li>
           <li><strong>If you subscribe to our newsletter:</strong> your email address, mobile number and name (if given), where you signed up, and when and from which IP address you agreed, as a record of your consent.</li>
           <li><strong>When you send a form</strong> (sample request, school order, enquiry or proposal): your name, contact details, institution, city, role and message.</li>
+          <li><strong>If you take part in our competitions</strong> (see section 7): for the parent, your name, WhatsApp number, email, city and state; for each child, only their first and last name, class, school, city and state; the entries you upload (pictures, documents, written work or links); answers to the competition’s questions, such as how you heard about it; the consents you give for each child, with the date, wording version and IP address as a record; and, if you came from a link, which link or campaign it was.</li>
           <li><strong>Technical data:</strong> your IP address and browser details in our server logs, used for security and to prevent abuse.</li>
           <li><strong>Website analytics</strong> (only if you choose <em>Accept all</em>): Google Tag Manager and Google Analytics show us how the website is used: pages visited, links clicked, device and browser, approximate location and how you found us. They set cookies to recognise repeat visits. We do not send them your name, contact details, address, order details or payment information. Until you accept, Google receives only anonymous, cookie-free signals.</li>
           <li><strong>Advertising</strong> (only if you choose <em>Accept all</em>): the Meta Pixel and Meta’s Conversions API tell Meta (Facebook and Instagram) which pages you view, what you add to your cart, and when you send an enquiry, sign up or buy (with the order value and the books), so we can measure our ads and show them to people likely to be interested. With these events we send the email address, phone number, name, city, state and PIN code you have given us (for example at checkout, when signing in or in a form, and with your later visits) in hashed (scrambled, one-way) form, with your IP address and browser details, so Meta can match them to a Meta account. Meta processes this data under its own <a href="https://www.facebook.com/privacy/policy/" target="_blank" rel="noopener noreferrer">privacy policy</a>. Choose <em>Only essential</em> and nothing is sent to Meta.</li>
@@ -131,6 +132,7 @@ function Privacy() {
           <li>to process, deliver and support your order, including emails about it (confirmation, dispatch, downloads, refunds);</li>
           <li>to issue invoices and keep the records that tax and accounting laws require;</li>
           <li>to reply to your enquiries;</li>
+          <li>to run competitions: registration, receipts, judging, results, certificates and prizes, and emails to parents (and students with their own login) about them;</li>
           <li>if you subscribed, to email you about new books, sample papers and offers;</li>
           <li>to keep the website secure and prevent fraud;</li>
           <li>to measure and improve how the website works.</li>
@@ -154,7 +156,7 @@ function Privacy() {
       </Section>
 
       <Section title="4. How long we keep it">
-        <p>Order and invoice records are kept for as long as tax and company law require (generally up to eight years). Enquiries are kept for up to two years after our last contact. If you unsubscribe from the newsletter, we keep your email address and the date marked as unsubscribed, so that you are never added again by mistake; ask us and we will delete it completely. Server logs are kept for a short period. After that, data is deleted or anonymised.</p>
+        <p>Order and invoice records are kept for as long as tax and company law require (generally up to eight years). Enquiries are kept for up to two years after our last contact. If you unsubscribe from the newsletter, we keep your email address and the date marked as unsubscribed, so that you are never added again by mistake; ask us and we will delete it completely. Server logs are kept for a short period. A student account that no parent approves within 14 days is deleted with everything in it. A child’s profile and entries are kept until the parent deletes the profile (or asks us to): the uploaded files are then deleted straight away, and the competition records keep only an anonymous “withdrawn” line so totals still add up. The consent records are kept as proof of what was agreed. After that, data is deleted or anonymised.</p>
       </Section>
 
       <Section title="5. Security">
@@ -167,8 +169,17 @@ function Privacy() {
         <GrievanceOfficer />
       </Section>
 
-      <Section title="7. Children">
+      <Section title="7. Children and competitions">
         <p>Our books are written for students, but orders and forms should be completed by an adult. If you are under 18, please ask a parent or guardian. If you believe a child has given us personal data without a parent’s consent, write to us and we will delete it.</p>
+        <p>In our competitions we treat every student as a child, whatever their age:</p>
+        <ul>
+          <li><strong>A parent decides.</strong> A parent or guardian adds the child, or approves a student’s own account through a link we send them, before the student can register, upload or download anything. Only a linked parent can give or change the child’s consents, from their account page at any time.</li>
+          <li><strong>Consents, asked once per child:</strong> taking part (required: we use the child’s details and entries only to run our competitions); showing entries publicly, credited with first name and city only (optional); and book news by email to the parent, never to the child (optional, off unless ticked).</li>
+          <li><strong>Nothing personal in public.</strong> Our public pages never show a child’s last name, school, phone number or email. Entries appear in public only with the parent’s permission, credited with first name and city.</li>
+          <li><strong>Uploads are private.</strong> Entries are stored privately, under random file names, and only the family and our competition staff can open them, through links that expire within minutes. Photos are cleaned of hidden data, such as the location where they were taken, before they are stored. Children’s files are never attached to or linked from emails.</li>
+          <li><strong>No tracking of students.</strong> While a student is signed in, we do not load Google Analytics, Google Tag Manager or the Meta Pixel, whatever the cookie choice, and we send nothing about them to Meta. Emails to students never contain advertising, book suggestions or referral links.</li>
+          <li><strong>Deleting.</strong> A parent can delete a child’s profile from their account. See section 4 for what happens to entries.</li>
+        </ul>
       </Section>
 
       <Section title="8. Changes">
