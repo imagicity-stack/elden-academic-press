@@ -14,6 +14,8 @@
           history.replaceState(history.state, '', p + l.search.replace(/([?&])t=[^&#]*&?/, '$1').replace(/[?&]$/, '') + l.hash);
         }
         if (/^\/admin(\/|$)/.test(p) || /^(localhost|127\.0\.0\.1)$/.test(l.hostname)) return;
+        // A student signed in on this browser: no analytics or ad scripts at all.
+        try { if (localStorage.getItem('elden-student') === '1') return; } catch (e) {}
         w.dataLayer = w.dataLayer || [];
         w.gtag = function () { w.dataLayer.push(arguments); };
         var c = null;

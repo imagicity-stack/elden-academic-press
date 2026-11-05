@@ -3,7 +3,7 @@
 // Staff access is separate (admin_users allow-list), so a customer account
 // never reaches the admin.
 import { createHash } from 'node:crypto';
-import { Hono, type MiddlewareHandler } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
@@ -22,7 +22,15 @@ export interface Customer { userId: string; email: string; name: string; avatar:
 /** Local development only (never on Vercel): "Bearer dev-customer:someone@example.com". */
 const DEV_PREFIX = 'dev-customer:';
 
-const requireCustomer: MiddlewareHandler<AppEnv> = async (c, next) => {
+/** The signed-in customer, or null when the request carries no sign-in at all. Throws for a bad one. */
+export async function readCustomer(c: Context<AppEnv>): Promise<Customer | null> {
+  const token = /^Bearer (.+)$/.exec(c.req.header('authorization') ?? '')?.[1];
+  if (!token) return null;
+  await requireCustomer(c, async () => {});
+  return c.get('customer');
+}
+
+export const requireCustomer: MiddlewareHandler<AppEnv> = async (c, next) => {
   const { env } = c.get('deps');
   const token = /^Bearer (.+)$/.exec(c.req.header('authorization') ?? '')?.[1];
   if (!token) throw new HttpError(401, 'Please sign in.', 'unauthenticated');
@@ -78,8 +86,9 @@ account.get('/', async (c) => {
   // First sign-in: a new account also joins the newsletter (the sign-in page says so),
   // and counts as a registration for Meta (the page fires the Pixel's twin with this id).
   const newAccount = !known && await justSignedUp(deps, me.userId);
+  // Every account is on the newsletter from sign-up (unless they unsubscribed).
+  await subscribeNewAccount(deps, me, c.get('ip'));
   if (newAccount) {
-    await subscribeNewAccount(deps, me, c.get('ip'));
     const visit = visitOf(c);
     await report(deps, visit.consent, {
       name: 'CompleteRegistration', eventId: `signup-${me.userId}`, time: now(), url: `${env.SITE_URL}/account`,
@@ -175,7 +184,7 @@ account.put('/newsletter', async (c) => {
   const input = await body(c, z.object({ subscribed: z.boolean() }));
   if (input.subscribed) {
     const [profile] = await deps.db.select().from(accounts).where(eq(accounts.userId, me.userId));
-    await subscribe(deps, { email: me.email, name: me.name, phone: profile?.phone, source: 'account', ip: c.get('ip'), confirmed: true });
+    await subscribe(deps, { email: me.email, name: me.name, phone: profile?.phone, source: 'account', ip: c.get('ip') });
   } else {
     await unsubscribe(deps, me.email);
   }

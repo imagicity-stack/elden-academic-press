@@ -28,11 +28,11 @@ export const unsubscribePage = (deps: Deps, email: string) => `${site(deps)}/new
 const oneClickUrl = (deps: Deps, email: string) => `${site(deps)}/api/newsletter/unsubscribe?${qs(deps, email)}`;
 
 /**
- * Add someone to the list. `confirmed` subscribes at once (the sign-up form's tick box,
- * a new account, a paid order with the newsletter box ticked, staff with consent);
- * otherwise they get an email with a confirmation link first (no longer used by the website).
+ * Add someone to the list, straight away: there is no confirmation email step.
+ * (The footer form's tick box, a new account, a paid order with the newsletter box
+ * ticked, staff with consent, an import.)
  */
-export async function subscribe(deps: Deps, input: { email: string; name?: string; phone?: string; source: string; ip?: string | null; confirmed: boolean }) {
+export async function subscribe(deps: Deps, input: { email: string; name?: string; phone?: string; source: string; ip?: string | null }) {
   const { db, now } = deps;
   const email = input.email.trim().toLowerCase();
   const [existing] = await db.select().from(subscribers).where(eq(subscribers.email, email));
@@ -45,20 +45,18 @@ export async function subscribe(deps: Deps, input: { email: string; name?: strin
     await db.update(subscribers).set(details).where(eq(subscribers.id, existing.id));
     return { status: 'subscribed' as const, row: existing, already: true };
   }
-  const status = input.confirmed ? 'subscribed' as const : 'pending' as const;
   const values = {
     ...details,
-    status,
+    status: 'subscribed' as const,
     source: input.source,
-    consentAt: input.confirmed ? now() : null,
+    consentAt: now(),
     consentIp: input.ip ?? null,
     unsubscribedAt: null,
   };
   const [row] = existing
     ? await db.update(subscribers).set(values).where(eq(subscribers.id, existing.id)).returning()
     : await db.insert(subscribers).values({ email, name: input.name ?? '', phone: input.phone ?? '', ...values }).returning();
-  if (status === 'pending') await sendConfirmation(deps, row, await getSettings(db));
-  return { status, row, already: false };
+  return { status: 'subscribed' as const, row, already: false };
 }
 
 export async function confirmSubscription(deps: Deps, email: string, token: string, ip: string | null) {
@@ -76,33 +74,17 @@ export async function unsubscribe(deps: Deps, email: string) {
     .where(and(eq(subscribers.email, email.toLowerCase()), inArray(subscribers.status, ['pending', 'subscribed'])));
 }
 
-async function sendConfirmation(deps: Deps, sub: Subscriber, s: Settings) {
-  const link = `${site(deps)}/newsletter?confirm=1&${qs(deps, sub.email)}`;
-  await sendSafely(deps.mailer, {
-    to: sub.email,
-    subject: `Confirm your subscription to ${s.storeName}`,
-    replyTo: s.supportEmail,
-    html: layout(deps, s, {
-      preheader: 'One click to start getting new books, free papers and offers.',
-      kicker: 'Almost there',
-      title: 'Confirm your email.',
-      intro: 'Tap the button to start getting news of new books, free study material and offers, once or twice a month.',
-      body: section(`${button(link, 'Yes, subscribe me')}${p('<br>If you didn’t ask for this, ignore this email and you won’t hear from us.', 'font-size:13px')}`, '4px 32px 32px'),
-    }),
-  });
-}
-
 /**
- * A new customer account (first Google sign-in; the caller checks it's really new) joins the newsletter, as the sign-in page
- * says, and gets a welcome email with an unsubscribe link. Anyone who unsubscribed
- * before stays unsubscribed. Never throws: the account page must always load.
+ * Every customer account is on the newsletter from sign-up, as the sign-in page says,
+ * and gets a welcome email with an unsubscribe link when it joins. Anyone who
+ * unsubscribed stays unsubscribed. Never throws: the account page must always load.
  */
 export async function subscribeNewAccount(deps: Deps, who: { email: string; name: string }, ip: string | null) {
   try {
     const email = who.email.toLowerCase();
     const [existing] = await deps.db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, email));
     if (existing?.status === 'subscribed' || existing?.status === 'unsubscribed') return;
-    const { row } = await subscribe(deps, { email, name: who.name, source: 'signup', ip, confirmed: true });
+    const { row } = await subscribe(deps, { email, name: who.name, source: 'signup', ip });
     await welcome(deps, row, 'account');
   } catch (e) {
     console.error('[newsletter] sign-up subscription failed', (e as Error).message);

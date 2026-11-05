@@ -1,0 +1,378 @@
+CREATE TYPE "public"."account_type" AS ENUM('parent', 'student');--> statement-breakpoint
+CREATE TYPE "public"."approval_status" AS ENUM('pending', 'approved', 'declined', 'expired');--> statement-breakpoint
+CREATE TYPE "public"."comp_email_type" AS ENUM('registration_confirmed', 'submission_received');--> statement-breakpoint
+CREATE TYPE "public"."competition_type" AS ENUM('comic', 'story', 'essay', 'drawing', 'poem', 'quiz', 'video', 'photo', 'live_event', 'other');--> statement-breakpoint
+CREATE TYPE "public"."consent_type" AS ENUM('data_processing', 'publication', 'marketing');--> statement-breakpoint
+CREATE TYPE "public"."email_audience" AS ENUM('parent', 'student');--> statement-breakpoint
+CREATE TYPE "public"."file_kind" AS ENUM('main', 'extra');--> statement-breakpoint
+CREATE TYPE "public"."form_field_type" AS ENUM('text', 'textarea', 'select', 'multiselect', 'checkbox', 'number');--> statement-breakpoint
+CREATE TYPE "public"."notify_channel" AS ENUM('email', 'whatsapp');--> statement-breakpoint
+CREATE TYPE "public"."notify_status" AS ENUM('queued', 'sent', 'failed');--> statement-breakpoint
+CREATE TYPE "public"."participation_mode" AS ENUM('individual', 'team');--> statement-breakpoint
+CREATE TYPE "public"."prize_type" AS ENUM('physical', 'voucher', 'digital', 'certificate');--> statement-breakpoint
+CREATE TYPE "public"."publish_state" AS ENUM('draft', 'published', 'archived');--> statement-breakpoint
+CREATE TYPE "public"."region_scope" AS ENUM('pan_india', 'states');--> statement-breakpoint
+CREATE TYPE "public"."registration_status" AS ENUM('registered', 'withdrawn', 'disqualified');--> statement-breakpoint
+CREATE TYPE "public"."resource_visibility" AS ENUM('public', 'registered_only');--> statement-breakpoint
+CREATE TYPE "public"."submission_status" AS ENUM('draft', 'submitted', 'withdrawn', 'under_review', 'shortlisted', 'winner', 'disqualified');--> statement-breakpoint
+CREATE TABLE "competition_email_templates" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_id" uuid NOT NULL,
+	"template_type" "comp_email_type" NOT NULL,
+	"audience" "email_audience" NOT NULL,
+	"enabled" boolean DEFAULT true NOT NULL,
+	"subject" text NOT NULL,
+	"preheader" text DEFAULT '' NOT NULL,
+	"banner_image_key" text,
+	"banner_alt" text DEFAULT '' NOT NULL,
+	"heading" text NOT NULL,
+	"body_content" text NOT NULL,
+	"primary_cta_label" text DEFAULT '' NOT NULL,
+	"primary_cta_url" text DEFAULT '' NOT NULL,
+	"secondary_cta_label" text DEFAULT '' NOT NULL,
+	"secondary_cta_url" text DEFAULT '' NOT NULL,
+	"blocks" jsonb NOT NULL,
+	"attachment_keys" text[] DEFAULT '{}'::text[] NOT NULL,
+	"updated_by" text DEFAULT '' NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "competition_form_fields" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_id" uuid NOT NULL,
+	"key" text NOT NULL,
+	"label" text NOT NULL,
+	"type" "form_field_type" NOT NULL,
+	"options" text[] DEFAULT '{}'::text[] NOT NULL,
+	"required" boolean DEFAULT false NOT NULL,
+	"help_text" text DEFAULT '' NOT NULL,
+	"sort_order" smallint DEFAULT 0 NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "competition_groups" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_id" uuid NOT NULL,
+	"name" text NOT NULL,
+	"letter" text NOT NULL,
+	"class_min" smallint NOT NULL,
+	"class_max" smallint NOT NULL,
+	"format_note" text DEFAULT '' NOT NULL,
+	"min_words" integer,
+	"max_words" integer,
+	"max_main_files" smallint,
+	"next_entry_no" integer DEFAULT 1 NOT NULL,
+	"sort_order" smallint DEFAULT 0 NOT NULL,
+	CONSTRAINT "group_class_range" CHECK (class_min BETWEEN 3 AND 12 AND class_max BETWEEN class_min AND 12)
+);
+--> statement-breakpoint
+CREATE TABLE "competition_resources" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_id" uuid NOT NULL,
+	"title" text NOT NULL,
+	"description" text DEFAULT '' NOT NULL,
+	"file_key" text NOT NULL,
+	"file_name" text DEFAULT '' NOT NULL,
+	"visibility" "resource_visibility" DEFAULT 'registered_only' NOT NULL,
+	"sort_order" smallint DEFAULT 0 NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "competitions" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"slug" text NOT NULL,
+	"entry_code_prefix" text NOT NULL,
+	"title" text NOT NULL,
+	"tagline" text DEFAULT '' NOT NULL,
+	"type" "competition_type" DEFAULT 'other' NOT NULL,
+	"prompt" text DEFAULT '' NOT NULL,
+	"description" text DEFAULT '' NOT NULL,
+	"rules_content" text DEFAULT '' NOT NULL,
+	"rules_pdf_key" text,
+	"disclaimer" text DEFAULT '' NOT NULL,
+	"thumbnail_9x16_key" text,
+	"image_1x1_key" text,
+	"banner_16x9_key" text,
+	"languages" text[] DEFAULT '{English}'::text[] NOT NULL,
+	"organiser_name" text DEFAULT 'Elden Academic Press' NOT NULL,
+	"faqs" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"judges" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"region_scope" "region_scope" DEFAULT 'pan_india' NOT NULL,
+	"states" text[] DEFAULT '{}'::text[] NOT NULL,
+	"participation_mode" "participation_mode" DEFAULT 'individual' NOT NULL,
+	"team_min" smallint,
+	"team_max" smallint,
+	"max_entries_per_student" smallint DEFAULT 1 NOT NULL,
+	"is_paid" boolean DEFAULT false NOT NULL,
+	"fee_amount_inr" integer,
+	"seat_cap" integer,
+	"announce_at" timestamp with time zone,
+	"registration_opens_at" timestamp with time zone,
+	"registration_closes_at" timestamp with time zone,
+	"submission_opens_at" timestamp with time zone,
+	"submission_closes_at" timestamp with time zone,
+	"submission_grace_minutes" smallint DEFAULT 0 NOT NULL,
+	"judging_starts_at" timestamp with time zone,
+	"shortlist_at" timestamp with time zone,
+	"voting_opens_at" timestamp with time zone,
+	"voting_closes_at" timestamp with time zone,
+	"results_at" timestamp with time zone,
+	"submission_required" boolean DEFAULT true NOT NULL,
+	"allowed_submission_types" text[] DEFAULT '{file}'::text[] NOT NULL,
+	"allowed_mime_types" text[] DEFAULT '{image/jpeg,image/png,application/pdf}'::text[] NOT NULL,
+	"max_file_size_mb" smallint DEFAULT 10 NOT NULL,
+	"max_main_files" smallint DEFAULT 1 NOT NULL,
+	"extra_files" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"min_words" integer,
+	"max_words" integer,
+	"allow_edit_until_deadline" boolean DEFAULT true NOT NULL,
+	"allow_withdraw" boolean DEFAULT true NOT NULL,
+	"declaration_text" text DEFAULT '' NOT NULL,
+	"consent_text_version" text DEFAULT 'v1' NOT NULL,
+	"terms_version" text DEFAULT 'v1' NOT NULL,
+	"upsell_rules" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"seo_title" text DEFAULT '' NOT NULL,
+	"seo_description" text DEFAULT '' NOT NULL,
+	"og_image_key" text,
+	"publish_state" "publish_state" DEFAULT 'draft' NOT NULL,
+	"results_published" boolean DEFAULT false NOT NULL,
+	"created_by" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "competitions_slug_unique" UNIQUE("slug"),
+	CONSTRAINT "competitions_entry_code_prefix_unique" UNIQUE("entry_code_prefix"),
+	CONSTRAINT "entry_prefix_format" CHECK (entry_code_prefix ~ '^[A-Z]{2,4}$')
+);
+--> statement-breakpoint
+CREATE TABLE "consent_records" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"student_profile_id" uuid NOT NULL,
+	"given_by_user_id" uuid NOT NULL,
+	"competition_id" uuid,
+	"consent_type" "consent_type" NOT NULL,
+	"text_version" text NOT NULL,
+	"granted" boolean NOT NULL,
+	"ip" text,
+	"user_agent" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "notification_log" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" uuid,
+	"to_address" text NOT NULL,
+	"student_profile_id" uuid,
+	"registration_id" uuid,
+	"template" text NOT NULL,
+	"channel" "notify_channel" DEFAULT 'email' NOT NULL,
+	"status" "notify_status" DEFAULT 'queued' NOT NULL,
+	"attempts" smallint DEFAULT 0 NOT NULL,
+	"payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"error" text,
+	"sent_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "parent_approval_requests" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"student_profile_id" uuid NOT NULL,
+	"parent_name" text NOT NULL,
+	"parent_whatsapp" text NOT NULL,
+	"parent_email" text NOT NULL,
+	"token_hash" text NOT NULL,
+	"status" "approval_status" DEFAULT 'pending' NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"approved_by_user_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"resolved_at" timestamp with time zone,
+	CONSTRAINT "parent_approval_requests_token_hash_unique" UNIQUE("token_hash")
+);
+--> statement-breakpoint
+CREATE TABLE "prizes" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_id" uuid NOT NULL,
+	"group_id" uuid,
+	"rank_from" smallint,
+	"rank_to" smallint,
+	"award_name" text NOT NULL,
+	"description" text DEFAULT '' NOT NULL,
+	"prize_type" "prize_type" DEFAULT 'certificate' NOT NULL,
+	"sort_order" smallint DEFAULT 0 NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "registrations" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_id" uuid NOT NULL,
+	"group_id" uuid NOT NULL,
+	"student_profile_id" uuid NOT NULL,
+	"registered_by_user_id" uuid NOT NULL,
+	"registered_by_type" "account_type" NOT NULL,
+	"class_at_registration" smallint NOT NULL,
+	"status" "registration_status" DEFAULT 'registered' NOT NULL,
+	"disqualify_reason" text DEFAULT '' NOT NULL,
+	"custom_answers" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"how_heard" text DEFAULT '' NOT NULL,
+	"utm_source" text DEFAULT '' NOT NULL,
+	"utm_medium" text DEFAULT '' NOT NULL,
+	"utm_campaign" text DEFAULT '' NOT NULL,
+	"utm_content" text DEFAULT '' NOT NULL,
+	"utm_term" text DEFAULT '' NOT NULL,
+	"referral_code" text NOT NULL,
+	"referred_by_code" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "registrations_referral_code_unique" UNIQUE("referral_code")
+);
+--> statement-breakpoint
+CREATE TABLE "resource_downloads" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"resource_id" uuid NOT NULL,
+	"registration_id" uuid,
+	"user_id" uuid,
+	"downloaded_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "student_guardians" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"student_profile_id" uuid NOT NULL,
+	"parent_user_id" uuid NOT NULL,
+	"relation" text DEFAULT '' NOT NULL,
+	"is_primary" boolean DEFAULT true NOT NULL,
+	"linked_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "student_login_invites" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"student_profile_id" uuid NOT NULL,
+	"created_by_parent_user_id" uuid NOT NULL,
+	"token_hash" text NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"claimed_by_user_id" uuid,
+	"claimed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "student_login_invites_token_hash_unique" UNIQUE("token_hash")
+);
+--> statement-breakpoint
+CREATE TABLE "student_profiles" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"student_user_id" uuid,
+	"first_name" text NOT NULL,
+	"last_name" text NOT NULL,
+	"class_grade" smallint NOT NULL,
+	"school_name" text NOT NULL,
+	"city" text NOT NULL,
+	"state" text NOT NULL,
+	"approval_status" "approval_status" DEFAULT 'pending' NOT NULL,
+	"approved_at" timestamp with time zone,
+	"class_confirmed_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_by_user_id" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
+	CONSTRAINT "student_class_range" CHECK (class_grade BETWEEN 3 AND 12)
+);
+--> statement-breakpoint
+CREATE TABLE "submission_files" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"submission_id" uuid NOT NULL,
+	"kind" "file_kind" NOT NULL,
+	"extra_key" text,
+	"storage_key" text NOT NULL,
+	"thumbnail_key" text,
+	"mime_type" text NOT NULL,
+	"size_bytes" integer NOT NULL,
+	"width" integer,
+	"height" integer,
+	"original_name" text DEFAULT '' NOT NULL,
+	"verified_at" timestamp with time zone,
+	"sort_order" smallint DEFAULT 0 NOT NULL,
+	"uploaded_by_user_id" uuid NOT NULL,
+	"uploaded_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "submissions" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"registration_id" uuid NOT NULL,
+	"entry_code" text NOT NULL,
+	"title" text DEFAULT '' NOT NULL,
+	"language" text DEFAULT '' NOT NULL,
+	"text_content" text DEFAULT '' NOT NULL,
+	"link_url" text DEFAULT '' NOT NULL,
+	"status" "submission_status" DEFAULT 'draft' NOT NULL,
+	"submitted_by_user_id" uuid,
+	"last_edited_by_user_id" uuid,
+	"declaration_accepted_at" timestamp with time zone,
+	"submitted_at" timestamp with time zone,
+	"admin_flags" text[] DEFAULT '{}'::text[] NOT NULL,
+	"admin_notes" text DEFAULT '' NOT NULL,
+	"hidden_from_public" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "submissions_entry_code_unique" UNIQUE("entry_code")
+);
+--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "account_type" "account_type";--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "onboarding_completed_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "full_name" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "whatsapp" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "city" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "state" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "type_locked_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "competition_email_templates" ADD CONSTRAINT "competition_email_templates_competition_id_competitions_id_fk" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "competition_form_fields" ADD CONSTRAINT "competition_form_fields_competition_id_competitions_id_fk" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "competition_groups" ADD CONSTRAINT "competition_groups_competition_id_competitions_id_fk" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "competition_resources" ADD CONSTRAINT "competition_resources_competition_id_competitions_id_fk" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "parent_approval_requests" ADD CONSTRAINT "parent_approval_requests_student_profile_id_student_profiles_id_fk" FOREIGN KEY ("student_profile_id") REFERENCES "public"."student_profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "prizes" ADD CONSTRAINT "prizes_competition_id_competitions_id_fk" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "registrations" ADD CONSTRAINT "registrations_competition_id_competitions_id_fk" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "registrations" ADD CONSTRAINT "registrations_group_id_competition_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."competition_groups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "registrations" ADD CONSTRAINT "registrations_student_profile_id_student_profiles_id_fk" FOREIGN KEY ("student_profile_id") REFERENCES "public"."student_profiles"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "resource_downloads" ADD CONSTRAINT "resource_downloads_resource_id_competition_resources_id_fk" FOREIGN KEY ("resource_id") REFERENCES "public"."competition_resources"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "student_guardians" ADD CONSTRAINT "student_guardians_student_profile_id_student_profiles_id_fk" FOREIGN KEY ("student_profile_id") REFERENCES "public"."student_profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "student_login_invites" ADD CONSTRAINT "student_login_invites_student_profile_id_student_profiles_id_fk" FOREIGN KEY ("student_profile_id") REFERENCES "public"."student_profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "submission_files" ADD CONSTRAINT "submission_files_submission_id_submissions_id_fk" FOREIGN KEY ("submission_id") REFERENCES "public"."submissions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "submissions" ADD CONSTRAINT "submissions_registration_id_registrations_id_fk" FOREIGN KEY ("registration_id") REFERENCES "public"."registrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "comp_email_idx" ON "competition_email_templates" USING btree ("competition_id","template_type","audience");--> statement-breakpoint
+CREATE UNIQUE INDEX "form_field_key_idx" ON "competition_form_fields" USING btree ("competition_id","key");--> statement-breakpoint
+CREATE UNIQUE INDEX "group_letter_idx" ON "competition_groups" USING btree ("competition_id","letter");--> statement-breakpoint
+CREATE INDEX "competitions_state_idx" ON "competitions" USING btree ("publish_state");--> statement-breakpoint
+CREATE INDEX "consent_student_idx" ON "consent_records" USING btree ("student_profile_id","consent_type","created_at");--> statement-breakpoint
+CREATE INDEX "notification_retry_idx" ON "notification_log" USING btree ("status","created_at");--> statement-breakpoint
+CREATE INDEX "notification_registration_idx" ON "notification_log" USING btree ("registration_id");--> statement-breakpoint
+CREATE INDEX "approval_student_idx" ON "parent_approval_requests" USING btree ("student_profile_id");--> statement-breakpoint
+CREATE INDEX "approval_status_idx" ON "parent_approval_requests" USING btree ("status","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "registration_once_idx" ON "registrations" USING btree ("competition_id","student_profile_id");--> statement-breakpoint
+CREATE INDEX "registration_comp_idx" ON "registrations" USING btree ("competition_id","created_at");--> statement-breakpoint
+CREATE INDEX "registration_student_idx" ON "registrations" USING btree ("student_profile_id");--> statement-breakpoint
+CREATE INDEX "resource_downloads_idx" ON "resource_downloads" USING btree ("resource_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "guardian_pair_idx" ON "student_guardians" USING btree ("student_profile_id","parent_user_id");--> statement-breakpoint
+CREATE INDEX "guardian_parent_idx" ON "student_guardians" USING btree ("parent_user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "student_user_idx" ON "student_profiles" USING btree ("student_user_id") WHERE student_user_id IS NOT NULL AND deleted_at IS NULL;--> statement-breakpoint
+CREATE INDEX "student_status_idx" ON "student_profiles" USING btree ("approval_status","created_at");--> statement-breakpoint
+CREATE INDEX "submission_files_idx" ON "submission_files" USING btree ("submission_id");--> statement-breakpoint
+CREATE INDEX "submission_registration_idx" ON "submissions" USING btree ("registration_id");--> statement-breakpoint
+-- Only the store's server reads these tables: lock them against Supabase's public API keys.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['student_profiles', 'student_guardians', 'parent_approval_requests', 'student_login_invites', 'consent_records',
+    'competitions', 'competition_groups', 'competition_form_fields', 'competition_resources', 'resource_downloads', 'prizes',
+    'competition_email_templates', 'registrations', 'submissions', 'submission_files', 'notification_log'] LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);
+    END IF;
+  END LOOP;
+END $$;
+--> statement-breakpoint
+-- New storage buckets (existing buckets are left exactly as they are):
+--   competition-entries: students' work, private, signed links only
+--   competition-files:   registered-only resources and email attachments, private
+--   competition-media:   banners, thumbnails, judge photos, public resources (marketing images only)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'storage') THEN
+    INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES
+      ('competition-entries', 'competition-entries', false, 52428800, NULL),
+      ('competition-files', 'competition-files', false, 52428800, NULL),
+      ('competition-media', 'competition-media', true, 10485760, ARRAY['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
+    ON CONFLICT (id) DO NOTHING;
+  END IF;
+END $$;

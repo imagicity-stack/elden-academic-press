@@ -18,6 +18,8 @@ const Enquiries = lazy(() => import('./pages/Enquiries'));
 const StudyHubAdmin = lazy(() => import('./pages/StudyHub'));
 const Settings = lazy(() => import('./pages/Settings'));
 const NewsletterAdmin = lazy(() => import('./pages/Newsletter'));
+const CompetitionsAdmin = lazy(() => import('./pages/Competitions'));
+const CompetitionEditor = lazy(() => import('./pages/CompetitionEditor'));
 
 export interface Me { userId: string; email: string; name: string; role: 'owner' | 'manager' | 'staff'; aal: string; mfaRequired: boolean; mfaSatisfied: boolean }
 interface Counts { toFulfil: number; attention: number; newEnquiries: number }
@@ -211,6 +213,7 @@ const NAV: { to: string; label: string; icon: string; count?: keyof Counts; owne
   { to: '/admin/customers', label: 'Customers', icon: 'M16 19a4 4 0 0 0-8 0M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19a3 3 0 0 0-3-3M4 19a3 3 0 0 1 3-3' },
   { to: '/admin/discounts', label: 'Discounts', icon: 'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01' },
   { to: '/admin/newsletter', label: 'Newsletter', icon: 'M3 6h18v12H3zM3 7l9 6 9-6' },
+  { to: '/admin/competitions', label: 'Competitions', icon: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3', owner: true },
   { to: '/admin/enquiries', label: 'Enquiries', icon: 'M4 5h16v11H8l-4 4zM8 9h8M8 12h5', count: 'newEnquiries' },
   { to: '/admin/study-hub', label: 'Study Hub', icon: 'M12 4v12M7 11l5 5 5-5M5 20h14' },
   { to: '/admin/settings', label: 'Settings', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z' },
@@ -236,7 +239,7 @@ function Shell({ me }: { me: Me }) {
             <button type="button" className="ad-side__menu" onClick={() => setMenu(!menu)} aria-expanded={menu}>{menu ? 'Close' : 'Menu'}</button>
           </div>
           <nav className="ad-nav">
-            {NAV.map((n) => (
+            {NAV.filter((n) => !n.owner || me.role === 'owner').map((n) => (
               <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => 'ad-nav__link' + (isActive ? ' is-active' : '')}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d={n.icon} /></svg>
                 <span>{n.label}</span>
@@ -266,6 +269,10 @@ function Shell({ me }: { me: Me }) {
               <Route path="/admin/newsletter" element={<NewsletterAdmin />} />
               <Route path="/admin/newsletter/:tab" element={<NewsletterAdmin />} />
               <Route path="/admin/newsletter/campaigns/:id" element={<NewsletterAdmin />} />
+              <Route path="/admin/competitions" element={<CompetitionsAdmin />} />
+              <Route path="/admin/competitions/accounts" element={<CompetitionsAdmin />} />
+              <Route path="/admin/competitions/:id" element={<CompetitionEditor />} />
+              <Route path="/admin/competitions/:id/:tab" element={<CompetitionEditor />} />
               <Route path="/admin/enquiries" element={<Enquiries />} />
               <Route path="/admin/study-hub" element={<StudyHubAdmin />} />
               <Route path="/admin/settings" element={<Settings />} />

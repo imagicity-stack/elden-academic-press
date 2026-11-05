@@ -11,6 +11,7 @@ import { Arrow, EASE, Marquee } from './motion';
 
 const NAV: { label: string; to: string; match?: (path: string, search: string) => boolean }[] = [
   { label: 'Store', to: '/catalogue', match: (p, s) => (p.startsWith('/catalogue') && !s.includes('type=journals')) || p.startsWith('/books/') },
+  { label: 'Competitions', to: '/competitions', match: (p) => p.startsWith('/competitions') },
   { label: 'Study Hub', to: '/study-hub', match: (p) => p.startsWith('/study-hub') },
   { label: 'Journals', to: catalogueHref({ type: ['journals'] }), match: (p, s) => p.startsWith('/catalogue') && s.includes('type=journals') },
   { label: 'For authors', to: '/about', match: (p) => p.startsWith('/about') },

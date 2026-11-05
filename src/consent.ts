@@ -38,7 +38,8 @@ export function isStaff() {
 }
 
 function writeCookie(c: Consent | null) {
-  const v = c && (isStaff() ? 'staff' : c);
+  // A signed-in student is never reported to Meta from the server either.
+  const v = c && (isStaff() ? 'staff' : isStudentSession() ? 'essential' : c);
   const secure = location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = v ? `elden_consent=${v}; Path=/; Max-Age=31536000; SameSite=Lax${secure}` : 'elden_consent=; Path=/; Max-Age=0';
 }
@@ -56,3 +57,26 @@ export function syncConsent() { writeCookie(getConsent()); }
 
 /** Show the cookie choice again (footer link). */
 export const openConsent = () => window.dispatchEvent(new Event('elden:consent-open'));
+
+/* ---------------- No tracking for students ---------------- */
+// While a student account is signed in on this browser, no analytics or ad scripts
+// load (index.html checks the same flag before loading Google Tag Manager), the
+// Meta Pixel stays off and no events are sent. Signing out clears it.
+
+const STUDENT = 'elden-student';
+
+export function isStudentSession() {
+  try { return localStorage.getItem(STUDENT) === '1'; } catch { return false; }
+}
+
+export function setStudentSession(on: boolean) {
+  try {
+    if (on) localStorage.setItem(STUDENT, '1'); else localStorage.removeItem(STUDENT);
+  } catch { /* ignore */ }
+  syncConsent();
+  if (on) {
+    // Anything already loaded on this page stops collecting.
+    window.gtag?.('consent', 'update', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied' });
+    (window as { fbq?: (...a: unknown[]) => void }).fbq?.('consent', 'revoke');
+  }
+}

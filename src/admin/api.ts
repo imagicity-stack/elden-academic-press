@@ -71,7 +71,7 @@ export async function openPrintable(path: string) {
 }
 
 /** Upload a file straight to storage with a one-time signed link from the API. */
-export async function uploadFile(bucket: 'covers' | 'ebooks' | 'resources', file: File) {
+export async function uploadFile(bucket: 'covers' | 'ebooks' | 'resources' | 'competition-media' | 'competition-files', file: File) {
   const signed = await adminApi<{ url: string; token: string; path: string; publicUrl: string | null }>('/uploads', {
     body: { bucket, fileName: file.name, contentType: file.type || 'application/octet-stream', size: file.size },
   });

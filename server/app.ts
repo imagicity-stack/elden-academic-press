@@ -6,6 +6,11 @@ import type { Deps } from './deps.js';
 import { clientIp, HttpError } from './lib/http.js';
 import { RazorpayError } from './lib/razorpay.js';
 import { account, type Customer } from './routes/account.js';
+import { approvals, invites } from './routes/approvals.js';
+import { profile } from './routes/profile.js';
+import { myCompetitions, publicCompetitions } from './routes/competitions.js';
+import { entries, mySubmissions } from './routes/submissions.js';
+import { competitionPage } from './routes/og.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
 import { meta } from './routes/meta.js';
@@ -29,6 +34,19 @@ export function createApp(getDeps: () => Promise<Deps>) {
     const xml = await sitemapXml(await getDeps(), process.env.VITE_SITE_LIVE === 'true');
     await tagCatalog();
     return c.body(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' });
+  });
+
+  // A competition's page with its own link-preview tags (vercel.json sends /competitions/<slug> here).
+  root.get('/competitions/:slug', async (c) => {
+    const slug = c.req.param('slug');
+    try {
+      const html = await competitionPage(await getDeps(), slug, new URL(c.req.url).origin);
+      if (html) return c.html(html, 200, { 'Cache-Control': 'public, max-age=0, s-maxage=300' });
+    } catch (e) {
+      console.warn('[og] competition page', (e as Error).message);
+    }
+    // Not found or not ready: the app's own page (the trailing slash skips this route).
+    return c.redirect(`/competitions/${encodeURIComponent(slug)}/`, 302);
   });
 
   // Product feed for Google Merchant Center and Meta Commerce Manager (vercel.json rewrites /feeds/* here).
@@ -87,6 +105,13 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/webhooks', webhooks);
   app.route('/admin', admin);
   app.route('/account', account);
+  app.route('/profile', profile);
+  app.route('/competitions', publicCompetitions);
+  app.route('/my/entries', entries);
+  app.route('/my/submissions', mySubmissions);
+  app.route('/my', myCompetitions);
+  app.route('/approvals', approvals);
+  app.route('/invites', invites);
   app.route('/newsletter', newsletter);
   app.route('/meta', meta);
   app.route('/cron', cron);

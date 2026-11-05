@@ -113,7 +113,7 @@ adminNewsletter.get('/subscribers/export.csv', async (c) => {
 adminNewsletter.post('/subscribers', requireRole('manager'), async (c) => {
   const deps = c.get('deps');
   const input = await body(c, z.object({ email: zEmail, name: zText(120).default(''), phone: z.union([z.literal(''), zPhone]).default(''), consent: z.literal(true, { error: 'Confirm that this person agreed to receive emails' }) }));
-  const r = await subscribe(deps, { email: input.email, name: input.name, phone: input.phone, source: 'admin', confirmed: true });
+  const r = await subscribe(deps, { email: input.email, name: input.name, phone: input.phone, source: 'admin' });
   await audit(c, 'subscriber.add', 'subscriber', input.email);
   return c.json(r.row, 201);
 });
@@ -157,7 +157,7 @@ adminNewsletter.post('/subscribers/import', requireRole('manager'), async (c) =>
     const phone = zPhone.safeParse(get('mobile', 'phone', 'mobile number', 'phone number'));
     const [existing] = await deps.db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, email.data));
     if (existing?.status === 'unsubscribed' || existing?.status === 'subscribed') { skipped++; continue; }
-    await subscribe(deps, { email: email.data, name: get('name', 'full name'), phone: phone.success ? phone.data : '', source: 'import', confirmed: true });
+    await subscribe(deps, { email: email.data, name: get('name', 'full name'), phone: phone.success ? phone.data : '', source: 'import' });
     added++;
   }
   await audit(c, 'subscriber.import', 'subscriber', `${added} added`, { added, skipped, invalid });

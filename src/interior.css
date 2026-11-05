@@ -1003,3 +1003,11 @@ select.input { appearance: none; padding-right: 42px; background: #FFFFFF url("d
 .pay-mode__text { display: flex; flex-direction: column; gap: 3px; font-size: 15px; color: var(--ink); }
 .pay-mode__text b { font-weight: 600; }
 .pay-mode__text span { font-size: 13.5px; line-height: 1.45; color: var(--muted); }
+
+/* Very small phones (360 px): the header's four buttons and the logo must fit. */
+@media (max-width: 400px) {
+  .header__inner { gap: 8px; }
+  .header__actions { gap: 0; }
+  .header__actions .icon-btn { width: 38px; }
+  .hero__kicker { flex-wrap: wrap; }
+}

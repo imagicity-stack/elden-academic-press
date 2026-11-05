@@ -8,7 +8,7 @@ import { categories, inventoryMovements, orderItems, productVariants, products }
 import { slugify } from '../../db/seed.js';
 import { parseCsv, toCsv } from '../../lib/csv.js';
 import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
-import type { Bucket } from '../../lib/storage.js';
+import { PUBLIC_BUCKETS, type Bucket } from '../../lib/storage.js';
 import { getSettings, type Variant } from '../../services/catalog.js';
 import { audit, requireRole } from './auth.js';
 
@@ -416,12 +416,17 @@ const UPLOAD_RULES: Record<Bucket, { types: string[]; maxMb: number }> = {
   covers: { types: ['image/jpeg', 'image/png', 'image/webp'], maxMb: 5 },
   ebooks: { types: ['application/pdf', 'application/epub+zip'], maxMb: 300 },
   resources: { types: ['application/pdf'], maxMb: 50 },
+  // Competitions: marketing images and public PDFs; private resources and email attachments.
+  'competition-media': { types: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'], maxMb: 10 },
+  'competition-files': { types: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'application/zip'], maxMb: 50 },
+  // Students' work is uploaded only through the submission page, never here.
+  'competition-entries': { types: [], maxMb: 0 },
 };
 
 adminUploads.post('/', async (c) => {
   const { storage } = c.get('deps');
   const input = await body(c, z.object({
-    bucket: z.enum(['covers', 'ebooks', 'resources']), fileName: z.string().trim().min(1).max(200), contentType: z.string().max(100), size: z.number().int().positive(),
+    bucket: z.enum(['covers', 'ebooks', 'resources', 'competition-media', 'competition-files']), fileName: z.string().trim().min(1).max(200), contentType: z.string().max(100), size: z.number().int().positive(),
   }));
   const rule = UPLOAD_RULES[input.bucket];
   if (!rule.types.includes(input.contentType)) throw new HttpError(400, `This file type isn’t allowed here (${rule.types.map((t) => t.split('/')[1]).join(', ')} only).`);
@@ -431,5 +436,5 @@ adminUploads.post('/', async (c) => {
   const path = `${new Date().getFullYear()}/${randomUUID()}/${base}.${ext}`;
   const signed = await storage.signedUploadUrl(input.bucket, path);
   await audit(c, 'file.upload', input.bucket, path, { fileName: input.fileName, size: input.size });
-  return c.json({ ...signed, bucket: input.bucket, publicUrl: input.bucket === 'ebooks' ? null : storage.publicUrl(input.bucket, path) });
+  return c.json({ ...signed, bucket: input.bucket, publicUrl: PUBLIC_BUCKETS.includes(input.bucket) ? storage.publicUrl(input.bucket, path) : null });
 });

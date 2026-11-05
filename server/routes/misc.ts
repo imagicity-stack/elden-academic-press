@@ -14,6 +14,9 @@ import { sendEnquiryNotice } from '../services/emails.js';
 import { processNewsletter } from '../services/newsletter.js';
 import { expireOrders } from '../services/orders.js';
 import { eventIdHeader, report, visitOf } from '../services/tracking.js';
+import { notify, retryFailed } from '../services/notify.js';
+import { purgeExpiredRequests } from '../services/students.js';
+import '../services/studentEmails.js';
 
 /* ---------------- Enquiry forms ---------------- */
 
@@ -67,6 +70,13 @@ cron.use('*', async (c, next) => {
 
 cron.get('/expire-orders', async (c) => c.json({ expired: await expireOrders(c.get('deps')) }));
 cron.get('/newsletter', async (c) => c.json(await processNewsletter(c.get('deps'))));
+/** Every 15 minutes: retry failed competition emails; drop student requests nobody approved in 14 days. */
+cron.get('/competitions', async (c) => {
+  const deps = c.get('deps');
+  const purge = await purgeExpiredRequests(deps);
+  await notify(deps, purge.emails.map((e) => ({ template: 'request_expired', to: e.to, userId: e.userId, payload: { firstName: e.firstName } })));
+  return c.json({ purged: purge.purged, ...(await retryFailed(deps)) });
+});
 
 /* ---------------- Local development only ---------------- */
 
@@ -94,14 +104,15 @@ dev.on(['GET', 'PUT'], '/files/:bucket/*', async (c) => {
   if (!('root' in store)) throw notFound();
   const bucket = c.req.param('bucket');
   const path = normalize(decodeURIComponent(c.req.path.split(`/files/${bucket}/`)[1] ?? ''));
-  if (!['covers', 'ebooks', 'resources'].includes(bucket) || path.startsWith('..') || path.includes('\0')) throw notFound();
+  if (!['covers', 'ebooks', 'resources', 'competition-entries', 'competition-files', 'competition-media'].includes(bucket) || path.startsWith('..') || path.includes('\0')) throw notFound();
   if (c.req.method === 'PUT') {
     const [exp, sig] = (c.req.query('upload') ?? '').split('.');
     if (!store.verify(bucket, path, exp, sig)) throw new HttpError(403, 'Upload link expired');
     await store.write(bucket as 'covers', path, new Uint8Array(await c.req.arrayBuffer()));
     return c.json({ ok: true });
   }
-  if (bucket === 'ebooks' && !store.verify(bucket, path, c.req.query('exp') ?? '', c.req.query('sig') ?? '')) throw new HttpError(403, 'Link expired');
+  const isPrivate = bucket === 'ebooks' || bucket === 'competition-entries' || bucket === 'competition-files';
+  if (isPrivate && !store.verify(bucket, path, c.req.query('exp') ?? '', c.req.query('sig') ?? '')) throw new HttpError(403, 'Link expired');
   const data = await readFile(join(store.root, bucket, path)).catch(() => null);
   if (!data) throw notFound();
   const type = path.endsWith('.pdf') ? 'application/pdf' : path.match(/\.(png|jpe?g|webp)$/)?.[1] ? `image/${path.split('.').pop()!.replace('jpg', 'jpeg')}` : 'application/octet-stream';

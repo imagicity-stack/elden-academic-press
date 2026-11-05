@@ -6,8 +6,8 @@ import { dirname, join } from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { hmacHex, safeEqual } from './crypto.js';
 
-export type Bucket = 'covers' | 'ebooks' | 'resources';
-export const PUBLIC_BUCKETS: Bucket[] = ['covers', 'resources'];
+export type Bucket = 'covers' | 'ebooks' | 'resources' | 'competition-entries' | 'competition-files' | 'competition-media';
+export const PUBLIC_BUCKETS: Bucket[] = ['covers', 'resources', 'competition-media'];
 
 export interface Storage {
   publicUrl(bucket: Bucket, path: string): string;
@@ -18,6 +18,8 @@ export interface Storage {
   remove(bucket: Bucket, path: string): Promise<void>;
   /** The file's bytes (used to attach e-books to emails). */
   read(bucket: Bucket, path: string): Promise<Uint8Array>;
+  /** Replace a file's bytes (a student's photo after its location data is removed). */
+  write(bucket: Bucket, path: string, data: Uint8Array, contentType?: string): Promise<void>;
 }
 
 export function supabaseStorage(url: string, serviceKey: string): Storage {
@@ -42,6 +44,10 @@ export function supabaseStorage(url: string, serviceKey: string): Storage {
       if (error || !data) throw new Error(error?.message ?? 'Could not read file');
       return new Uint8Array(await data.arrayBuffer());
     },
+    async write(bucket, path, data, contentType) {
+      const { error } = await client.storage.from(bucket).upload(path, data, { upsert: true, contentType });
+      if (error) throw new Error(error.message);
+    },
   };
 }
 
@@ -51,7 +57,6 @@ export function supabaseStorage(url: string, serviceKey: string): Storage {
  */
 export function localStorage(root: string, baseUrl: string, secret = 'local-storage-secret'): Storage & {
   verify(bucket: string, path: string, exp: string, sig: string): boolean;
-  write(bucket: Bucket, path: string, data: Uint8Array): Promise<void>;
   root: string;
 } {
   const sign = (bucket: string, path: string, exp: string) => hmacHex(secret, `${bucket}/${path}:${exp}`);
