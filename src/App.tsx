@@ -23,6 +23,7 @@ import { CompetitionList } from './pages/CompetitionList';
 import { CompetitionDetail } from './pages/CompetitionDetail';
 import { CompetitionRegister, RegistrationDone } from './pages/CompetitionRegister';
 import { MyEntries } from './pages/MyEntries';
+import { EntryPage } from './pages/EntryPage';
 import { BookDetail } from './pages/BookDetail';
 import { Catalogue } from './pages/Catalogue';
 import { Checkout } from './pages/Checkout';
@@ -82,6 +83,7 @@ export function App() {
           <Route path="competitions/:slug" element={<CompetitionDetail />} />
           <Route path="competitions/:slug/register" element={<CompetitionRegister />} />
           <Route path="competitions/:slug/registered/:id" element={<RegistrationDone />} />
+          <Route path="competitions/:slug/entry/:id" element={<EntryPage />} />
           <Route path="onboarding" element={<Onboarding />} />
           <Route path="approve/:token" element={<Approve />} />
           <Route path="invite/:token" element={<Invite />} />

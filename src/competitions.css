@@ -136,3 +136,21 @@
 .rich ul, .rich ol { padding-left: 22px; }
 .rich h3 { margin: 18px 0 8px; font: 650 20px/1.2 var(--f-display); }
 .rich a { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+
+/* ---------- Entry page ---------- */
+.cp-receipt { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; background: #E8F5EC; color: #1F5532; }
+.cp-receipt b { font: 700 18px var(--f-display); }
+.cp-upload { align-self: flex-start; cursor: pointer; }
+.cp-files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cp-files li { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1.5px solid var(--line); background: #FFFFFF; }
+.cp-files img, .cp-files__icon { width: 64px; height: 64px; object-fit: cover; flex: none; display: grid; place-items: center; background: var(--paper); font: 700 13px var(--f-mono); }
+.cp-files li > div { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.cp-files li > div b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-uploads { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cp-uploads li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; background: var(--paper); font: 500 14px var(--f-text); }
+.cp-uploads progress { flex: 1; min-width: 120px; height: 10px; accent-color: var(--accent); }
+.cp-text { min-height: 260px; font: 400 17px/1.6 var(--f-text), 'Noto Sans Devanagari', system-ui, sans-serif; }
+.cp-words { font: 500 13px var(--f-mono); color: var(--muted); }
+.cp-words.is-bad { color: var(--err); }
+.cp-preview__text { white-space: pre-wrap; font: 400 16px/1.6 var(--f-text); }
+.cp-danger-link { color: var(--err); }

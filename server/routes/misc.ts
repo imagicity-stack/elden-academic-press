@@ -104,14 +104,15 @@ dev.on(['GET', 'PUT'], '/files/:bucket/*', async (c) => {
   if (!('root' in store)) throw notFound();
   const bucket = c.req.param('bucket');
   const path = normalize(decodeURIComponent(c.req.path.split(`/files/${bucket}/`)[1] ?? ''));
-  if (!['covers', 'ebooks', 'resources'].includes(bucket) || path.startsWith('..') || path.includes('\0')) throw notFound();
+  if (!['covers', 'ebooks', 'resources', 'competition-entries', 'competition-files', 'competition-media'].includes(bucket) || path.startsWith('..') || path.includes('\0')) throw notFound();
   if (c.req.method === 'PUT') {
     const [exp, sig] = (c.req.query('upload') ?? '').split('.');
     if (!store.verify(bucket, path, exp, sig)) throw new HttpError(403, 'Upload link expired');
     await store.write(bucket as 'covers', path, new Uint8Array(await c.req.arrayBuffer()));
     return c.json({ ok: true });
   }
-  if (bucket === 'ebooks' && !store.verify(bucket, path, c.req.query('exp') ?? '', c.req.query('sig') ?? '')) throw new HttpError(403, 'Link expired');
+  const isPrivate = bucket === 'ebooks' || bucket === 'competition-entries' || bucket === 'competition-files';
+  if (isPrivate && !store.verify(bucket, path, c.req.query('exp') ?? '', c.req.query('sig') ?? '')) throw new HttpError(403, 'Link expired');
   const data = await readFile(join(store.root, bucket, path)).catch(() => null);
   if (!data) throw notFound();
   const type = path.endsWith('.pdf') ? 'application/pdf' : path.match(/\.(png|jpe?g|webp)$/)?.[1] ? `image/${path.split('.').pop()!.replace('jpg', 'jpeg')}` : 'application/octet-stream';

@@ -9,6 +9,7 @@ import { account, type Customer } from './routes/account.js';
 import { approvals, invites } from './routes/approvals.js';
 import { profile } from './routes/profile.js';
 import { myCompetitions, publicCompetitions } from './routes/competitions.js';
+import { entries, mySubmissions } from './routes/submissions.js';
 import { competitionPage } from './routes/og.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
@@ -106,6 +107,8 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/account', account);
   app.route('/profile', profile);
   app.route('/competitions', publicCompetitions);
+  app.route('/my/entries', entries);
+  app.route('/my/submissions', mySubmissions);
   app.route('/my', myCompetitions);
   app.route('/approvals', approvals);
   app.route('/invites', invites);
