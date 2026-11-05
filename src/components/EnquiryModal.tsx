@@ -8,16 +8,14 @@ import type { ModalKind } from '../site';
 import { Field, SelectField } from './Field';
 
 const CFG: Record<ModalKind, [title: string, desc: string, cta: string]> = {
-  sample: ['Request a sample copy', 'For teachers, schools and coaching institutes evaluating Elden titles.', 'Request sample'],
   bulk: ['School & bulk order enquiry', 'Tell us about your requirement and we’ll share pricing and delivery options.', 'Send enquiry'],
   teacher: ['Request teacher access', 'Teacher’s manuals, answer keys and lesson plans for adopting schools.', 'Request access'],
   dist: ['Become a distributor', 'Partner with Elden to supply schools and bookstores in your region.', 'Send application'],
 };
 
 export function EnquiryModal({ kind, bookId, onClose }: { kind: ModalKind; bookId?: string; onClose: () => void }) {
-  const { byId, products } = useCatalog();
+  const { byId } = useCatalog();
   const book = byId(bookId);
-  const titles = products.filter((p) => p.category?.slug !== 'journals').map((p) => p.title + (p.classLabel ? ' — ' + p.classLabel : ''));
   const { busy, error, sent, submit } = useSubmit((form) => submitForm(kind, { ...(book ? { title: book.title } : {}), ...formData(form) }));
   const [title, desc, cta] = CFG[kind];
 
@@ -56,11 +54,6 @@ export function EnquiryModal({ kind, bookId, onClose }: { kind: ModalKind; bookI
                   <span className="modal__book-meta">{[book.category?.name, book.classLabel, book.boards.join(', ')].filter(Boolean).join(' · ')}</span>
                 </span>
               </div>
-            )}
-            {!book && kind === 'sample' && (
-              <SelectField label="Title(s) you'd like to evaluate" name="title">
-                {titles.map((t) => <option key={t}>{t}</option>)}
-              </SelectField>
             )}
             <div className="form-grid form-grid--tight">
               <Field label="Name" name="name" required />

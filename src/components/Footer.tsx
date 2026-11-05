@@ -27,7 +27,6 @@ const COLS: { t: string; links: FooterLink[] }[] = [
     ...(config.elmasterUrl ? [['elmaster ↗', { href: config.elmasterUrl }] as FooterLink] : []),
   ] },
   { t: 'Schools', links: [
-    ['Request a sample', { modal: 'sample' }],
     ['Teacher resources', { modal: 'teacher' }],
     ['Bulk orders', { modal: 'bulk' }],
     ['Find a distributor', '/contact'],
@@ -54,8 +53,8 @@ export function Footer() {
         <Reveal className="footer__cta">
           <h2 className="footer__cta-title">Choosing books for next session?</h2>
           <div className="footer__cta-actions">
-            <button type="button" className="btn btn--yellow btn--lg" onClick={() => openModal('sample')}>Request inspection copies <Arrow /></button>
-            <Link to="/catalogue" className="btn btn--ghost-light btn--lg">Browse the store</Link>
+            <Link to="/catalogue" className="btn btn--yellow btn--lg">Browse the store <Arrow /></Link>
+            <button type="button" className="btn btn--ghost-light btn--lg" onClick={() => openModal('bulk')}>Bulk orders for schools</button>
           </div>
         </Reveal>
         <div className="footer__news">

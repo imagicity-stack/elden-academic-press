@@ -169,7 +169,6 @@ function BookView({ book }: { book: Product }) {
             <div className="pd__schools">
               <b>Ordering for a school?</b>
               <div className="pd__links">
-                <button type="button" className="text-link" onClick={() => openModal('sample', book.id)}>Request a sample copy</button>
                 <button type="button" className="text-link" onClick={() => openModal('bulk', book.id)}>Bulk pricing</button>
                 <Link to="/contact" className="text-link">Find a distributor</Link>
               </div>

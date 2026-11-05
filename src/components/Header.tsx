@@ -24,7 +24,7 @@ export function TopBar() {
   const items = [
     <><b>Session 2027–28</b> New titles for CBSE, ICSE &amp; State Boards</>,
     <>Free sample papers &amp; notes in the <Link to="/study-hub">Study Hub</Link></>,
-    <>Teachers: <button type="button" onClick={() => openModal('sample')}>request inspection copies</button></>,
+    <>Schools: <button type="button" onClick={() => openModal('bulk')}>bulk pricing on class sets</button></>,
     <>E-books delivered instantly · printed books across India</>,
   ];
   return (
@@ -48,7 +48,6 @@ const ICONS = {
 };
 
 export function Header() {
-  const { openModal } = useSite();
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const cart = useCart();
@@ -119,7 +118,7 @@ export function Header() {
               )}
             </AnimatePresence>
           </button>
-          <button type="button" className="btn btn--ink btn--sm header__cta" onClick={() => openModal('sample')}>Request a sample</button>
+          <Link to="/catalogue" className="btn btn--ink btn--sm header__cta">Shop books</Link>
           <button type="button" className="icon-btn header__menu-btn" aria-expanded={menu} aria-label="Menu" onClick={() => setMenu(true)}><Icon d={ICONS.menu} /></button>
         </div>
       </div>
@@ -144,7 +143,7 @@ export function Header() {
               ))}
             </motion.nav>
             <div className="wrap menu__foot">
-              <button type="button" className="btn btn--yellow btn--lg" onClick={() => { setMenu(false); openModal('sample'); }}>Request a sample <Arrow /></button>
+              <Link to="/catalogue" className="btn btn--yellow btn--lg" onClick={() => setMenu(false)}>Shop books <Arrow /></Link>
               <p>{config.contactEmail} · {config.headOffice}</p>
             </div>
           </motion.div>

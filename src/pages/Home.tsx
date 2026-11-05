@@ -159,7 +159,7 @@ function Paths() {
   const paths = [
     { n: '01', t: 'School, Class 1–12', d: 'Textbooks, workbooks and revision guides for CBSE, ICSE and State Boards.', cta: 'Browse school books', tone: 'ink', go: () => navigate(catalogueHref({ level: ['P', 'M', 'S', 'SS'] })) },
     { n: '02', t: 'Competitive exams', d: 'Reference books and practice papers for JEE, NEET, CUET and UPSC.', cta: 'Browse exam prep', tone: 'orange', go: () => navigate(catalogueHref({ level: ['C'] })) },
-    { n: '03', t: 'Teachers & schools', d: 'Inspection copies, teacher’s manuals and bulk orders for your school.', cta: 'Request a sample', tone: 'yellow', go: () => openModal('sample') },
+    { n: '03', t: 'Teachers & schools', d: 'Class sets at bulk prices, delivered to your school, with teacher’s manuals for adopting schools.', cta: 'Get bulk pricing', tone: 'yellow', go: () => openModal('bulk') },
     { n: '04', t: 'Researchers & authors', d: 'Peer-reviewed journals, scholarly titles and proposals for new books.', cta: 'Publish with us', tone: 'paper', go: () => navigate('/about') },
   ];
   return (
@@ -325,10 +325,10 @@ function Audiences() {
     <section className="wrap section aud">
       <Reveal className="aud__card aud__card--orange">
         <div className="t-label">For schools &amp; teachers</div>
-        <h3 className="aud__title">Evaluating books for next session?</h3>
-        <p>Inspection copies, teacher’s manuals and bulk pricing for your school or coaching centre.</p>
+        <h3 className="aud__title">Ordering for next session?</h3>
+        <p>Bulk pricing on class sets for your school or coaching centre, delivered across India.</p>
         <div className="aud__ctas">
-          <button type="button" className="btn btn--ink btn--lg" onClick={() => openModal('sample')}>Request a sample <Arrow /></button>
+          <button type="button" className="btn btn--ink btn--lg" onClick={() => openModal('bulk')}>Get bulk pricing <Arrow /></button>
           <Link to="/contact" className="btn btn--outline btn--lg">Find a distributor</Link>
         </div>
       </Reveal>

@@ -28,7 +28,7 @@ export default function Enquiries() {
   };
 
   return (
-    <Page title="Enquiries" subtitle="Sample requests, school orders, teacher access, distributor applications, contact messages and author proposals."
+    <Page title="Enquiries" subtitle="School orders, teacher access, distributor applications, contact messages and author proposals (and sample requests from before they were switched off)."
       actions={<Btn busy={busy === 'csv'} onClick={() => run('csv', () => downloadFile(`/enquiries/export.csv?${params}`, 'enquiries.csv'))}>Export CSV</Btn>}>
       <div className="ad-tabs">
         {[['open', 'Open'], ['new', 'New'], ['closed', 'Done'], ['', 'All']].map(([v, l]) => (
