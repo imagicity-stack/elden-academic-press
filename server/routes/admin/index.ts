@@ -31,7 +31,7 @@ admin.use('*', requireAdmin());
 // After saving books, categories, files or settings, the store shows the change on the next reload.
 admin.use('*', async (c, next) => {
   await next();
-  if (c.req.method !== 'GET' && c.res.status < 400 && /\/admin\/(products|categories|inventory|uploads|resources|settings)\b/.test(c.req.path)) await clearCatalogCache();
+  if (c.req.method !== 'GET' && c.res.status < 400 && /\/admin\/(products|categories|inventory|uploads|resources|settings|competitions)\b/.test(c.req.path)) await clearCatalogCache();
 });
 
 admin.route('/orders', adminOrders);

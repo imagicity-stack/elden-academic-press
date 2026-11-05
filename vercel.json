@@ -18,6 +18,7 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/sitemap.xml", "destination": "/api" },
+    { "source": "/competitions/:slug", "destination": "/api" },
     { "source": "/feeds/(.*)", "destination": "/api" },
     { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ],
