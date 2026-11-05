@@ -19,7 +19,6 @@ const StudyHubAdmin = lazy(() => import('./pages/StudyHub'));
 const Settings = lazy(() => import('./pages/Settings'));
 const NewsletterAdmin = lazy(() => import('./pages/Newsletter'));
 const CompetitionsAdmin = lazy(() => import('./pages/Competitions'));
-const CompetitionEditor = lazy(() => import('./pages/CompetitionEditor'));
 
 export interface Me { userId: string; email: string; name: string; role: 'owner' | 'manager' | 'staff'; aal: string; mfaRequired: boolean; mfaSatisfied: boolean }
 interface Counts { toFulfil: number; attention: number; newEnquiries: number }
@@ -270,9 +269,7 @@ function Shell({ me }: { me: Me }) {
               <Route path="/admin/newsletter/:tab" element={<NewsletterAdmin />} />
               <Route path="/admin/newsletter/campaigns/:id" element={<NewsletterAdmin />} />
               <Route path="/admin/competitions" element={<CompetitionsAdmin />} />
-              <Route path="/admin/competitions/accounts" element={<CompetitionsAdmin />} />
-              <Route path="/admin/competitions/:id" element={<CompetitionEditor />} />
-              <Route path="/admin/competitions/:id/:tab" element={<CompetitionEditor />} />
+              <Route path="/admin/competitions/:slug" element={<CompetitionsAdmin />} />
               <Route path="/admin/enquiries" element={<Enquiries />} />
               <Route path="/admin/study-hub" element={<StudyHubAdmin />} />
               <Route path="/admin/settings" element={<Settings />} />

@@ -3,8 +3,8 @@
 // the policies are listed, since every other address shows the coming-soon page.
 import { asc, eq } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
-import { competitions, products } from '../db/schema.js';
-import { isListed } from '../services/competitions.js';
+import { products } from '../db/schema.js';
+import { listedCompetitions } from '../../src/shared/competitions.js';
 
 const PAGES = ['/', '/catalogue', '/competitions', '/study-hub', '/about', '/contact', '/newsletter'];
 const POLICIES = ['/terms', '/privacy', '/refunds', '/shipping'];
@@ -18,8 +18,7 @@ export async function sitemapXml(deps: Deps, live: boolean): Promise<string> {
     const rows = await deps.db.select({ slug: products.slug, updatedAt: products.updatedAt }).from(products)
       .where(eq(products.status, 'active')).orderBy(asc(products.sort), asc(products.title));
     for (const r of rows) entries.push({ loc: `${base}/books/${encodeURIComponent(r.slug)}`, lastmod: r.updatedAt.toISOString().slice(0, 10) });
-    const comps = await deps.db.select().from(competitions).where(eq(competitions.publishState, 'published'));
-    for (const c of comps.filter((x) => isListed(x, deps.now()))) entries.push({ loc: `${base}/competitions/${c.slug}`, lastmod: c.updatedAt.toISOString().slice(0, 10) });
+    for (const c of listedCompetitions()) entries.push({ loc: `${base}/competitions/${c.slug}` });
   }
   return '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     + entries.map((e) => `  <url><loc>${esc(e.loc)}</loc>${e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : ''}</url>`).join('\n')

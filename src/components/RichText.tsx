@@ -1,5 +1,5 @@
-// The admin's small Markdown (**bold**, *italic*, [links](https://…), lists, ## headings),
-// drawn as React elements: no HTML from the database ever reaches the page.
+// Small Markdown (**bold**, *italic*, [links](https://…), lists, ## headings),
+// drawn as React elements, so no raw HTML ever reaches the page.
 import type { ReactNode } from 'react';
 
 function inline(text: string, key: string): ReactNode[] {
@@ -18,7 +18,8 @@ function inline(text: string, key: string): ReactNode[] {
 }
 
 export function RichText({ text, className }: { text: string; className?: string }) {
-  const blocks = text.trim().split(/\n{2,}/).filter(Boolean);
+  // A "## heading" line always stands alone, even with text on the very next line.
+  const blocks = text.trim().replace(/^(##\s+[^\n]*)\n(?!\n)/gm, '$1\n\n').split(/\n{2,}/).filter(Boolean);
   return (
     <div className={'rich' + (className ? ` ${className}` : '')}>
       {blocks.map((b, i) => {

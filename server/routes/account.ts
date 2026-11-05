@@ -7,8 +7,10 @@ import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
-import { accounts, orderItems, orders, subscribers } from '../db/schema.js';
+import { accounts, competitionSignups, orderItems, orders, subscribers } from '../db/schema.js';
 import { body, HttpError, notFound, rateLimit, zPhone } from '../lib/http.js';
+import { isStateCode, stateName } from '../lib/states.js';
+import { findCompetition, personName } from '../../src/shared/competitions.js';
 import { getSettings } from '../services/catalog.js';
 import { subscribe, subscribeNewAccount, unsubscribe } from '../services/newsletter.js';
 import { orderToken } from '../services/orders.js';
@@ -131,10 +133,17 @@ account.get('/', async (c) => {
     }
   }
 
+  const signups = await db.select().from(competitionSignups).where(eq(competitionSignups.userId, me.userId))
+    .orderBy(desc(competitionSignups.createdAt)).limit(100);
+
   return c.json({
     customer: me,
     newAccount,
-    profile: { phone: profile.phone },
+    profile: profileOf(profile),
+    competitions: signups.map((x) => ({
+      id: x.id, slug: x.competitionSlug, title: findCompetition(x.competitionSlug)?.title ?? x.competitionSlug, mode: x.mode, groupName: x.groupName,
+      people: x.participants.map(personName), createdAt: x.createdAt,
+    })),
     newsletter: sub?.status ?? null,
     orders: mine.map((o) => ({
       number: o.number, createdAt: o.createdAt, status: orderStatusLabel(o), total: o.total, invoice: o.invoiceNumber,
@@ -166,15 +175,36 @@ account.post('/library/:itemId/read', async (c) => {
   return c.json({ url: await storage.signedDownloadUrl('ebooks', file.path, 300) });
 });
 
-/** The mobile number the customer adds to their account. */
+const ACCOUNT_TYPES = ['student', 'parent', 'teacher', 'other'] as const;
+type AccountRow = typeof accounts.$inferSelect;
+/** The profile on the account page: complete once name, WhatsApp, city, state and "I am a" are all there. */
+export function profileOf(a: AccountRow) {
+  const completed = Boolean(a.fullName && a.phone && a.city && a.state && a.accountType);
+  return { phone: a.phone, fullName: a.fullName, city: a.city, state: a.state, stateName: stateName(a.state), type: a.accountType, completed };
+}
+
+/** The profile: just the mobile number (the quick prompt), or everything ("Complete your profile"). */
 account.put('/profile', async (c) => {
-  const { db } = c.get('deps');
+  const { db, now } = c.get('deps');
   const me = c.get('customer');
-  const input = await body(c, z.object({ phone: zPhone }));
-  const [row] = await db.update(accounts).set({ phone: input.phone, updatedAt: sql`now()` }).where(eq(accounts.userId, me.userId)).returning();
+  const input = await body(c, z.object({
+    phone: zPhone,
+    fullName: z.string().trim().min(2, 'Add your full name').max(80).optional(),
+    city: z.string().trim().min(2, 'Add your city or town').max(60).optional(),
+    state: z.string().refine(isStateCode, 'Choose your state').optional(),
+    type: z.enum(ACCOUNT_TYPES, { error: 'Choose who you are' }).optional(),
+  }));
+  const set: Partial<typeof accounts.$inferInsert> = { phone: input.phone, updatedAt: now() };
+  if (input.fullName !== undefined) set.fullName = input.fullName;
+  if (input.city !== undefined) set.city = input.city;
+  if (input.state !== undefined) set.state = input.state;
+  if (input.type !== undefined) set.accountType = input.type;
+  const [row] = await db.update(accounts).set(set).where(eq(accounts.userId, me.userId)).returning();
   if (!row) throw notFound('Account not found');
+  const p = profileOf(row);
+  if (p.completed && !row.onboardingCompletedAt) await db.update(accounts).set({ onboardingCompletedAt: now() }).where(eq(accounts.userId, me.userId));
   await db.update(subscribers).set({ phone: input.phone, updatedAt: sql`now()` }).where(eq(subscribers.email, me.email));
-  return c.json({ phone: row.phone });
+  return c.json(p);
 });
 
 /** Newsletter on / off. A signed-in Google account has a proven email, so no confirmation email is needed. */

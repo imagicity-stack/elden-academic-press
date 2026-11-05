@@ -13,8 +13,6 @@ import { orderStatusLabel } from '../orders.js';
 import { audit, requireAdmin, requireRole } from './auth.js';
 import { adminNewsletter } from './newsletter.js';
 import { adminCompetitions } from './competitions.js';
-import { adminCompetitionEmails } from './competitionEmails.js';
-import { adminCompetitionEntries } from './competitionEntries.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
 import { adminCategories, adminInventory, adminProducts, adminUploads } from './products.js';
@@ -33,7 +31,7 @@ admin.use('*', requireAdmin());
 // After saving books, categories, files or settings, the store shows the change on the next reload.
 admin.use('*', async (c, next) => {
   await next();
-  if (c.req.method !== 'GET' && c.res.status < 400 && /\/admin\/(products|categories|inventory|uploads|resources|settings|competitions)\b/.test(c.req.path)) await clearCatalogCache();
+  if (c.req.method !== 'GET' && c.res.status < 400 && /\/admin\/(products|categories|inventory|uploads|resources|settings)\b/.test(c.req.path)) await clearCatalogCache();
 });
 
 admin.route('/orders', adminOrders);
@@ -50,8 +48,6 @@ admin.route('/newsletter', adminNewsletter);
 admin.use('/competitions', requireRole('owner'));
 admin.use('/competitions/*', requireRole('owner'));
 admin.route('/competitions', adminCompetitions);
-admin.route('/competitions', adminCompetitionEmails);
-admin.route('/competitions', adminCompetitionEntries);
 
 const PAID = ['paid', 'partially_refunded', 'refunded'] as const;
 const IST_DAY = sql`(${orders.paidAt} at time zone 'Asia/Kolkata')::date`;

@@ -37,11 +37,17 @@ export interface AccountOrder {
   items: { title: string; format: string; quantity: number }[];
 }
 export type NewsletterStatus = 'pending' | 'subscribed' | 'unsubscribed' | null;
+export type AccountType = 'student' | 'parent' | 'teacher' | 'other';
+export interface Profile { phone: string; fullName: string; city: string; state: string; stateName: string; type: AccountType | null; completed: boolean }
+export interface MyCompetition { id: string; slug: string; title: string; mode: 'individual' | 'group'; groupName: string; people: string[]; createdAt: string }
+
 export interface AccountData {
   customer: { userId: string; email: string; name: string; avatar: string | null };
   /** First visit after signing up (the server reports the registration to Meta with the same id). */
   newAccount?: boolean;
-  profile: { phone: string };
+  profile: Profile;
+  /** Competitions this account registered for, newest first. */
+  competitions: MyCompetition[];
   newsletter: NewsletterStatus;
   orders: AccountOrder[];
   library: LibraryItem[];
@@ -164,7 +170,10 @@ export function useAccount() {
   const load = useCallback(async () => {
     try {
       if (!(await accountToken())) { setState({ status: 'signedOut' }); return; }
-      setState({ status: 'ready', data: await accountApi<AccountData>('') });
+      const data = await accountApi<AccountData>('');
+      // A student's own account: no analytics or ad tracking on this browser.
+      setStudentSession(data.profile.type === 'student');
+      setState({ status: 'ready', data });
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) { await signOut(); setState({ status: 'signedOut' }); }
       else setState({ status: 'error', message: (e as Error).message });
