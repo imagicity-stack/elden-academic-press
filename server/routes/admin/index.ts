@@ -13,6 +13,7 @@ import { orderStatusLabel } from '../orders.js';
 import { audit, requireAdmin, requireRole } from './auth.js';
 import { adminNewsletter } from './newsletter.js';
 import { adminCompetitions } from './competitions.js';
+import { adminCompetitionEmails } from './competitionEmails.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
 import { adminCategories, adminInventory, adminProducts, adminUploads } from './products.js';
@@ -48,6 +49,7 @@ admin.route('/newsletter', adminNewsletter);
 admin.use('/competitions', requireRole('owner'));
 admin.use('/competitions/*', requireRole('owner'));
 admin.route('/competitions', adminCompetitions);
+admin.route('/competitions', adminCompetitionEmails);
 
 const PAID = ['paid', 'partially_refunded', 'refunded'] as const;
 const IST_DAY = sql`(${orders.paidAt} at time zone 'Asia/Kolkata')::date`;

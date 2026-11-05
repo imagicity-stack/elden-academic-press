@@ -67,7 +67,7 @@ export interface EmailContext {
 }
 
 /** Build one competition email from its template. */
-export async function renderCompetitionEmail(deps: Deps, t: TemplateContent, ctx: EmailContext, s?: Settings): Promise<BuiltMail> {
+export async function renderCompetitionEmail(deps: Deps, t: TemplateContent, ctx: EmailContext, s?: Settings, o: { attachments?: boolean } = {}): Promise<BuiltMail> {
   s ??= await getSettings(deps.db);
   const { f, values: v } = ctx;
   const student = ctx.audience === 'student';
@@ -126,7 +126,7 @@ ${url(vals.resources_url) ? `<div style="margin-top:10px"><a href="${esc(vals.re
     : `You’re getting this because ${esc(v.student_first_name)} is taking part in ${esc(f.c.title)} on eldenap.in.`;
   const attachments: Attachment[] = [];
   let total = 0;
-  for (const key of t.attachmentKeys.slice(0, 2)) {
+  for (const key of o.attachments === false ? [] : t.attachmentKeys.slice(0, 2)) {
     try {
       const content = await deps.storage.read('competition-files', key);
       if (total + content.length > 5 * 1024 * 1024) break;
@@ -176,6 +176,15 @@ export async function templateFor(deps: Deps, competitionId: string, type: Email
   const [t] = await deps.db.select().from(competitionEmailTemplates).where(and(
     eq(competitionEmailTemplates.competitionId, competitionId), eq(competitionEmailTemplates.templateType, type), eq(competitionEmailTemplates.audience, audience)));
   return t ?? defaultTemplate(type, audience, title);
+}
+
+/** The editor's preview: the first upsell rule, as a parent who allowed book news would see it. */
+export async function sampleUpsell(deps: Deps, f: Full) {
+  const rule = f.c.upsellRules[0];
+  if (!rule) return null;
+  const [prod] = rule.productId ? await deps.db.select().from(products).where(eq(products.id, rule.productId)) : [];
+  const url = prod ? `${site(deps)}/books/${prod.slug}` : rule.url;
+  return url ? { headline: rule.headline, url, title: prod?.title ?? null } : null;
 }
 
 async function upsellFor(deps: Deps, f: Full, studentId: string, classGrade: number) {
