@@ -38,7 +38,13 @@ export interface AccountOrder {
 }
 export type NewsletterStatus = 'pending' | 'subscribed' | 'unsubscribed' | null;
 export type AccountType = 'student' | 'parent' | 'teacher' | 'other';
-export interface Profile { phone: string; fullName: string; city: string; state: string; stateName: string; type: AccountType | null; completed: boolean }
+export interface Profile {
+  phone: string; fullName: string; city: string; state: string; stateName: string; type: AccountType | null; completed: boolean;
+  dob: string | null; institutionType: string; institutionName: string; grade: string; guardianName: string; guardianPhone: string; instagram: string;
+  /** What's still needed for this kind of person (see src/shared/profile.ts). */
+  missing: string[];
+}
+export interface MyTeam { id: string; slug: string; title: string; teamName: string; status: string; statusText: string; code: string; createdAt: string }
 export interface MyCompetition { id: string; slug: string; title: string; mode: 'individual' | 'group'; groupName: string; people: string[]; createdAt: string }
 
 export interface AccountData {
@@ -48,6 +54,8 @@ export interface AccountData {
   profile: Profile;
   /** Competitions this account registered for, newest first. */
   competitions: MyCompetition[];
+  /** Team competitions this person registered for, or is a member of. */
+  teams: MyTeam[];
   newsletter: NewsletterStatus;
   orders: AccountOrder[];
   library: LibraryItem[];

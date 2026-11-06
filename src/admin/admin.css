@@ -355,3 +355,24 @@
 /* Competitions */
 .ad-comp-people { margin: 4px 0 0; padding-left: 18px; }
 .ad-comp-people li { margin: 2px 0; }
+/* Team competitions */
+.ad-tt-tabs { margin-bottom: 18px; overflow-x: auto; flex-wrap: nowrap; }
+.ad-tt-tabs .ad-tab { white-space: nowrap; }
+.ad-tt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; align-items: start; }
+.ad-tt-grid--2 { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+@media (max-width: 720px) { .ad-tt-grid--2 { grid-template-columns: minmax(0, 1fr); } }
+.ad-tt-chips { padding: 12px 18px 0; }
+.ad-tt-days { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; }
+.ad-tt-days li { display: grid; grid-template-columns: 44px 1fr 28px; align-items: center; gap: 8px; }
+.ad-tt-days i { display: block; height: 10px; background: var(--ad-navy); border-radius: 2px; }
+.ad-tt-days b { text-align: right; }
+.ad-tt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
+.ad-tt-notices { list-style: none; margin: 0; padding: 0; }
+.ad-tt-notices li { padding: 14px 18px; border-bottom: 1px solid var(--ad-line2); font-size: 13.5px; }
+.ad-tt-notices p { margin: 6px 0; white-space: pre-wrap; }
+.ad-tt-thumb { width: 220px; max-height: 140px; object-fit: cover; border-radius: 6px; border: 1px solid var(--ad-line); }
+.ad-tt-logo { display: inline-flex; align-items: center; gap: 4px; }
+.ad-tt-logo img { height: 36px; width: auto; border: 1px solid var(--ad-line); border-radius: 4px; padding: 2px; background: #fff; }
+.ad-tt-result select { padding: 6px 8px; }
+a.ad-stat { color: inherit; text-decoration: none; }
+a.ad-stat:hover { border-color: var(--ad-navy); }

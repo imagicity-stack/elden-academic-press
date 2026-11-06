@@ -12,6 +12,7 @@ import { ProfileForm } from '../components/ProfileForm';
 import { RichText } from '../components/RichText';
 import { Reveal, SplitWords } from '../components/motion';
 import { NotFound } from './NotFound';
+import { DoomsdayPage } from './doomsday/DoomsdayPage';
 
 const ORDER: Record<Phase, number> = { open: 0, upcoming: 1, closed: 2 };
 
@@ -64,6 +65,7 @@ export function CompetitionPage() {
   const c = findCompetition(slug);
   useEffect(() => { if (c) document.title = `${c.title} — Elden Academic Press`; }, [c]);
   if (!c) return <NotFound />;
+  if (c.team) return <DoomsdayPage c={c as Competition & { team: NonNullable<Competition['team']> }} />;
   const phase = phaseOf(c);
   return (
     <div className="comp">

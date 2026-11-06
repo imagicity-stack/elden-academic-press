@@ -219,17 +219,22 @@ The website already sends everything Google needs; these are the settings on Goo
 
 ## 11. Competitions and profiles
 
-**One-time:** run these in the SQL Editor, oldest first, skipping any you've already run: [`0009_competitions.sql`](supabase-updates/0009_competitions.sql), [`0010_newsletter_everyone_subscribed.sql`](supabase-updates/0010_newsletter_everyone_subscribed.sql), [`0011_simple_competitions.sql`](supabase-updates/0011_simple_competitions.sql). They only add things; `/api/health` lists any that are missing. (0009 also created tables for an earlier, more complicated competitions system. That system has been removed; its tables stay unused so nothing saved is lost.)
+**One-time:** run these in the SQL Editor, oldest first, skipping any you've already run: [`0009_competitions.sql`](supabase-updates/0009_competitions.sql), [`0010_newsletter_everyone_subscribed.sql`](supabase-updates/0010_newsletter_everyone_subscribed.sql), [`0011_simple_competitions.sql`](supabase-updates/0011_simple_competitions.sql), [`0012_doomsday_diaries.sql`](supabase-updates/0012_doomsday_diaries.sql). They only add things; `/api/health` lists any that are missing. (0009 also created tables for an earlier competitions system that has been removed; they stay unused so nothing saved is lost.)
 
-**Profile.** On the account page, everyone is asked once to *Complete your profile*: full name, WhatsApp number, city, state, and *I am a* Student / Parent / Teacher / Other. Shopping never needs it; registering for a competition does. No approval from anyone.
+**Bigger uploads (one-time):** comic PDFs can be up to 100 MB. 0012 lets the private `competition-entries` bucket take that, but Supabase also has a project-wide limit: **Storage → Settings → Upload file size limit**: set it to **110 MB** or more (the default is 50 MB).
 
-**Competitions** are built on request: ask Claude for a competition (title, dates, description, prizes, rules, who can enter, and what the registration form asks; individual, group or both). It's added to `src/shared/competitions.ts` and, once merged, it:
-- appears on **/competitions** (open ones first) with its own page at `/competitions/<name>`, a countdown, and a link preview when shared on WhatsApp;
-- takes registrations from signed-in people with a completed profile: one person at a time, or a group with its name and members (a teacher or parent can register several, up to 10 by default);
-- emails each registration a confirmation, and lists it under **Competitions** on their account page;
-- shows in **Admin → Competitions** (store owner only) with every registration, who made it (name, I am a, email, WhatsApp, city, state) and **Export CSV** (one row per person; exports are recorded in Settings → Activity).
+**Profile.** After signing up, everyone sees *Complete your profile* (they can *Skip for now*, after a warning that competitions need it). It starts with *I am a* Student / Parent / Teacher / Other: students also give their date of birth, class or year, school, college or institution and, if under 18, a parent's or guardian's name and number; teachers give their institution. Shopping never needs it. Registering for a competition asks only for what's still missing.
 
-Registration opens and closes at the times set for the competition, in India time, checked by the server. A competition can be published *unlisted* (reachable by its link only) to check its page before announcing it.
+**DoomsDay Diaries** (team competition, `/competitions/doomsday-diaries`):
+- *Registration:* a signed-in captain, teacher or parent fills one form for the whole team (2 to 4 members, roles, an ID document each, a parent's or guardian's details and consent for anyone under 18). The site checks the age rules (8 to 24 on 6 Nov 2026, no mixing under-18s and adults, age group from the oldest member), the Writer and Artist roles, same school or college for school and college teams, and one team per person. The team gets an application ID (DD-0001) and an email; its status is *Pending verification*.
+- *Review (Admin → Competitions → DoomsDay Diaries → Applications):* open a team, look at each ID (a link that works for 5 minutes; every view is logged), then **Approve**, **Request changes** (with a message; the team edits and resends) or **Reject**. Each sends the team an email.
+- *After approval:* the team's page unlocks the comic and the rough-sketch PDF uploads (40 pages at least, counted from the PDF; up to 100 MB; replaceable until the deadline), a printable registration confirmation, notices and resources. See uploads under **Submissions**.
+- *Notices & email:* post to groups of teams (by status, age group, shortlisted) or one team; they show on the teams' pages and can be emailed (BCC, transactional, separate from the newsletter). Public announcements show on the competition page.
+- *Shortlist & results:* set each approved team's result; **Publish results** shows the winners on the page (team name, first names and city, as the terms say).
+- *Settings:* change the dates, pause registration, upload the hero banner, artwork, sponsor logos, the official rules PDF and a topic document, and **Delete ID documents of decided teams** once checks are done (please do this after reviewing).
+- *Exports:* participants CSV, one row per member, with or without contact and guardian details (recorded in Settings → Activity).
+
+**Other competitions** are built on request: ask Claude for one (title, dates, description, rules, who can enter, individual, group or team, and what the form asks). It's added to `src/shared/competitions.ts` and appears on **/competitions** and in **Admin → Competitions** by itself.
 
 ## Running costs
 
