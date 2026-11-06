@@ -4,13 +4,15 @@
 // never reaches the admin.
 import { createHash } from 'node:crypto';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
-import { accounts, competitionSignups, orderItems, orders, subscribers } from '../db/schema.js';
+import { accounts, competitionSignups, orderItems, orders, subscribers, teamApplications, teamMembers } from '../db/schema.js';
 import { body, HttpError, notFound, rateLimit, zPhone } from '../lib/http.js';
 import { isStateCode, stateName } from '../lib/states.js';
 import { findCompetition, personName } from '../../src/shared/competitions.js';
+import { missingFields, todayIST } from '../../src/shared/profile.js';
+import { ageOn, applicationCode, STATUS_TEXT } from '../../src/shared/teams.js';
 import { getSettings } from '../services/catalog.js';
 import { subscribe, subscribeNewAccount, unsubscribe } from '../services/newsletter.js';
 import { orderToken } from '../services/orders.js';
@@ -135,15 +137,27 @@ account.get('/', async (c) => {
 
   const signups = await db.select().from(competitionSignups).where(eq(competitionSignups.userId, me.userId))
     .orderBy(desc(competitionSignups.createdAt)).limit(100);
+  // Teams this person registered, or is a member of (by their Google email).
+  const asMember = await db.selectDistinct({ id: teamMembers.applicationId }).from(teamMembers).where(eq(teamMembers.email, me.email.toLowerCase()));
+  const teamApps = await db.select().from(teamApplications)
+    .where(or(eq(teamApplications.userId, me.userId), asMember.length ? inArray(teamApplications.id, asMember.map((x) => x.id)) : sql`false`))
+    .orderBy(desc(teamApplications.createdAt)).limit(50);
 
   return c.json({
     customer: me,
     newAccount,
-    profile: profileOf(profile),
+    profile: profileOf(profile, now()),
     competitions: signups.map((x) => ({
       id: x.id, slug: x.competitionSlug, title: findCompetition(x.competitionSlug)?.title ?? x.competitionSlug, mode: x.mode, groupName: x.groupName,
       people: x.participants.map(personName), createdAt: x.createdAt,
     })),
+    teams: teamApps.map((x) => {
+      const comp = findCompetition(x.competitionSlug);
+      return {
+        id: x.id, slug: x.competitionSlug, title: comp?.title ?? x.competitionSlug, teamName: x.teamName, status: x.status, statusText: STATUS_TEXT[x.status] ?? x.status,
+        code: comp?.team ? applicationCode(comp.team, x.applicationNo) : String(x.applicationNo), createdAt: x.createdAt,
+      };
+    }),
     newsletter: sub?.status ?? null,
     orders: mine.map((o) => ({
       number: o.number, createdAt: o.createdAt, status: orderStatusLabel(o), total: o.total, invoice: o.invoiceNumber,
@@ -177,33 +191,47 @@ account.post('/library/:itemId/read', async (c) => {
 
 const ACCOUNT_TYPES = ['student', 'parent', 'teacher', 'other'] as const;
 type AccountRow = typeof accounts.$inferSelect;
-/** The profile on the account page: complete once name, WhatsApp, city, state and "I am a" are all there. */
-export function profileOf(a: AccountRow) {
-  const completed = Boolean(a.fullName && a.phone && a.city && a.state && a.accountType);
-  return { phone: a.phone, fullName: a.fullName, city: a.city, state: a.state, stateName: stateName(a.state), type: a.accountType, completed };
+/** The profile, with what's still missing for this kind of person (see src/shared/profile.ts). */
+export function profileOf(a: AccountRow, now = new Date()) {
+  const values = {
+    type: a.accountType, fullName: a.fullName, phone: a.phone, city: a.city, state: a.state, dob: a.dob,
+    institutionType: a.institutionType, institutionName: a.institutionName, grade: a.grade,
+    guardianName: a.guardianName, guardianPhone: a.guardianPhone, instagram: a.instagram,
+  };
+  const missing = missingFields(values, todayIST(now));
+  return { ...values, stateName: stateName(a.state), missing, completed: missing.length === 0 };
 }
 
-/** The profile: just the mobile number (the quick prompt), or everything ("Complete your profile"). */
+const optional = (max: number) => z.string().trim().max(max).optional();
+/** Save the profile: just the mobile number (the quick prompt), some fields, or all of them. Empty values aren't saved over details already given. */
 account.put('/profile', async (c) => {
   const { db, now } = c.get('deps');
   const me = c.get('customer');
   const input = await body(c, z.object({
-    phone: zPhone,
+    phone: zPhone.optional(),
     fullName: z.string().trim().min(2, 'Add your full name').max(80).optional(),
     city: z.string().trim().min(2, 'Add your city or town').max(60).optional(),
     state: z.string().refine(isStateCode, 'Choose your state').optional(),
     type: z.enum(ACCOUNT_TYPES, { error: 'Choose who you are' }).optional(),
+    dob: z.iso.date('Add a real date of birth').refine((d) => { const a = ageOn(d, todayIST(now())); return a !== null && a >= 4 && a <= 100; }, 'Check the date of birth').optional(),
+    institutionType: z.enum(['school', 'college', 'other'], { error: 'Choose school, college or other' }).optional(),
+    institutionName: optional(120),
+    grade: optional(40),
+    guardianName: optional(80),
+    guardianPhone: z.union([z.literal(''), zPhone]).optional(),
+    instagram: z.union([z.literal(''), z.string().trim().regex(/^@?[A-Za-z0-9._]{1,30}$/, 'Check the Instagram username')]).optional(),
   }));
-  const set: Partial<typeof accounts.$inferInsert> = { phone: input.phone, updatedAt: now() };
-  if (input.fullName !== undefined) set.fullName = input.fullName;
-  if (input.city !== undefined) set.city = input.city;
-  if (input.state !== undefined) set.state = input.state;
+  const set: Partial<typeof accounts.$inferInsert> = { updatedAt: now() };
+  for (const k of ['phone', 'fullName', 'city', 'state', 'dob', 'institutionType', 'institutionName', 'grade', 'guardianName', 'guardianPhone'] as const) {
+    if (input[k] !== undefined && input[k] !== '') (set as Record<string, unknown>)[k] = input[k];
+  }
+  if (input.instagram !== undefined) set.instagram = input.instagram.replace(/^@/, '');
   if (input.type !== undefined) set.accountType = input.type;
   const [row] = await db.update(accounts).set(set).where(eq(accounts.userId, me.userId)).returning();
   if (!row) throw notFound('Account not found');
-  const p = profileOf(row);
+  const p = profileOf(row, now());
   if (p.completed && !row.onboardingCompletedAt) await db.update(accounts).set({ onboardingCompletedAt: now() }).where(eq(accounts.userId, me.userId));
-  await db.update(subscribers).set({ phone: input.phone, updatedAt: sql`now()` }).where(eq(subscribers.email, me.email));
+  if (input.phone) await db.update(subscribers).set({ phone: input.phone, updatedAt: sql`now()` }).where(eq(subscribers.email, me.email));
   return c.json(p);
 });
 

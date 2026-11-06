@@ -38,7 +38,7 @@ async function signedIn(complete = true) {
   const h = await as(TEACHER);
   expect((await t.call('GET', '/account', { headers: h })).status).toBe(200);
   if (complete) {
-    const p = await t.call('PUT', '/account/profile', { headers: h, body: { phone: '98765 43210', fullName: 'Asha Verma', city: 'Ranchi', state: '20', type: 'teacher' } });
+    const p = await t.call('PUT', '/account/profile', { headers: h, body: { phone: '98765 43210', fullName: 'Asha Verma', city: 'Ranchi', state: '20', type: 'teacher', institutionType: 'school', institutionName: 'DAV Ranchi' } });
     expect(p.json).toMatchObject({ completed: true, type: 'teacher', phone: '9876543210', stateName: 'Jharkhand' });
   }
   return h;
@@ -46,15 +46,15 @@ async function signedIn(complete = true) {
 const individual = (name = 'Riya Sharma', cls = 'Class 7') => ({ mode: 'individual', answers: { how_heard: 'School' }, participants: [{ student_name: name, class: cls, school: 'DAV Ranchi' }] });
 
 describe('profile', () => {
-  it('is complete once name, WhatsApp, city, state and "I am a" are saved; the phone alone still works', async () => {
+  it('a parent is complete with name, WhatsApp, city, state and "I am a"; the phone alone still works', async () => {
     const h = await signedIn(false);
     expect((await t.call('GET', '/account', { headers: h })).json.profile).toMatchObject({ completed: false, type: null });
     expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210' } })).json).toMatchObject({ phone: '9876543210', completed: false });
     expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210', fullName: 'A', city: 'Ranchi', state: '20', type: 'teacher' } })).status).toBe(400);
     expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210', fullName: 'Asha', city: 'Ranchi', state: '99', type: 'teacher' } })).json.error).toBeTruthy();
     expect((await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210', fullName: 'Asha', city: 'Ranchi', state: '20', type: 'principal' } })).status).toBe(400);
-    const ok = await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210', fullName: 'Asha Verma', city: 'Ranchi', state: '20', type: 'student' } });
-    expect(ok.json).toMatchObject({ completed: true, type: 'student' });
+    const ok = await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210', fullName: 'Asha Verma', city: 'Ranchi', state: '20', type: 'parent' } });
+    expect(ok.json).toMatchObject({ completed: true, type: 'parent', missing: [] });
     expect((await t.call('GET', '/account', { headers: h })).json.profile).toMatchObject({ fullName: 'Asha Verma', city: 'Ranchi', completed: true });
   });
 });
@@ -65,7 +65,7 @@ describe('competitions', () => {
     expect((await t.call('POST', `/competitions/${QUIZ.slug}/register`, { body: individual() })).status).toBe(401);
     const h = await signedIn(false);
     expect((await t.call('POST', `/competitions/${QUIZ.slug}/register`, { headers: h, body: individual() })).json.code).toBe('profile_incomplete');
-    await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210', fullName: 'Asha Verma', city: 'Ranchi', state: '20', type: 'teacher' } });
+    await t.call('PUT', '/account/profile', { headers: h, body: { phone: '9876543210', fullName: 'Asha Verma', city: 'Ranchi', state: '20', type: 'teacher', institutionType: 'school', institutionName: 'DAV Ranchi' } });
     t.mailer.sent.length = 0;
     const r = await t.call('POST', `/competitions/${QUIZ.slug}/register`, { headers: h, body: individual() });
     expect(r.status).toBe(201);

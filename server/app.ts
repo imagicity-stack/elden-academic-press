@@ -7,6 +7,7 @@ import { clientIp, HttpError } from './lib/http.js';
 import { RazorpayError } from './lib/razorpay.js';
 import { account, type Customer } from './routes/account.js';
 import { competitions } from './routes/competitions.js';
+import { competitionInfo, teams } from './routes/teams.js';
 import { competitionPage } from './routes/og.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
@@ -102,7 +103,9 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/webhooks', webhooks);
   app.route('/admin', admin);
   app.route('/account', account);
+  app.route('/competitions', teams);
   app.route('/competitions', competitions);
+  app.route('/competition-info', competitionInfo);
   app.route('/newsletter', newsletter);
   app.route('/meta', meta);
   app.route('/cron', cron);

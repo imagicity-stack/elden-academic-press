@@ -1,7 +1,7 @@
 // Store database schema (Postgres / Supabase). All money is integer paise.
 import { sql } from 'drizzle-orm';
 import {
-  boolean, check, index, integer, jsonb, pgEnum, pgSequence, pgTable, serial, smallint, text, timestamp, uniqueIndex, uuid,
+  boolean, check, date, index, integer, jsonb, pgEnum, pgSequence, pgTable, serial, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
 
 /** One file of an e-book: where it's stored, its file name, and a label for buyers ("Part 1"). */
@@ -409,6 +409,15 @@ export const accounts = pgTable('accounts', {
   state: text('state').notNull().default(''),
   /** Not used (the earlier competitions system). */
   typeLockedAt: timestamp('type_locked_at', { withTimezone: true }),
+  /** Profile details that depend on "I am a" (students: date of birth, class or year, institution,
+   *  a parent's contact if under 18; teachers: institution). */
+  dob: date('dob', { mode: 'string' }),
+  institutionType: text('institution_type').notNull().default(''),
+  institutionName: text('institution_name').notNull().default(''),
+  grade: text('grade').notNull().default(''),
+  guardianName: text('guardian_name').notNull().default(''),
+  guardianPhone: text('guardian_phone').notNull().default(''),
+  instagram: text('instagram').notNull().default(''),
   ...timestamps,
 }, (t) => [index('accounts_email_idx').on(t.email)]);
 
@@ -485,6 +494,109 @@ export const competitionSignups = pgTable('competition_signups', {
   participants: jsonb('participants').$type<Record<string, string>[]>().notNull().default([]),
   createdAt: timestamps.createdAt,
 }, (t) => [index('signup_competition_idx').on(t.competitionSlug, t.createdAt), index('signup_user_idx').on(t.userId)]);
+
+/* ---- Team competitions (DoomsDay Diaries first) ----
+ * One application per team: the person who registers fills in the whole team (2 to 4
+ * members, roles, an ID document each, a parent's or guardian's details and consent for
+ * anyone under 18). The organiser reviews it; once approved the team uploads its files. */
+
+export const teamApplications = pgTable('team_applications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionSlug: text('competition_slug').notNull(),
+  /** Shown as DD-0001 (prefix from the competition). */
+  applicationNo: serial('application_no').notNull().unique(),
+  /** The account that registered the team (a student, teacher or parent). */
+  userId: uuid('user_id').notNull(),
+  email: text('email').notNull(),
+  teamName: text('team_name').notNull(),
+  /** school | college | other */
+  institutionType: text('institution_type').notNull(),
+  /** The team's school or college (for "other": the group or organisation, optional). */
+  institutionName: text('institution_name').notNull().default(''),
+  city: text('city').notNull(),
+  state: text('state').notNull(),
+  /** Age group from the oldest member, e.g. junior | rising | senior | open. */
+  category: text('category').notNull(),
+  /** pending | changes_requested | approved | rejected | withdrawn */
+  status: text('status').notNull().default('pending'),
+  /** What the organiser told the team (changes needed, or why it was rejected). */
+  reviewNote: text('review_note').notNull().default(''),
+  adminNotes: text('admin_notes').notNull().default(''),
+  /** '' | shortlisted | first | second | third | peoples_choice */
+  result: text('result').notNull().default(''),
+  /** Automatic checks, e.g. possible_duplicate. */
+  flags: text('flags').array().notNull().default(sql`'{}'::text[]`),
+  acceptedTermsAt: timestamp('accepted_terms_at', { withTimezone: true }).notNull(),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  reviewedBy: text('reviewed_by').notNull().default(''),
+  ...timestamps,
+}, (t) => [index('team_app_comp_idx').on(t.competitionSlug, t.status), index('team_app_user_idx').on(t.userId)]);
+
+export const teamMembers = pgTable('team_members', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  applicationId: uuid('application_id').notNull().references(() => teamApplications.id, { onDelete: 'cascade' }),
+  /** 0 is the team captain. */
+  position: smallint('position').notNull(),
+  fullName: text('full_name').notNull(),
+  dob: date('dob', { mode: 'string' }).notNull(),
+  email: text('email').notNull().default(''),
+  phone: text('phone').notNull().default(''),
+  /** Their own school, college or institution (the team's, unless the team is "other"). */
+  institutionName: text('institution_name').notNull().default(''),
+  /** writer, artist, colourist, letterer */
+  roles: text('roles').array().notNull(),
+  instagram: text('instagram').notNull().default(''),
+  /** school_id | institution_letter | masked_aadhaar | govt_id */
+  idDocType: text('id_doc_type').notNull().default(''),
+  /** Private bucket; removed once no longer needed (idDocDeletedAt). */
+  idDocKey: text('id_doc_key'),
+  idDocDeletedAt: timestamp('id_doc_deleted_at', { withTimezone: true }),
+  guardianName: text('guardian_name').notNull().default(''),
+  guardianRelation: text('guardian_relation').notNull().default(''),
+  guardianPhone: text('guardian_phone').notNull().default(''),
+  guardianEmail: text('guardian_email').notNull().default(''),
+  /** When the person registering confirmed the parent's or guardian's consent (under 18 only). */
+  guardianConsentAt: timestamp('guardian_consent_at', { withTimezone: true }),
+}, (t) => [index('team_member_app_idx').on(t.applicationId)]);
+
+export const teamFiles = pgTable('team_files', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  applicationId: uuid('application_id').notNull().references(() => teamApplications.id, { onDelete: 'cascade' }),
+  /** comic | sketches */
+  kind: text('kind').notNull(),
+  /** Null once replaced by a newer upload (the history row stays). */
+  storageKey: text('storage_key'),
+  originalName: text('original_name').notNull().default(''),
+  sizeBytes: integer('size_bytes').notNull(),
+  /** Counted from the PDF; null if it couldn't be counted (the organiser checks by hand). */
+  pages: integer('pages'),
+  uploadedBy: text('uploaded_by').notNull(),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+  replacedAt: timestamp('replaced_at', { withTimezone: true }),
+}, (t) => [index('team_files_app_idx').on(t.applicationId, t.kind)]);
+
+/** Notices from the organiser: on the website (public, or in teams' dashboards) and optionally emailed. */
+export const competitionNotices = pgTable('competition_notices', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  competitionSlug: text('competition_slug').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  /** Who sees it: { public?: true } or { statuses?, categories?, results?, applicationIds? } */
+  audience: jsonb('audience').$type<NoticeAudience>().notNull(),
+  emailed: integer('emailed').notNull().default(0),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamps.createdAt,
+}, (t) => [index('notices_comp_idx').on(t.competitionSlug, t.createdAt)]);
+
+export interface NoticeAudience { public?: boolean; statuses?: string[]; categories?: string[]; results?: string[]; applicationIds?: string[] }
+
+/** What the admin changes for a competition without new code: dates, pictures, documents, results. */
+export const competitionSettings = pgTable('competition_settings', {
+  slug: text('slug').primaryKey(),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
+  updatedBy: text('updated_by').notNull().default(''),
+  updatedAt: timestamps.updatedAt,
+});
 
 /* ---- The earlier competitions system (switched off, November 2026) ----
  * Parent approval, children, per-competition editor and entries. Its tables stay so that
