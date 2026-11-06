@@ -4,7 +4,7 @@ import { Hono } from 'hono';
 import { desc, eq, inArray, sql } from 'drizzle-orm';
 import type { AppEnv } from '../../app.js';
 import type { Deps } from '../../deps.js';
-import { accounts, competitionSignups } from '../../db/schema.js';
+import { accounts, competitionSignups, teamApplications } from '../../db/schema.js';
 import { toCsv } from '../../lib/csv.js';
 import { notFound } from '../../lib/http.js';
 import { stateName } from '../../lib/states.js';
@@ -23,10 +23,18 @@ adminCompetitions.get('/', async (c) => {
     groups: sql<number>`count(*) filter (where ${competitionSignups.mode} = 'group')::int`,
     people: sql<number>`coalesce(sum(jsonb_array_length(${competitionSignups.participants})), 0)::int`,
   }).from(competitionSignups).groupBy(competitionSignups.competitionSlug);
+  const teams = await db.select({
+    slug: teamApplications.competitionSlug,
+    total: sql<number>`count(*)::int`,
+    pending: sql<number>`count(*) filter (where ${teamApplications.status} in ('pending'))::int`,
+    approved: sql<number>`count(*) filter (where ${teamApplications.status} = 'approved')::int`,
+  }).from(teamApplications).groupBy(teamApplications.competitionSlug);
   return c.json({
     items: COMPETITIONS.map((x) => {
       const t = totals.find((r) => r.slug === x.slug);
+      const tm = teams.find((r) => r.slug === x.slug);
       return {
+        team: Boolean(x.team), applications: tm?.total ?? 0, pending: tm?.pending ?? 0, approved: tm?.approved ?? 0,
         slug: x.slug, title: x.title, tagline: x.tagline, opensAt: x.opensAt, closesAt: x.closesAt, phase: phaseOf(x, now().getTime()), unlisted: Boolean(x.unlisted),
         modes: [x.individual && 'individual', x.group && 'group'].filter(Boolean),
         registrations: t?.registrations ?? 0, groups: t?.groups ?? 0, people: t?.people ?? 0,

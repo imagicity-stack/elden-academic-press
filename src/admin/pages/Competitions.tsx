@@ -3,14 +3,20 @@
 import { Link, useParams } from 'react-router-dom';
 import { downloadFile, fmtDate, useAdmin } from '../api';
 import { Badge, Btn, Card, Empty, ErrorBox, Loading, Page, type Tone, useAction } from '../ui';
-import { istDateTime, PHASE_LABEL, type Phase } from '../../shared/competitions';
+import { findCompetition, istDateTime, PHASE_LABEL, type Phase } from '../../shared/competitions';
+import { TeamApplication, TeamCompetition } from './TeamCompetition';
 
-interface Row { slug: string; title: string; tagline: string; opensAt: string; closesAt: string; phase: Phase; unlisted: boolean; modes: string[]; registrations: number; groups: number; people: number }
+interface Row {
+  slug: string; title: string; tagline: string; opensAt: string; closesAt: string; phase: Phase; unlisted: boolean; modes: string[]; registrations: number; groups: number; people: number;
+  team: boolean; applications: number; pending: number; approved: number;
+}
 const TONE: Record<Phase, Tone> = { open: 'green', upcoming: 'amber', closed: 'grey' };
 
 export default function Competitions() {
-  const { slug } = useParams();
-  return slug ? <Registrations slug={slug} /> : <List />;
+  const { slug, id } = useParams();
+  if (!slug) return <List />;
+  if (findCompetition(slug)?.team) return id ? <TeamApplication slug={slug} id={id} /> : <TeamCompetition slug={slug} />;
+  return <Registrations slug={slug} />;
 }
 
 function List() {
@@ -30,8 +36,17 @@ function List() {
                     <td><Link to={`/admin/competitions/${c.slug}`} className="ad-strong">{c.title}</Link><div className="ad-muted">{c.tagline}{c.unlisted && ' · not listed on the website'}</div></td>
                     <td><Badge tone={TONE[c.phase]}>{PHASE_LABEL[c.phase]}</Badge></td>
                     <td className="ad-muted">{istDateTime(c.opensAt)}<br />to {istDateTime(c.closesAt)}</td>
-                    <td className="ad-num">{c.registrations}{c.groups > 0 && <div className="ad-muted">{c.groups} groups</div>}</td>
-                    <td className="ad-num ad-strong">{c.people}</td>
+                    {c.team ? (
+                      <>
+                        <td className="ad-num">{c.applications} teams{c.pending > 0 && <div><Badge tone="amber">{c.pending} to check</Badge></div>}</td>
+                        <td className="ad-num ad-strong">{c.approved} approved</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="ad-num">{c.registrations}{c.groups > 0 && <div className="ad-muted">{c.groups} groups</div>}</td>
+                        <td className="ad-num ad-strong">{c.people}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>

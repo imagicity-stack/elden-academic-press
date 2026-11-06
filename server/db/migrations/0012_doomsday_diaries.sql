@@ -1,0 +1,112 @@
+CREATE TABLE "competition_notices" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_slug" text NOT NULL,
+	"title" text NOT NULL,
+	"body" text NOT NULL,
+	"audience" jsonb NOT NULL,
+	"emailed" integer DEFAULT 0 NOT NULL,
+	"created_by" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "competition_settings" (
+	"slug" text PRIMARY KEY NOT NULL,
+	"data" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"updated_by" text DEFAULT '' NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "team_applications" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"competition_slug" text NOT NULL,
+	"application_no" serial NOT NULL,
+	"user_id" uuid NOT NULL,
+	"email" text NOT NULL,
+	"team_name" text NOT NULL,
+	"institution_type" text NOT NULL,
+	"institution_name" text DEFAULT '' NOT NULL,
+	"city" text NOT NULL,
+	"state" text NOT NULL,
+	"category" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"review_note" text DEFAULT '' NOT NULL,
+	"admin_notes" text DEFAULT '' NOT NULL,
+	"result" text DEFAULT '' NOT NULL,
+	"flags" text[] DEFAULT '{}'::text[] NOT NULL,
+	"accepted_terms_at" timestamp with time zone NOT NULL,
+	"reviewed_at" timestamp with time zone,
+	"reviewed_by" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "team_applications_application_no_unique" UNIQUE("application_no")
+);
+--> statement-breakpoint
+CREATE TABLE "team_files" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"application_id" uuid NOT NULL,
+	"kind" text NOT NULL,
+	"storage_key" text,
+	"original_name" text DEFAULT '' NOT NULL,
+	"size_bytes" integer NOT NULL,
+	"pages" integer,
+	"uploaded_by" text NOT NULL,
+	"uploaded_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"replaced_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "team_members" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"application_id" uuid NOT NULL,
+	"position" smallint NOT NULL,
+	"full_name" text NOT NULL,
+	"dob" date NOT NULL,
+	"email" text DEFAULT '' NOT NULL,
+	"phone" text DEFAULT '' NOT NULL,
+	"institution_name" text DEFAULT '' NOT NULL,
+	"roles" text[] NOT NULL,
+	"instagram" text DEFAULT '' NOT NULL,
+	"id_doc_type" text DEFAULT '' NOT NULL,
+	"id_doc_key" text,
+	"id_doc_deleted_at" timestamp with time zone,
+	"guardian_name" text DEFAULT '' NOT NULL,
+	"guardian_relation" text DEFAULT '' NOT NULL,
+	"guardian_phone" text DEFAULT '' NOT NULL,
+	"guardian_email" text DEFAULT '' NOT NULL,
+	"guardian_consent_at" timestamp with time zone
+);
+--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "dob" date;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "institution_type" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "institution_name" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "grade" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "guardian_name" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "guardian_phone" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "instagram" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "team_files" ADD CONSTRAINT "team_files_application_id_team_applications_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."team_applications"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "team_members" ADD CONSTRAINT "team_members_application_id_team_applications_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."team_applications"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "notices_comp_idx" ON "competition_notices" USING btree ("competition_slug","created_at");--> statement-breakpoint
+CREATE INDEX "team_app_comp_idx" ON "team_applications" USING btree ("competition_slug","status");--> statement-breakpoint
+CREATE INDEX "team_app_user_idx" ON "team_applications" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "team_files_app_idx" ON "team_files" USING btree ("application_id","kind");--> statement-breakpoint
+CREATE INDEX "team_member_app_idx" ON "team_members" USING btree ("application_id");--> statement-breakpoint
+-- Only the store's server reads these tables: lock them against Supabase's public API keys.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['team_applications', 'team_members', 'team_files', 'competition_notices', 'competition_settings'] LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);
+    END IF;
+  END LOOP;
+END $$;
+--> statement-breakpoint
+-- Comic PDFs can be up to 100 MB: let the private entries bucket take files that size.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'storage') THEN
+    INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+      VALUES ('competition-entries', 'competition-entries', false, 110100480, NULL)
+      ON CONFLICT (id) DO UPDATE SET file_size_limit = 110100480;
+  END IF;
+END $$;

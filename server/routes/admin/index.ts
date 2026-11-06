@@ -13,6 +13,7 @@ import { orderStatusLabel } from '../orders.js';
 import { audit, requireAdmin, requireRole } from './auth.js';
 import { adminNewsletter } from './newsletter.js';
 import { adminCompetitions } from './competitions.js';
+import { adminTeams } from './teams.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
 import { adminCategories, adminInventory, adminProducts, adminUploads } from './products.js';
@@ -47,6 +48,7 @@ admin.route('/newsletter', adminNewsletter);
 // Competitions: the store owner only, for now.
 admin.use('/competitions', requireRole('owner'));
 admin.use('/competitions/*', requireRole('owner'));
+admin.route('/competitions', adminTeams);
 admin.route('/competitions', adminCompetitions);
 
 const PAID = ['paid', 'partially_refunded', 'refunded'] as const;

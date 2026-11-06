@@ -6,6 +6,8 @@
 // People sign in with Google and complete their profile first (name, WhatsApp, city,
 // state, "I am a…"); no approval from anyone is needed.
 
+import type { TeamConfig } from './teams';
+
 export type FieldType = 'text' | 'textarea' | 'select' | 'class' | 'number' | 'email' | 'phone';
 
 export interface Field {
@@ -44,10 +46,68 @@ export interface Competition {
   maxPerAccount?: number;
   /** Reachable by its link but not listed on /competitions (to check a page before announcing it). */
   unlisted?: boolean;
+  /** A team competition: one application per team, reviewed by the organiser, then uploads. */
+  team?: TeamConfig;
+  /** A page design of its own (e.g. 'comic'); the rest of the site stays as it is. */
+  theme?: 'comic';
+  /** Official Instagram handle, without the @. */
+  instagram?: string;
 }
 
 /** The competitions, newest first. */
-export const COMPETITIONS: Competition[] = [];
+export const COMPETITIONS: Competition[] = [
+  {
+    slug: 'doomsday-diaries',
+    title: 'DoomsDay Diaries',
+    tagline: 'Comic Creating Challenge · Doom Picked the Wrong Town. Doctor Doom has given your town 24 hours. Create the hero who stops him.',
+    about: 'Doctor Doom has given your town 24 hours. Create the hero who stops him. Make a team comic of at least 40 pages by 5 December 2026, 11:59 PM IST.',
+    opensAt: '2026-11-06T00:00:00+05:30',
+    closesAt: '2026-12-05T23:59:59+05:30',
+    theme: 'comic',
+    instagram: 'eldenacademicpress',
+    maxPerAccount: 10,
+    team: {
+      ageOn: '2026-11-06',
+      minAge: 8,
+      maxAge: 24,
+      groups: [
+        { key: 'junior', label: 'Junior Heroes', min: 8, max: 11 },
+        { key: 'rising', label: 'Rising Heroes', min: 12, max: 14 },
+        { key: 'senior', label: 'Senior Heroes', min: 15, max: 17 },
+        { key: 'open', label: 'Open Heroes', min: 18, max: 24 },
+      ],
+      minMembers: 2,
+      maxMembers: 4,
+      roles: [
+        { key: 'writer', label: 'Writer' },
+        { key: 'artist', label: 'Artist', help: 'pencils and inks' },
+        { key: 'colourist', label: 'Colourist' },
+        { key: 'letterer', label: 'Letterer' },
+      ],
+      requiredRoles: ['writer', 'artist'],
+      noMixedAdults: true,
+      institutionTypes: [
+        { key: 'school', label: 'School', same: true, placeholder: 'e.g. DAV Public School, Hazaribagh' },
+        { key: 'college', label: 'College', same: true, placeholder: 'e.g. St. Columba’s College, Hazaribagh' },
+        { key: 'other', label: 'Other institution', same: false, placeholder: 'Coaching centre, art academy, club or NGO (optional)' },
+      ],
+      instagramFromAge: 13,
+      idDocs: [
+        { key: 'school_id', label: 'School or college ID card' },
+        { key: 'institution_letter', label: 'Letter from the school, college or institution' },
+        { key: 'masked_aadhaar', label: 'Masked Aadhaar (only the last 4 digits showing)' },
+        { key: 'govt_id', label: 'Other government photo ID' },
+      ],
+      files: [
+        { kind: 'comic', label: 'Comic (PDF)', help: 'The full comic as one PDF: at least 40 story pages (60 at most), plus the cover, title and credits pages. Up to 100 MB.', minPages: 40, maxMb: 100 },
+        { kind: 'sketches', label: 'Rough pencil sketches (PDF)', help: 'Proof of work: your rough pencil sketches or layouts as one PDF of at least 40 pages. Digital artists: screenshots of the working files with layers. Up to 100 MB.', minPages: 40, maxMb: 100 },
+      ],
+      codePrefix: 'DD',
+      submissionDeadline: '2026-12-05T23:59:59+05:30',
+      resultsOn: '2026-12-15',
+    },
+  },
+];
 
 export const findCompetition = (slug: string) => COMPETITIONS.find((c) => c.slug === slug) ?? null;
 export const listedCompetitions = () => COMPETITIONS.filter((c) => !c.unlisted);

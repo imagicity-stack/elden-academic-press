@@ -27,7 +27,7 @@ export const config = {
   grievanceOfficer: { name: '', email: 'hello@eldenap.in', phone: '' },
   /** Terms quoted in the policies. */
   policy: {
-    updated: '5 November 2026',
+    updated: '6 November 2026',
     /** Days after delivery to report a damaged, misprinted or wrong book. */
     reportDays: 7,
     /** Days after purchase to cancel an e-book that hasn't been downloaded. */

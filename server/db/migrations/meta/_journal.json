@@ -85,6 +85,13 @@
       "when": 1793906418992,
       "tag": "0011_simple_competitions",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793974722937,
+      "tag": "0012_doomsday_diaries",
+      "breakpoints": true
     }
   ]
 }

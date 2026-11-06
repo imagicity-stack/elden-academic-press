@@ -16,6 +16,8 @@ import { Header, TopBar } from './components/Header';
 import { About } from './pages/About';
 import { Account } from './pages/Account';
 import { CompetitionPage, CompetitionsPage } from './pages/Competitions';
+import { CompetitionRules, TeamConfirmation } from './pages/doomsday/DoomsdayPage';
+import './doomsday.css';
 import { BookDetail } from './pages/BookDetail';
 import { Catalogue } from './pages/Catalogue';
 import { Checkout } from './pages/Checkout';
@@ -78,6 +80,8 @@ export function App() {
           <Route path="account/competitions" element={<Navigate to="/account?tab=competitions" replace />} />
           <Route path="competitions" element={<CompetitionsPage />} />
           <Route path="competitions/:slug" element={<CompetitionPage />} />
+          <Route path="competitions/:slug/rules" element={<CompetitionRules />} />
+          <Route path="competitions/:slug/confirmation/:id" element={<TeamConfirmation />} />
           <Route path="competitions/:slug/*" element={<ToCompetition />} />
           {/* Addresses from the earlier competitions system (links in old emails). */}
           {['account/students', 'onboarding', 'approve/:token', 'invite/:token'].map((p) => <Route key={p} path={p} element={<Navigate to="/account" replace />} />)}

@@ -4,13 +4,13 @@ import { AnimatePresence, motion } from 'motion/react';
 import { catalogueHref } from '../catalogue';
 import { errorMessage, inr } from '../store/api';
 import { useCatalog } from '../store/catalog';
-import { accountApi, accountsDevMode, accountsEnabled, devSignIn, googleButtonAvailable, renderGoogleButton, signInWithGoogle, signOut, useAccount, type AccountData, type LibraryItem, type MyCompetition, type NewsletterStatus, type Profile } from '../store/account';
+import { accountApi, accountsDevMode, accountsEnabled, devSignIn, googleButtonAvailable, renderGoogleButton, signInWithGoogle, signOut, useAccount, type AccountData, type LibraryItem, type MyCompetition, type MyTeam, type NewsletterStatus, type Profile } from '../store/account';
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem } from '../components/motion';
 import { rememberUser, track } from '../meta';
 import { ga } from '../ga';
-import { ProfileForm } from '../components/ProfileForm';
+import { ProfileForm, ProfileOnboarding, shouldOnboard } from '../components/ProfileForm';
 import { accountTypeLabel } from '../shared/competitions';
 
 const day = (s: string | null) => (s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -114,6 +114,8 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
   const asked = new URLSearchParams(location.search).get('tab') as Tab | null;
   const [tab, setTab] = useState<Tab>(asked && TABS.includes(asked) ? asked : data.library.length ? 'library' : 'orders');
   const [profile, setProfile] = useState<Profile>(data.profile);
+  // Right after signing up: the "Complete your profile" step (it can be skipped).
+  const [onboard, setOnboard] = useState(() => shouldOnboard(data.newAccount, data.profile));
   const [news, setNews] = useState<NewsletterStatus>(data.newsletter);
   useEffect(() => {
     rememberUser({ email: data.customer.email, name: data.customer.name, phone: data.profile.phone });
@@ -152,7 +154,7 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
           </section>
         )}
         <div className="tabs" role="tablist">
-          {([['library', `Library · ${data.library.length}`], ['orders', `Orders · ${data.orders.length}`], ['competitions', `Competitions · ${data.competitions.length}`], ['details', 'Profile & emails']] as const).map(([k, label]) => (
+          {([['library', `Library · ${data.library.length}`], ['orders', `Orders · ${data.orders.length}`], ['competitions', `Competitions · ${data.competitions.length + data.teams.length}`], ['details', 'Profile & emails']] as const).map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={tab === k} className={'tab' + (tab === k ? ' is-on' : '')} onClick={() => setTab(k)}>
               {label}
               {tab === k && <motion.span layoutId="acct-tab" className="tab__line" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
@@ -163,25 +165,41 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
           <motion.div key={tab} className="acct__panel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: EASE }}>
             {tab === 'library' ? <Library items={data.library} />
               : tab === 'orders' ? <Orders data={data} />
-              : tab === 'competitions' ? <Competitions items={data.competitions} />
+              : tab === 'competitions' ? <Competitions items={data.competitions} teams={data.teams} />
               : <Details data={data} profile={profile} onProfile={setProfile} news={news} onNews={setNews} />}
           </motion.div>
         </AnimatePresence>
       </div>
+      <AnimatePresence>
+        {onboard && <ProfileOnboarding profile={profile} name={data.customer.name} onSaved={setProfile} onClose={() => setOnboard(false)} />}
+      </AnimatePresence>
     </div>
   );
 }
 
 /** The competitions this account registered for (each registration: one person or a group). */
-function Competitions({ items }: { items: MyCompetition[] }) {
+function Competitions({ items, teams }: { items: MyCompetition[]; teams: MyTeam[] }) {
   return (
     <div className="acct-comps">
-      {items.length === 0 ? (
+      {teams.length > 0 && (
+        <ul className="acct-comps__list">
+          {teams.map((x) => (
+            <li key={x.id}>
+              <Link to={`/competitions/${x.slug}#team`} className="acct-comps__item">
+                <span className="acct-comps__title">{x.title}</span>
+                <span className="acct-comps__who">Team {x.teamName} · {x.code}</span>
+                <span className={'acct-comps__status is-' + x.status}>{x.statusText}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {items.length === 0 && teams.length === 0 ? (
         <div className="acct-empty">
           <p>You haven’t registered for a competition yet.</p>
           <Link to="/competitions" className="btn btn--ink btn--md">See competitions <Arrow /></Link>
         </div>
-      ) : (
+      ) : items.length === 0 ? <Link to="/competitions" className="text-link">All competitions</Link> : (
         <>
           <ul className="acct-comps__list">
             {items.map((x) => (

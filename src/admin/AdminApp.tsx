@@ -270,6 +270,8 @@ function Shell({ me }: { me: Me }) {
               <Route path="/admin/newsletter/campaigns/:id" element={<NewsletterAdmin />} />
               <Route path="/admin/competitions" element={<CompetitionsAdmin />} />
               <Route path="/admin/competitions/:slug" element={<CompetitionsAdmin />} />
+              <Route path="/admin/competitions/:slug/teams/:id" element={<CompetitionsAdmin />} />
+              <Route path="/admin/competitions/:slug/:tab" element={<CompetitionsAdmin />} />
               <Route path="/admin/enquiries" element={<Enquiries />} />
               <Route path="/admin/study-hub" element={<StudyHubAdmin />} />
               <Route path="/admin/settings" element={<Settings />} />
