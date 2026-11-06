@@ -1,6 +1,6 @@
 // The account profile ("Complete your profile"): which details each kind of person gives.
 // Used by the account page, the sign-up step, competition registration and the server.
-import { ageOn } from './teams';
+import { ageOn } from './teams.js';
 
 export type ProfileType = 'student' | 'parent' | 'teacher' | 'other';
 export const PROFILE_TYPES: [ProfileType, string][] = [['student', 'Student'], ['parent', 'Parent'], ['teacher', 'Teacher'], ['other', 'Other']];

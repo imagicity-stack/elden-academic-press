@@ -6,7 +6,7 @@
 // People sign in with Google and complete their profile first (name, WhatsApp, city,
 // state, "I am a…"); no approval from anyone is needed.
 
-import type { TeamConfig } from './teams';
+import type { TeamConfig } from './teams.js';
 
 export type FieldType = 'text' | 'textarea' | 'select' | 'class' | 'number' | 'email' | 'phone';
 
