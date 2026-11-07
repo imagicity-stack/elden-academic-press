@@ -1056,6 +1056,12 @@ BEGIN
   END IF;
 END $$;
 
+-- ===== 0013_order_source =====
+
+ALTER TABLE "orders" ADD COLUMN "channel" text DEFAULT 'unknown' NOT NULL;--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "source" jsonb;--> statement-breakpoint
+CREATE INDEX "orders_channel_idx" ON "orders" USING btree ("channel");
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -1073,7 +1079,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('ab97a53bc5fb3d387de329e63003afe600dfe515c7b514957112ceabf20608cb', 1793889211762),
   ('1a5897f0da323e1f734702bbbd3a84d2b6e97939b93b98b60b9ceee6df9b1e40', 1793889801033),
   ('eb2aca73b402e91f1681d3967203712ba529f8785b8d68e4e47e9704ccef2790', 1793906418992),
-  ('67ca6b68c889731c089bd83f44e3b7dd68024d6f48a03c96ccf0bb5770284db4', 1793974722937);
+  ('67ca6b68c889731c089bd83f44e3b7dd68024d6f48a03c96ccf0bb5770284db4', 1793974722937),
+  ('ca67e5eb7c1a0c925e749fd5047d33769bce7929f647b088b20df06a62e2efb8', 1794060116138);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

@@ -185,6 +185,25 @@ ${from !== null ? `<td style="padding-right:14px;font:700 16px/1 ${FONT};color:$
 </tr></table></td></tr></table>`;
 }
 
+/**
+ * Links to this site inside a campaign get utm_source=newsletter&utm_medium=email&utm_campaign=…,
+ * so orders they bring show as "Email" in Admin → Orders. Other sites' links, the site's
+ * /api/ links (unsubscribe) and links that already carry UTM tags are left as they are.
+ */
+export function tagCampaignLinks(html: string, siteUrl: string, subject: string) {
+  let host: string;
+  try { host = new URL(siteUrl).hostname.replace(/^www\./, ''); } catch { return html; }
+  const campaign = subject.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'newsletter';
+  return html.replace(/href="([^"]+)"/g, (whole, raw: string) => {
+    try {
+      const u = new URL(raw.replace(/&amp;/g, '&'));
+      if (u.hostname.replace(/^www\./, '') !== host || u.pathname.startsWith('/api/') || u.searchParams.has('utm_source')) return whole;
+      u.searchParams.set('utm_source', 'newsletter'); u.searchParams.set('utm_medium', 'email'); u.searchParams.set('utm_campaign', campaign);
+      return `href="${u.toString().replace(/&/g, '&amp;')}"`;
+    } catch { return whole; }
+  });
+}
+
 /** The campaign email for one recipient (or a preview when `to` is null). */
 export type CampaignContent = Pick<Campaign, 'subject' | 'preheader' | 'heading' | 'body' | 'ctaLabel' | 'ctaUrl' | 'productIds'>;
 
@@ -193,11 +212,11 @@ export async function renderCampaign(deps: Deps, c: CampaignContent, to: { email
   const items = catalog ?? (c.productIds.length ? (await loadCatalog(deps.db, deps.storage)).items : []);
   const books = c.productIds.map((id) => items.find((b) => b.id === id)).filter((b): b is CatalogItem => Boolean(b));
   const first = to?.name.split(' ')[0];
-  const body = [
+  const body = tagCampaignLinks([
     c.body.trim() ? section(richText(c.body)) : '',
     books.length ? section(books.map((b) => bookBlock(deps, b)).join('') + `<div style="border-top:1px solid ${LINE}"></div>`) : '',
     c.ctaLabel && c.ctaUrl ? section(button(c.ctaUrl, c.ctaLabel), '4px 32px 32px') : '',
-  ].join('');
+  ].join(''), site(deps), c.subject);
   return {
     subject: c.subject,
     html: layout(deps, s, {

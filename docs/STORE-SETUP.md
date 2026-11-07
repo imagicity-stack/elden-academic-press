@@ -257,6 +257,33 @@ The website already sends everything Google needs; these are the settings on Goo
 
 **If something leaks or looks wrong:** change the key at its provider (Razorpay, Supabase, Google, Meta), update it in **Vercel → Settings → Environment Variables**, and redeploy. Sign out every admin from Supabase → Authentication → Users if an admin account may be affected. In India, CERT-In asks for certain cyber incidents to be reported within 6 hours ([cert-in.org.in](https://www.cert-in.org.in)); under the DPDP rules, as they come into force, a personal data breach is also reported to the people affected and to the Data Protection Board.
 
+## 13. Where orders come from
+
+**One-time:** run [`0013_order_source.sql`](supabase-updates/0013_order_source.sql) in Supabase → SQL Editor **before** this version goes live (until then, orders can't be saved).
+
+**Admin → Orders** shows *Where orders came from* (paid orders and revenue for each source in the chosen dates, or the last 30 days, and the campaigns that sold most), a **Source** column and filter, and on each order *Where this order came from*: the visit that led to the order, the first visit, and how many days in between. The CSV export has Source, Campaign and Landing page columns. Orders placed before this update show *Not recorded*.
+
+The site notes how each visitor arrived: the link's UTM tags, an ad-click marker, the referring site and the landing page (never who they are), keeps it in their browser for 90 days and sends it with an order. The order is credited to the **last visit that had a source**, so a later direct visit doesn't hide the ad that brought them.
+
+| Shows as | When |
+|---|---|
+| Meta ads | a Facebook or Instagram ad whose link is tagged as paid (see below) |
+| Google Ads | Google Ads clicks (auto-tagging is on by default in Google Ads) |
+| Search | Google, Bing and other search results |
+| Facebook / Instagram | posts, profile and bio links, or Meta ads whose links aren't tagged |
+| Other social | YouTube, WhatsApp Web, X, LinkedIn… |
+| Email | the newsletter (its links are tagged automatically) and webmail |
+| Other websites / Other campaigns | a link on another site / other tagged links |
+| Direct | typed address, bookmark, or an app that hides where the link was (WhatsApp often does) |
+
+**Tag your Meta ads** (Ads Manager → the ad → *Tracking* → **URL parameters**), once per ad or in the ad set's template:
+`utm_source={{site_source_name}}&utm_medium=paid&utm_campaign={{campaign.name}}&utm_content={{ad.name}}`
+
+**Tag links you share yourself** so they don't land in *Direct*, e.g.
+- WhatsApp groups: `https://eldenap.in/?utm_source=whatsapp&utm_medium=social&utm_campaign=class-10-launch`
+- Instagram bio: `https://eldenap.in/?utm_source=instagram&utm_medium=bio`
+- A poster's QR code: `https://eldenap.in/?utm_source=poster&utm_medium=qr&utm_campaign=book-fair`
+
 ## Running costs
 
 | Service | Cost |

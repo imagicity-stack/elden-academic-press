@@ -192,7 +192,7 @@ describe('campaigns', () => {
     expect(mail.headers?.['List-Unsubscribe']).toMatch(/^<https:\/\/eldenap\.in\/api\/newsletter\/unsubscribe\?e=/);
     expect(mail.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
     expect(mail.html).toMatch(/<strong[^>]*>readers<\/strong>/);
-    expect(mail.html).toContain('href="https://eldenap.in/catalogue"');
+    expect(mail.html).toContain('href="https://eldenap.in/catalogue?utm_source=newsletter&amp;utm_medium=email&amp;utm_campaign=new-books-for-2027"');
     expect(linkParams(mail.html, 'unsubscribe')?.email).toBe(mail.to);
 
     const done = await t.call('GET', `/admin/newsletter/campaigns/${id}`, { headers: await admin() });
