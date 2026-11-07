@@ -67,6 +67,16 @@ store.post('/cart/quote', async (c) => {
   return c.json({ quote: q });
 });
 
+const zTouch = z.object({
+  at: z.number().int().positive(),
+  source: z.string().max(100).optional(), medium: z.string().max(100).optional(), campaign: z.string().max(100).optional(),
+  content: z.string().max(100).optional(), term: z.string().max(100).optional(),
+  click: z.enum(['google', 'meta', 'microsoft', 'tiktok', 'linkedin']).optional(),
+  ref: z.string().max(100).regex(/^[a-z0-9.-]+$/i).optional(),
+  landing: z.string().max(200).regex(/^\//).optional(),
+});
+const zSource = z.object({ first: zTouch.optional(), last: zTouch.optional() }).optional().catch(undefined);
+
 const zCheckout = z.object({
   items: zItems,
   couponCode: zCoupon,
@@ -89,6 +99,8 @@ const zCheckout = z.object({
   paymentMode: z.enum(['online', 'cod']).default('online'),
   /** Honeypot: real people never fill this in. */
   website: z.string().max(0).optional(),
+  /** How the buyer reached the site. Anything malformed is dropped, never a reason to refuse the order. */
+  source: zSource,
 });
 
 store.post('/checkout', async (c) => {

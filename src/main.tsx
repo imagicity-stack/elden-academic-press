@@ -6,6 +6,7 @@ import { MetaStatus } from './components/MetaStatus';
 import { metaTestMode } from './consent';
 import { WithIntro } from './components/Intro';
 import { legalDocFor } from './legal';
+import { recordVisit } from './attribution';
 import { ComingSoon } from './pages/ComingSoon';
 import './styles.css';
 
@@ -37,6 +38,9 @@ const LegalStandalone = lazy(() => import('./pages/Legal').then((m) => ({ defaul
 
 // The admin works whether or not the store is live, so products can be set up before launch.
 const isAdmin = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/');
+
+// How this visitor reached the site, kept for their order (not for the admin's own visits).
+if (!isAdmin) recordVisit();
 
 // Before launch, staff signed in to /admin in this browser see the full site,
 // to check it and place test orders. Signing out of the admin ends the preview.

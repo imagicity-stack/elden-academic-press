@@ -12,6 +12,7 @@ import { renderPackingSlip } from '../../services/invoice.js';
 import { invoiceFileName, renderInvoicePdf } from '../../services/invoicePdf.js';
 import { cancelUnpaid, logEvent, orderLink, refundOrder } from '../../services/orders.js';
 import { orderStatusLabel } from '../orders.js';
+import { CHANNELS, channelLabel, classify, orderChannel, type Channel, type Touch } from '../../../src/shared/attribution.js';
 import { audit, requireRole } from './auth.js';
 
 export const adminOrders = new Hono<AppEnv>();
@@ -24,6 +25,8 @@ const zList = z.object({
   attention: z.enum(['1']).optional(),
   from: z.iso.date().optional(),
   to: z.iso.date().optional(),
+  /** Where the order came from (a channel key, see src/shared/attribution.ts). */
+  source: z.enum(CHANNELS.map((x) => x.key) as [Channel, ...Channel[]]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -35,6 +38,7 @@ function filters(f: z.infer<typeof zList>): SQL | undefined {
   if (f.payment) w.push(eq(orders.paymentStatus, f.payment));
   if (f.fulfillment) w.push(eq(orders.fulfillmentStatus, f.fulfillment));
   if (f.attention) w.push(eq(orders.needsAttention, true));
+  if (f.source) w.push(eq(orders.channel, f.source));
   // Dates are IST calendar days.
   if (f.from) w.push(gte(orders.createdAt, new Date(`${f.from}T00:00:00+05:30`)));
   if (f.to) w.push(lte(orders.createdAt, new Date(`${f.to}T23:59:59.999+05:30`)));
@@ -59,12 +63,42 @@ adminOrders.get('/', async (c) => {
       id: orders.id, number: orders.number, createdAt: orders.createdAt, name: orders.name, email: orders.email, phone: orders.phone,
       total: orders.total, paymentStatus: orders.paymentStatus, fulfillmentStatus: orders.fulfillmentStatus, cancelledAt: orders.cancelledAt,
       requiresShipping: orders.requiresShipping, needsAttention: orders.needsAttention, items: itemCount.n, shipState: orders.shipState,
-      paymentMode: orders.paymentMode, codAmount: orders.codAmount, codCollectedAt: orders.codCollectedAt,
+      paymentMode: orders.paymentMode, codAmount: orders.codAmount, codCollectedAt: orders.codCollectedAt, channel: orders.channel, source: orders.source,
     }).from(orders).leftJoin(itemCount, eq(itemCount.orderId, orders.id)).where(where)
       .orderBy(desc(orders.createdAt)).limit(f.limit).offset((f.page - 1) * f.limit),
     db.select({ total: count() }).from(orders).where(where),
   ]);
-  return c.json({ items: rows.map((r) => ({ ...r, status: orderStatusLabel(r) })), total, page: f.page, limit: f.limit });
+  return c.json({
+    items: rows.map(({ source, ...r }) => ({ ...r, status: orderStatusLabel(r), sourceLabel: channelLabel(r.channel), sourceDetail: source ? orderChannel(source).detail : '' })),
+    total, page: f.page, limit: f.limit,
+  });
+});
+
+/**
+ * Where paid orders came from, in the chosen dates (the last 30 days if none): orders and revenue
+ * (after refunds) per channel, and the campaigns that sold most.
+ */
+adminOrders.get('/sources', async (c) => {
+  const { db, now } = c.get('deps');
+  const f = query(c, zList);
+  const ist = (d: Date) => new Date(d.getTime() + 330 * 60_000).toISOString().slice(0, 10);
+  const range = f.from || f.to ? { from: f.from, to: f.to } : { from: ist(new Date(now().getTime() - 29 * 86_400_000)), to: ist(now()) };
+  const where = filters({ ...f, ...range, view: 'orders', source: undefined, q: undefined, payment: undefined, fulfillment: undefined, attention: undefined });
+  const revenue = sql<number>`coalesce(sum(${orders.total} - ${orders.refundedAmount}), 0)::int`;
+  const campaign = sql<string>`${orders.source}->'last'->>'campaign'`;
+  const [byChannel, byCampaign] = await Promise.all([
+    db.select({ channel: orders.channel, orders: sql<number>`count(*)::int`, revenue }).from(orders).where(where).groupBy(orders.channel),
+    db.select({ channel: orders.channel, campaign, orders: sql<number>`count(*)::int`, revenue }).from(orders)
+      .where(and(where, sql`${campaign} is not null`)).groupBy(orders.channel, campaign).orderBy(desc(revenue)).limit(8),
+  ]);
+  const totals = { orders: byChannel.reduce((n, x) => n + x.orders, 0), revenue: byChannel.reduce((n, x) => n + x.revenue, 0) };
+  return c.json({
+    ...range, totals,
+    channels: byChannel.map((x) => ({ ...x, label: channelLabel(x.channel), hint: CHANNELS.find((k) => k.key === x.channel)?.hint ?? '' }))
+      // Older orders without a source go last, whatever their total.
+      .sort((a, b) => Number(a.channel === 'unknown') - Number(b.channel === 'unknown') || b.revenue - a.revenue || b.orders - a.orders),
+    campaigns: byCampaign.map((x) => ({ ...x, label: channelLabel(x.channel) })),
+  });
 });
 
 adminOrders.get('/export.csv', async (c) => {
@@ -80,6 +114,8 @@ adminOrders.get('/export.csv', async (c) => {
     ['Refunded', (r) => rupees(r.refundedAmount)], ['Method', (r) => r.paymentMethod], ['Razorpay payment', (r) => r.razorpayPaymentId],
     ['City', (r) => r.shipCity], ['State', (r) => stateName(r.shipState ?? r.billingState)], ['PIN', (r) => r.shipPincode],
     ['Courier', (r) => r.courier], ['Tracking', (r) => r.trackingNumber],
+    ['Source', (r) => channelLabel(r.channel)], ['Source detail', (r) => (r.source ? orderChannel(r.source).detail : '')],
+    ['Campaign', (r) => r.source?.last?.campaign ?? ''], ['Landing page', (r) => r.source?.last?.landing ?? r.source?.first?.landing ?? ''],
   ]);
   return c.body(csv, 200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="orders.csv"' });
 });
@@ -100,8 +136,10 @@ adminOrders.get('/:id{[0-9a-f-]{36}}', async (c) => {
     db.select().from(refunds).where(eq(refunds.orderId, o.id)).orderBy(asc(refunds.createdAt)),
     o.customerId ? db.select().from(customers).where(eq(customers.id, o.customerId)) : Promise.resolve([]),
   ]);
+  const visit = (t?: Touch) => t && { ...t, ...classify(t), label: channelLabel(classify(t).channel) };
   return c.json({
     order: { ...o, status: orderStatusLabel(o), shipStateName: stateName(o.shipState), billingStateName: stateName(o.billingState) },
+    source: { channel: o.channel, label: channelLabel(o.channel), detail: o.source ? orderChannel(o.source).detail : '', first: visit(o.source?.first), last: visit(o.source?.last) },
     items, events, payments: pays.map(({ raw: _raw, ...p }) => p), refunds: refs, customer: cust[0] ?? null,
     customerLink: orderLink(c.get('deps'), o),
   });

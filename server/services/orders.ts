@@ -13,6 +13,7 @@ import { paymentMethodLabel } from '../lib/format.js';
 import { sendOrderConfirmation, sendStoreNewOrder } from './emails.js';
 import { subscribe } from './newsletter.js';
 import { reportPurchase, type Visit } from './tracking.js';
+import { orderChannel, type OrderSource } from '../../src/shared/attribution.js';
 
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
@@ -96,6 +97,8 @@ export interface CheckoutInput {
   tracking?: Visit;
   /** 'cod': an advance online now, the rest in cash on delivery (printed books only). */
   paymentMode?: 'online' | 'cod';
+  /** How the buyer reached the site (first visit and last visit with a source). */
+  source?: OrderSource;
 }
 
 /** What the customer pays online: the full total, or the advance for cash on delivery. */
@@ -162,6 +165,8 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
       paymentMode: cod ? 'cod' : 'online',
       codAmount: cod ? q.total - s.codAdvance : 0,
       ...(input.tracking?.consent ? { adConsent: true, fbp: input.tracking.fbp, fbc: input.tracking.fbc, userAgent: input.tracking.userAgent } : {}),
+      channel: orderChannel(input.source).channel,
+      source: input.source && (input.source.first || input.source.last) ? input.source : null,
       ip,
     }).returning();
     await tx.insert(orderItems).values(q.lines.map((l) => ({

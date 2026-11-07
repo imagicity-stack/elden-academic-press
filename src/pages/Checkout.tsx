@@ -8,6 +8,7 @@ import { BookCover } from '../components/BookCover';
 import { CouponField, issueText } from '../components/CartDrawer';
 import { formatList, rememberUser, track } from '../meta';
 import { ga, gaItem } from '../ga';
+import { orderSource } from '../attribution';
 
 /** The cart as Google Analytics data. */
 const gaCart = (q: { total: number; lines: { productId: string; title: string; kind: string; unitPrice: number; quantity: number }[] }, coupon?: string | null) => ({
@@ -104,6 +105,7 @@ export function Checkout() {
     note: d.note || undefined,
     newsletter: newsletter || undefined,
     paymentMode: cod ? 'cod' as const : 'online' as const,
+    source: orderSource(),
   }), [cart.lines, cart.coupon, d, newsletter, cod]);
 
   async function finish(result: PaymentResult) {

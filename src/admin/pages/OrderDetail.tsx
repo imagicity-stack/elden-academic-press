@@ -21,6 +21,24 @@ interface Detail {
   refunds: { id: string; amount: number; status: string; reason: string; actor: string; createdAt: string }[];
   customer: { id: string; ordersCount: number; totalSpent: number } | null;
   customerLink: string;
+  source: { channel: string; label: string; detail: string; first?: Visit; last?: Visit };
+}
+interface Visit { at: number; label: string; detail: string; source?: string; medium?: string; campaign?: string; content?: string; term?: string; ref?: string; landing?: string; click?: string }
+
+const CLICK: Record<string, string> = { google: 'Google Ads click', meta: 'link from Facebook/Instagram', microsoft: 'Microsoft Ads click', tiktok: 'TikTok click', linkedin: 'LinkedIn click' };
+
+/** One visit: "Meta ads · Instagram", its date, and the tags it carried. */
+function VisitLine({ title, v }: { title: string; v: Visit }) {
+  const tags = [v.campaign && `campaign “${v.campaign}”`, v.content && `ad “${v.content}”`, v.term && `keyword “${v.term}”`,
+    !v.campaign && (v.source || v.medium) && [v.source, v.medium].filter(Boolean).join(' / '), v.click && CLICK[v.click]].filter(Boolean);
+  return (
+    <div className="ad-src-visit">
+      <div className="ad-muted">{title} · {fmtDate(new Date(v.at).toISOString(), true)}</div>
+      <div className="ad-strong">{v.label}{v.detail && ` · ${v.detail}`}</div>
+      {tags.length > 0 && <div className="ad-muted">{tags.join(' · ')}</div>}
+      {(v.ref || v.landing) && <div className="ad-muted">{v.ref && <>from {v.ref}</>}{v.ref && v.landing && ' · '}{v.landing && <>landed on {v.landing}</>}</div>}
+    </div>
+  );
 }
 
 const COURIERS = ['India Post', 'DTDC', 'Delhivery', 'Blue Dart', 'Ekart', 'Xpressbees', 'Shiprocket', 'Professional Couriers', 'Hand delivery', 'Other'];
@@ -163,6 +181,17 @@ export default function OrderDetail() {
               <p className="ad-muted ad-mt">E-books only, delivered by download.</p>
             </Card>
           )}
+          <Card title="Where this order came from">
+            <div className="ad-src-head"><Badge tone={data.source.channel === 'unknown' ? 'grey' : 'blue'}>{data.source.label}</Badge>{data.source.detail && <span className="ad-strong">{data.source.detail}</span>}</div>
+            {data.source.last && <VisitLine title="Visit that led to the order" v={data.source.last} />}
+            {data.source.first && (!data.source.last || data.source.first.at !== data.source.last.at) && <VisitLine title="First visit" v={data.source.first} />}
+            {data.source.first && (() => {
+              const days = Math.max(0, Math.floor((new Date(o.createdAt).getTime() - data.source.first.at) / 86_400_000));
+              return <p className="ad-muted ad-mt">{days === 0 ? 'Ordered the same day as the first visit.' : `Ordered ${days} day${days === 1 ? '' : 's'} after the first visit.`}</p>;
+            })()}
+            {data.source.channel === 'unknown' && <p className="ad-muted">This order was placed before sources were recorded.</p>}
+            {data.source.channel === 'direct' && <p className="ad-muted">No link or site was recorded: the address was typed, opened from a bookmark, or shared in an app that hides where links come from (often WhatsApp).</p>}
+          </Card>
           {o.customerNote && <Card title="Customer note"><p className="ad-pre">{o.customerNote}</p></Card>}
           <Card title="Internal note">
             <TextArea label="Only staff can see this" rows={3} value={note ?? o.internalNote} onChange={(e) => setNote(e.target.value)} />

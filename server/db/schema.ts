@@ -1,5 +1,6 @@
 // Store database schema (Postgres / Supabase). All money is integer paise.
 import { sql } from 'drizzle-orm';
+import type { OrderSource } from '../../src/shared/attribution.js';
 import {
   boolean, check, date, index, integer, jsonb, pgEnum, pgSequence, pgTable, serial, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
@@ -208,6 +209,10 @@ export const orders = pgTable('orders', {
   fbp: text('fbp'),
   fbc: text('fbc'),
   userAgent: text('user_agent'),
+  /** Where the order came from (src/shared/attribution.ts): 'meta_ads', 'search', 'direct'… ('unknown' before it was recorded). */
+  channel: text('channel').notNull().default('unknown'),
+  /** The buyer's first visit and last visit with a source: UTM tags, referring site, landing page. Nothing personal. */
+  source: jsonb('source').$type<OrderSource>(),
   internalNote: text('internal_note').notNull().default(''),
   needsAttention: boolean('needs_attention').notNull().default(false),
   attentionReason: text('attention_reason'),
@@ -218,6 +223,7 @@ export const orders = pgTable('orders', {
   index('orders_created_idx').on(t.createdAt),
   index('orders_payment_idx').on(t.paymentStatus),
   index('orders_email_idx').on(t.email),
+  index('orders_channel_idx').on(t.channel),
 ]);
 
 export const orderItems = pgTable('order_items', {
