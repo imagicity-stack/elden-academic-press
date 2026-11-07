@@ -11,6 +11,7 @@ import { competitionInfo, teams } from './routes/teams.js';
 import { competitionPage } from './routes/og.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
+import { handleCspReport } from './routes/cspReport.js';
 import { meta } from './routes/meta.js';
 import { newsletter } from './routes/newsletter.js';
 import { customerOrders } from './routes/orders.js';
@@ -61,6 +62,9 @@ export function createApp(getDeps: () => Promise<Deps>) {
     const h = await health.result;
     return c.json(h, h.ok ? 200 : 503, { 'Cache-Control': 'no-store' });
   });
+
+  // What the Content Security Policy blocked (no database needed, so before the middleware below).
+  app.post('/csp-report', (c) => handleCspReport(c.req.raw));
 
   app.use('*', async (c, next) => {
     c.set('deps', await getDeps());

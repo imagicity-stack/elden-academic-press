@@ -23,12 +23,28 @@ const setMeta = (html: string, attr: 'name' | 'property', key: string, value: st
   return re.test(html) ? html.replace(re, tag) : html.replace('</head>', `    ${tag}\n  </head>`);
 };
 
+/**
+ * Where to fetch index.html from: this deployment's own address if the request came in on it,
+ * else SITE_URL. Never an address taken blindly from the request's Host header, so nobody can
+ * make the server fetch, and pass on, another site's page.
+ */
+export function pageOrigin(site: string, requested: string, vercel: Record<string, string | undefined> = process.env): string {
+  const ok = new Set<string>();
+  const add = (u?: string) => { if (u) try { ok.add(new URL(/^https?:\/\//.test(u) ? u : `https://${u}`).origin); } catch { /* not a URL */ } };
+  add(site);
+  try { const u = new URL(site); add(`${u.protocol}//${u.hostname.startsWith('www.') ? u.hostname.slice(4) : `www.${u.hostname}`}`); } catch { /* not a URL */ }
+  add(vercel.VERCEL_URL); add(vercel.VERCEL_BRANCH_URL); add(vercel.VERCEL_PROJECT_PRODUCTION_URL);
+  if (!vercel.VERCEL) { add('http://localhost'); try { const r = new URL(requested); if (['localhost', '127.0.0.1'].includes(r.hostname)) ok.add(r.origin); } catch { /* not a URL */ } }
+  return ok.has(requested) ? requested : new URL(site).origin;
+}
+
 /** The page with this competition's tags, or null to fall back to the plain app. */
-export async function competitionPage(deps: Deps, slug: string, origin: string): Promise<string | null> {
+export async function competitionPage(deps: Deps, slug: string, requestOrigin: string): Promise<string | null> {
   if (!/^[a-z0-9-]{1,80}$/.test(slug)) return null;
   const comp = findCompetition(slug);
   if (!comp) return null;
   const site = deps.env.SITE_URL.replace(/\/$/, '');
+  const origin = pageOrigin(site, requestOrigin);
   const title = `${comp.title} — Elden Academic Press`;
   const description = (comp.tagline || 'A competition by Elden Academic Press.').slice(0, 200);
   const pic = comp.shareImage || comp.image;
