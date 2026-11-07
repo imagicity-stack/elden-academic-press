@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { accountApi, type Profile } from '../store/account';
 import { errorMessage } from '../store/api';
 import { useStoreConfig } from '../store/catalog';
-import { FIELD_LABEL, INSTITUTION_TYPES, missingFields, PROFILE_TYPES, todayIST, type ProfileField, type ProfileValues } from '../shared/profile';
+import { FIELD_LABEL, INSTITUTION_TYPES, PROFILE_TYPES, todayIST, type ProfileField, type ProfileValues } from '../shared/profile';
 import { ageOn } from '../shared/teams';
 
 type Values = Record<keyof ProfileValues, string>;
@@ -37,13 +37,16 @@ export function ProfileForm({ profile, name, onSaved, submitLabel = 'Save profil
 
   const today = todayIST();
   const age = f.dob ? ageOn(f.dob, today) : null;
-  const nowMissing = new Set<string>(missingFields({ ...f, type: f.type as ProfileValues['type'], dob: f.dob || null }, today));
   const roleFields = (ROLE_FIELDS[f.type] ?? []).filter((k) => {
     if (k === 'guardianName' || k === 'guardianPhone') return age !== null && age < 18;
     if (k === 'instagram') return age !== null && age >= 13;
     return true;
   });
-  const fields = [...BASE, ...roleFields].filter((k) => !onlyMissing || firstMissing.has(k) || nowMissing.has(k) || (k === 'instagram' && !f.instagram && f.type === 'student' && age !== null && age >= 13));
+  // With onlyMissing, show the fields this kind of person needs that the *saved* profile doesn't
+  // have yet. Judged by what's saved, not by what's typed, so a box doesn't vanish the moment
+  // someone types in it (or picks an option).
+  const savedEmpty = (k: keyof ProfileValues) => !profile[k];
+  const fields = [...BASE, ...roleFields].filter((k) => !onlyMissing || firstMissing.has(k) || savedEmpty(k));
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
