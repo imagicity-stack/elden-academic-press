@@ -14,6 +14,14 @@ npm run typecheck  # front end, server and tests
 npm run build      # type-check + production build to dist/
 ```
 
+Before a release, also run the tests on a real Postgres server, through the same driver as the
+live site (the embedded one accepts some things postgres.js doesn't). Any server you can create
+databases on will do; each test gets its own copy:
+
+```sh
+TEST_DATABASE_URL=postgres://postgres@localhost:5432/postgres npm test
+```
+
 `npm run dev` needs no accounts or keys. It starts an embedded Postgres (PGlite, kept in `.data/`) filled with the sample catalogue and Study Hub PDFs, a **payment simulator** in place of Razorpay, and a developer sign-in for the admin at [`/admin`](http://localhost:5173/admin). Delete `.data/` to start fresh. None of these shortcuts exist on Vercel.
 
 Connecting the real services (Supabase, Razorpay, Google Workspace email, Vercel) is a one-time checklist: **[docs/STORE-SETUP.md](docs/STORE-SETUP.md)**.
