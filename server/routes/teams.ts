@@ -17,6 +17,7 @@ import {
   assertOpen, canUpload, code, datesOf, ID_TYPES, loadApplication, mediaUrl, membersOf, noticeReaches, registrationState, requireAccess,
   sendTeamEmail, settingsFor, teamCompetition, type App, type Member, type TeamComp, type TeamFile, type TeamSettings,
 } from '../services/teams.js';
+import { briefFor } from '../services/briefs.js';
 import { profileOf, requireCustomer } from './account.js';
 
 export const teams = new Hono<AppEnv>();
@@ -97,13 +98,16 @@ teams.get('/:slug/team', async (c) => {
     });
   }
   const [acct] = await db.select().from(accounts).where(eq(accounts.userId, me.userId));
+  // The story brief and the official PDFs (which name it) only for an approved team.
+  const approved = apps.some((a) => a.status === 'approved');
   return c.json({
     applications: out,
     registration: registrationState(comp, s, now()),
     dates: datesOf(comp, s),
     profile: acct ? profileOf(acct, now()) : null,
-    rulesDocUrl: mediaUrl(deps, s.rulesDocKey),
-    topicDocUrl: mediaUrl(deps, s.topicDocKey),
+    brief: approved ? briefFor(comp.slug) : null,
+    rulesDocUrl: approved ? mediaUrl(deps, s.rulesDocKey) : null,
+    topicDocUrl: approved ? mediaUrl(deps, s.topicDocKey) : null,
   });
 });
 
@@ -344,7 +348,8 @@ teams.get('/:slug/team/:id{[0-9a-f-]{36}}/files/:fileId{[0-9a-f-]{36}}', async (
 
 export const competitionInfo = new Hono<AppEnv>();
 
-/** Pictures, documents, dates, public notices and (once published) results. No personal data beyond winners' credits. */
+/** Pictures, dates, public notices and (once published) results. No personal data beyond winners' credits, and not the
+ * story brief or the official PDFs (approved teams get those with their team). */
 competitionInfo.get('/:slug', async (c) => {
   const deps = c.get('deps');
   const { db, now } = deps;
@@ -363,7 +368,6 @@ competitionInfo.get('/:slug', async (c) => {
     registration: registrationState(comp, s, now()),
     dates: datesOf(comp, s),
     bannerUrl: mediaUrl(deps, s.bannerKey), artUrl: mediaUrl(deps, s.artKey), sponsorUrls: s.sponsorKeys.map((k) => mediaUrl(deps, k)),
-    rulesDocUrl: mediaUrl(deps, s.rulesDocKey), topicDocUrl: mediaUrl(deps, s.topicDocKey),
     notices: notices.filter((n) => n.audience.public).map((n) => ({ id: n.id, title: n.title, body: n.body, createdAt: n.createdAt })),
     resultsPublished: s.resultsPublished, results,
   });

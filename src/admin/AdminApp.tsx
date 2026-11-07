@@ -4,6 +4,7 @@ import { errorMessage } from '../store/api';
 import { adminApi, ApiError } from './api';
 import { accessToken, devMode, devSignIn, LINK_TYPE, mfaEnroll, mfaState, mfaVerify, onAuthChange, sendReset, setPassword, signIn, signOut, supabase } from './auth';
 import { Btn, Loading, ToastProvider } from './ui';
+import { COMPETITIONS } from '../shared/competitions';
 import './admin.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -239,11 +240,21 @@ function Shell({ me }: { me: Me }) {
           </div>
           <nav className="ad-nav">
             {NAV.filter((n) => !n.owner || me.role === 'owner').map((n) => (
-              <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => 'ad-nav__link' + (isActive ? ' is-active' : '')}>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d={n.icon} /></svg>
-                <span>{n.label}</span>
-                {n.count && counts?.[n.count] ? <em>{counts[n.count]}</em> : null}
-              </NavLink>
+              <div key={n.to} className="ad-nav__item">
+                <NavLink to={n.to} end={n.end} className={({ isActive }) => 'ad-nav__link' + (isActive ? ' is-active' : '')}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d={n.icon} /></svg>
+                  <span>{n.label}</span>
+                  {n.count && counts?.[n.count] ? <em>{counts[n.count]}</em> : null}
+                </NavLink>
+                {/* Competitions opens out to each competition while you're in that section. */}
+                {n.to === '/admin/competitions' && pathname.startsWith(n.to) && COMPETITIONS.length > 0 && (
+                  <div className="ad-nav__sub">
+                    {COMPETITIONS.map((c) => (
+                      <NavLink key={c.slug} to={`/admin/competitions/${c.slug}`} className={({ isActive }) => 'ad-nav__sublink' + (isActive ? ' is-active' : '')}>{c.title}</NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </nav>
           <div className="ad-side__foot">

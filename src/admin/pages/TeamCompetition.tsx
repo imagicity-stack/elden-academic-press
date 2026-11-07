@@ -457,8 +457,8 @@ function Settings({ slug }: { slug: string }) {
         <div className="ad-form">
           {upload('bannerKey', 'image/jpeg,image/png,image/webp', 'Hero banner', 'Replaces the illustration at the top of the page. 1500 × 1000 px works well.')}
           {upload('artKey', 'image/jpeg,image/png,image/webp', 'Promotional artwork', 'Shown lower on the page, full width.')}
-          {upload('rulesDocKey', 'application/pdf', 'Official rules and terms (PDF)', 'Linked as “Official rules (PDF)” on the page, the rules page and teams’ pages.')}
-          {upload('topicDocKey', 'application/pdf', 'Topic document (PDF)', 'Optional.')}
+          {upload('rulesDocKey', 'application/pdf', 'Official rules and terms (PDF)', 'Shown only to approved teams, on their team page and the rules page (the PDF names the story’s title).')}
+          {upload('topicDocKey', 'application/pdf', 'Topic document (PDF)', 'Optional. Shown only to approved teams, with the story brief.')}
           <div className="ad-field">
             <span className="ad-label">Sponsor logos ({s.sponsorKeys.length}/8)</span>
             <div className="ad-row">{data.urls.sponsorKeys.map((u, i) => u && <span key={u} className="ad-tt-logo"><img src={u} alt="" /><button type="button" className="ad-link ad-neg" onClick={() => save({ sponsorKeys: s.sponsorKeys.filter((_, k) => k !== i) }, 'Removed')}>×</button></span>)}</div>

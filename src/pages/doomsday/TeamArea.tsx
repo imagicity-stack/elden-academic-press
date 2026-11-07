@@ -14,6 +14,7 @@ import { preparePhoto, putWithRetry, sizeText } from '../../lib/upload';
 import { Countdown } from '../../components/Countdown';
 import { GoogleSignIn } from '../../components/GoogleSignIn';
 import { ProfileForm, ProfileOnboarding, shouldOnboard } from '../../components/ProfileForm';
+import { RichText } from '../../components/RichText';
 
 type TeamComp = Competition & { team: TeamConfig };
 interface FileRow { id: string; name: string; size: number; pages: number | null; uploadedAt: string }
@@ -25,14 +26,35 @@ export interface TeamApp {
   files: (TeamFileSpec & { current: FileRow | null; history: (Omit<FileRow, 'id'> & { replacedAt: string | null })[] })[];
   notices: { id: string; title: string; body: string; createdAt: string }[];
 }
+/** The story brief: sent by the server only once one of the person's teams is approved. */
+export interface StoryBrief { title: string; lead: string; story: string; mustInclude: string; hashtag: string }
 export interface TeamData {
   applications: TeamApp[]; registration: { open: boolean; reason: string };
   dates: { opensAt: string; closesAt: string; submissionDeadline: string; resultsOn: string };
-  profile: Profile | null; rulesDocUrl: string | null; topicDocUrl: string | null;
+  profile: Profile | null; brief: StoryBrief | null; rulesDocUrl: string | null; topicDocUrl: string | null;
 }
 
-export function TeamArea({ c }: { c: TeamComp }) {
-  const { state, reload } = useAccount();
+export function StoryBriefPanel({ brief, topicDocUrl }: { brief: StoryBrief; topicDocUrl?: string | null }) {
+  return (
+    <div className="dd-brief">
+      <div className="dd-panel dd-panel--dark">
+        <div className="dd-caption">Your story brief</div>
+        <h4 className="dd-brief__title">{brief.title}</h4>
+        <p className="dd-brief__lead">{brief.lead}</p>
+        <p>{brief.story}</p>
+      </div>
+      <div className="dd-panel">
+        <h4 className="dd-h4">Your comic must include</h4>
+        <RichText text={brief.mustInclude} className="dd-rich" />
+        <p className="dd-small">Sharing your entry after you submit? Tag @eldenacademicpress and use <b>{brief.hashtag}</b>.{topicDocUrl && <> <a href={topicDocUrl} target="_blank" rel="noreferrer">Topic document (PDF)</a></>}</p>
+      </div>
+    </div>
+  );
+}
+
+/** account: the page's own useAccount(), so the page and this area agree on who is signed in. */
+export function TeamArea({ c, account }: { c: TeamComp; account: ReturnType<typeof useAccount> }) {
+  const { state, reload } = account;
   const [data, setData] = useState<TeamData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [mode, setMode] = useState<{ kind: 'new' } | { kind: 'edit'; app: TeamApp } | null>(null);
@@ -50,7 +72,7 @@ export function TeamArea({ c }: { c: TeamComp }) {
   else if (!signedIn) {
     body = (
       <div className="dd-signin">
-        <p className="dd-lead">Sign in with Google to register your team. A team captain, a teacher or a parent can register the whole team.</p>
+        <p className="dd-lead">Sign in with Google to see the full rules and register your team. A team captain, a teacher or a parent can register the whole team.</p>
         <GoogleSignIn onDone={reload} />
       </div>
     );
@@ -168,13 +190,13 @@ function TeamDashboard({ c, app, data, onChange, onEdit }: { c: TeamComp; app: T
             <h4 className="dd-h4">Competition section</h4>
             <Countdown to={data.dates.submissionDeadline} label="Uploads close in" />
           </div>
+          {data.brief && <StoryBriefPanel brief={data.brief} topicDocUrl={data.topicDocUrl} />}
           <p className="dd-lead">Upload by <b>{istDateTime(data.dates.submissionDeadline)}</b>. You can replace a file until then; the last upload before the deadline is judged. Upload early!</p>
           {app.files.map((f) => <FileSlot key={f.kind} c={c} app={app} spec={f} onDone={onChange} />)}
           <div className="dd-links">
             <Link to={`/competitions/${c.slug}/confirmation/${app.id}`} className="btn btn--outline btn--sm">Registration confirmation</Link>
             <Link to={`/competitions/${c.slug}/rules`} className="text-link">Rules and terms</Link>
             {data.rulesDocUrl && <a href={data.rulesDocUrl} target="_blank" rel="noreferrer" className="text-link">Official PDF</a>}
-            {data.topicDocUrl && <a href={data.topicDocUrl} target="_blank" rel="noreferrer" className="text-link">Topic document</a>}
           </div>
         </div>
       )}

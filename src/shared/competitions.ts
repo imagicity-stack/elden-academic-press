@@ -29,8 +29,12 @@ export interface Competition {
   tagline: string;
   /** The page's main text: **bold**, *italic*, [links](https://…), lists with - or 1., ## headings. */
   about: string;
-  /** A picture for the card and link previews (a full https:// URL or a /path in public/). */
+  /** A picture for the card and the page (a full https:// URL, or a /assets/… path in public/). */
   image?: string;
+  /** A smaller copy of image for cards (optional). */
+  imageSmall?: string;
+  /** The picture for link previews on WhatsApp, Facebook and X: ideally a 1200 × 630 JPG (falls back to image). */
+  shareImage?: string;
   /** India time, e.g. '2026-12-01T00:00:00+05:30'. Registration is open from opensAt until closesAt. */
   opensAt: string;
   closesAt: string;
@@ -59,8 +63,11 @@ export const COMPETITIONS: Competition[] = [
   {
     slug: 'doomsday-diaries',
     title: 'DoomsDay Diaries',
-    tagline: 'Comic Creating Challenge · Doom Picked the Wrong Town. Doctor Doom has given your town 24 hours. Create the hero who stops him.',
-    about: 'Doctor Doom has given your town 24 hours. Create the hero who stops him. Make a team comic of at least 40 pages by 5 December 2026, 11:59 PM IST.',
+    tagline: 'Comic Creating Challenge for teams aged 8 to 24, across India. Free entry.',
+    about: 'Form a team, create an original hero and make a comic of at least 40 pages by 5 December 2026, 11:59 PM IST. The story brief is revealed once your team is approved.',
+    image: '/assets/competitions/doomsday-diaries.webp',
+    imageSmall: '/assets/competitions/doomsday-diaries-800.webp',
+    shareImage: '/assets/competitions/doomsday-diaries-share.jpg',
     opensAt: '2026-11-06T00:00:00+05:30',
     closesAt: '2026-12-05T23:59:59+05:30',
     theme: 'comic',

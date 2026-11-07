@@ -35,12 +35,19 @@ export function CompetitionsPage() {
           </div>
         ) : (
           <ul className="comp__cards">
-            {list.map((c) => {
+            {list.map((c, i) => {
               const phase = phaseOf(c);
+              // The first open competition with a picture gets the full width, picture beside the text.
+              const wide = i === 0 && Boolean(c.image) && phase !== 'closed';
               return (
-                <li key={c.slug}>
-                  <Link to={`/competitions/${c.slug}`} className="comp-card">
-                    {c.image && <img className="comp-card__img" src={c.image} alt="" loading="lazy" />}
+                <li key={c.slug} className={wide ? 'comp__wide' : undefined}>
+                  <Link to={`/competitions/${c.slug}`} className={'comp-card' + (wide ? ' comp-card--wide' : '') + (c.theme ? ` comp-card--${c.theme}` : '')}>
+                    {c.image && (
+                      <div className="comp-card__media">
+                        <img className="comp-card__img" src={c.imageSmall || c.image} srcSet={c.imageSmall ? `${c.imageSmall} 800w, ${c.image} 1400w` : undefined}
+                          sizes={wide ? '(min-width: 720px) 55vw, 100vw' : '(min-width: 1100px) 33vw, (min-width: 720px) 50vw, 100vw'} alt="" loading={i === 0 ? 'eager' : 'lazy'} />
+                      </div>
+                    )}
                     <div className="comp-card__body">
                       <span className={'comp-badge comp-badge--' + phase}>{PHASE_LABEL[phase]}</span>
                       <h2 className="comp-card__title">{c.title}</h2>
@@ -48,6 +55,7 @@ export function CompetitionsPage() {
                       <span className="comp-card__when">
                         {phase === 'upcoming' ? `Opens ${istDateTime(c.opensAt)}` : phase === 'open' ? `Register by ${istDateTime(c.closesAt)}` : 'Registration closed'}
                       </span>
+                      {phase !== 'closed' && <span className="comp-card__go">{phase === 'open' ? 'Register your team' : 'See the details'} <span aria-hidden="true">→</span></span>}
                     </div>
                   </Link>
                 </li>

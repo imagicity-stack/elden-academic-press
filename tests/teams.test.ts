@@ -165,8 +165,11 @@ describe('DoomsDay Diaries registration', () => {
     const h = await signedIn(TEACHER);
     const app = (await register(h, await team(h))).json.application;
     const admin = await as(OWNER);
-    // Not approved yet: no uploads.
+    // Not approved yet: no uploads, and the story brief stays secret.
     expect((await t.call('POST', `/competitions/${SLUG}/team/${app.id}/uploads`, { headers: h, body: { kind: 'comic', contentType: 'application/pdf', size: 1000 } })).json.code).toBe('not_approved');
+    const before = await t.call('GET', `/competitions/${SLUG}/team`, { headers: h });
+    expect(before.json.brief).toBeNull();
+    expect(before.text).not.toMatch(/Wrong Town/i);
     // Changes requested → the team edits → back to pending.
     t.mailer.sent.length = 0;
     expect((await t.call('POST', `/admin/competitions/${SLUG}/teams/${app.id}/review`, { headers: admin, body: { action: 'changes', message: 'Please upload a clearer ID for Aman.' } })).status).toBe(200);
@@ -183,7 +186,10 @@ describe('DoomsDay Diaries registration', () => {
     t.mailer.sent.length = 0;
     await t.call('POST', `/admin/competitions/${SLUG}/teams/${app.id}/review`, { headers: admin, body: { action: 'approve' } });
     expect(t.mailer.sent.find((m) => m.to === TEACHER.email)?.subject).toBe('Approved: The Ink Avengers is in DoomsDay Diaries');
-    expect((await t.call('GET', `/competitions/${SLUG}/team`, { headers: h })).json.applications[0]).toMatchObject({ status: 'approved', canUpload: true, canEdit: false });
+    const after = (await t.call('GET', `/competitions/${SLUG}/team`, { headers: h })).json;
+    expect(after.applications[0]).toMatchObject({ status: 'approved', canUpload: true, canEdit: false });
+    expect(after.brief).toMatchObject({ title: 'Doom Picked the Wrong Town', hashtag: '#DoomPickedTheWrongTown' });
+    expect(t.mailer.sent.find((m) => m.to === TEACHER.email)?.html).toContain('read the story brief');
     const up = async (kind: string, file: Uint8Array) => {
       const u = await t.call('POST', `/competitions/${SLUG}/team/${app.id}/uploads`, { headers: h, body: { kind, contentType: 'application/pdf', size: file.length } });
       expect(u.status).toBe(201);
@@ -255,8 +261,11 @@ describe('DoomsDay Diaries admin', () => {
     await t.call('POST', `/admin/competitions/${SLUG}/notices`, { headers: admin, body: { title: 'Registrations are open', body: 'Tell your friends.', audience: { public: true } } });
     const mine = (await t.call('GET', `/competitions/${SLUG}/team`, { headers: h })).json.applications[0];
     expect(mine.notices.map((x: any) => x.title)).toEqual(['Upload early']);
-    const info = (await t.call('GET', `/competition-info/${SLUG}`)).json;
+    const infoRes = await t.call('GET', `/competition-info/${SLUG}`);
+    const info = infoRes.json;
     expect(info.notices.map((x: any) => x.title)).toEqual(['Registrations are open']);
+    // The public page never gets the story brief or the official PDFs (they name it).
+    expect(infoRes.text).not.toMatch(/Wrong Town|brief|rulesDoc|topicDoc/i);
     expect(info.results).toEqual([]);
     await t.call('POST', `/admin/competitions/${SLUG}/teams/${app.id}/result`, { headers: admin, body: { result: 'first' } });
     expect((await t.call('GET', `/competitions/${SLUG}/team`, { headers: h })).json.applications[0].result).toBe('');

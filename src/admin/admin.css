@@ -22,6 +22,10 @@
 .ad-nav__link:hover { background: rgba(255,255,255,.06); color: #fff !important; }
 .ad-nav__link.is-active { background: rgba(204,149,95,.16); color: #fff !important; }
 .ad-nav__link.is-active svg { color: #E2B68A; }
+.ad-nav__sub { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 19px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.14); }
+.ad-nav__sublink { padding: 7px 10px; border-radius: 6px; color: #AEB6C1 !important; font-size: 13px; font-weight: 500; text-decoration: none; }
+.ad-nav__sublink:hover { background: rgba(255,255,255,.06); color: #fff !important; }
+.ad-nav__sublink.is-active { color: #fff !important; background: rgba(255,255,255,.08); }
 .ad-nav__link em { margin-left: auto; font-style: normal; background: #CC955F; color: var(--ad-navy); font-weight: 700; font-size: 11px; padding: 1px 7px; border-radius: 9px; }
 .ad-side__foot { margin-top: auto; padding: 16px 8px 0; border-top: 1px solid rgba(255,255,255,.1); display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
 .ad-side__foot a { color: #E2B68A !important; text-decoration: none; }
@@ -356,7 +360,7 @@
 .ad-comp-people { margin: 4px 0 0; padding-left: 18px; }
 .ad-comp-people li { margin: 2px 0; }
 /* Team competitions */
-.ad-tt-tabs { margin-bottom: 18px; overflow-x: auto; flex-wrap: nowrap; }
+.ad-tt-tabs { margin-bottom: 18px; }
 .ad-tt-tabs .ad-tab { white-space: nowrap; }
 .ad-tt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; align-items: start; }
 .ad-tt-grid--2 { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
