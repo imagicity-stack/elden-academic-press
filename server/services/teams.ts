@@ -7,10 +7,11 @@ import type { Deps } from '../deps.js';
 import type { Q } from '../db/client.js';
 import { competitionSettings, teamApplications, teamFiles, teamMembers, type NoticeAudience } from '../db/schema.js';
 import { esc } from '../lib/format.js';
-import { sendSafely } from '../lib/mail.js';
+import { addressList, sendSafely } from '../lib/mail.js';
+import { stateName } from '../lib/states.js';
 import { HttpError, notFound } from '../lib/http.js';
 import { findCompetition, istDateTime, type Competition } from '../../src/shared/competitions.js';
-import { applicationCode, dayLabel, type TeamConfig } from '../../src/shared/teams.js';
+import { ageOn, applicationCode, dayLabel, type TeamConfig } from '../../src/shared/teams.js';
 import { getSettings } from './catalog.js';
 import { button, FONT, INK, label, layout, LINE, p, PAPER, ACCENT, section } from './emails.js';
 
@@ -175,6 +176,40 @@ export async function sendTeamEmail(deps: Deps, c: TeamComp, app: App, members: 
     }
   } catch (e) {
     console.error('[teams] email', kind, (e as Error).message);
+  }
+}
+
+/**
+ * Tells the organiser a team needs checking: a new registration, or one sent back after
+ * "Request changes". To Settings → alerts, else MAIL_TO, else the support address. Never throws.
+ */
+export async function sendTeamStaffAlert(deps: Deps, c: TeamComp, app: App, members: Member[], kind: 'new' | 'resubmitted') {
+  try {
+    const s = await getSettings(deps.db);
+    const to = s.notifyEmails.length ? s.notifyEmails : addressList(deps.env.MAIL_TO).length ? addressList(deps.env.MAIL_TO) : [s.supportEmail];
+    const id = code(c, app);
+    const group = c.team.groups.find((g) => g.key === app.category)?.label ?? app.category;
+    const inst = c.team.institutionTypes.find((t) => t.key === app.institutionType);
+    const role = (k: string) => c.team.roles.find((r) => r.key === k)?.label ?? k;
+    const age = (dob: string | null) => (dob ? ageOn(dob, c.team.ageOn) : null);
+    const memberLines = members.map((m) => `${esc(m.fullName)}${m.position === 0 ? ' (captain)' : ''} · ${esc(m.roles.map(role).join(', '))}${age(m.dob) !== null ? ` · ${age(m.dob)} yrs` : ''}${inst && !inst.same && m.institutionName ? ` · ${esc(m.institutionName)}` : ''}`);
+    const rows: [string, string][] = [
+      ['Team', esc(app.teamName)], ['Application ID', esc(id)], ['Age group', esc(group)],
+      ['From', `${esc(inst?.label ?? app.institutionType)}${app.institutionName ? `: ${esc(app.institutionName)}` : ''}<br>${esc(app.city)}, ${esc(stateName(app.state))}`],
+      ['Members', memberLines.join('<br>')], ['Registered by', esc(app.email)],
+    ];
+    const facts = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows.map(([k, v]) => `<tr><td style="width:130px;padding:9px 12px 9px 0;border-bottom:1px solid ${LINE};vertical-align:top">${label(esc(k))}</td><td style="padding:9px 0;border-bottom:1px solid ${LINE};font:400 15px/1.5 ${FONT};color:${INK}">${v}</td></tr>`).join('')}</table>`;
+    const m = kind === 'new'
+      ? { subject: `New registration: ${app.teamName} (${id})`, title: 'New team registration', intro: `${esc(app.teamName)} registered for ${esc(c.title)} and is waiting for your check (pending verification).` }
+      : { subject: `Changes sent: ${app.teamName} (${id})`, title: 'Changes sent back for checking', intro: `${esc(app.teamName)} made the changes you asked for and sent the application back. It’s waiting for your check again.` };
+    const html = layout(deps, s, {
+      preheader: m.title, kicker: c.title, title: m.title, intro: m.intro,
+      body: section(facts) + section(button(`${deps.env.SITE_URL.replace(/\/$/, '')}/admin/competitions/${c.slug}/teams/${app.id}`, 'Review the application', INK), '4px 32px 32px'),
+      footerNote: 'Sent to the alert addresses in Admin → Settings. Replying writes to the person who registered the team. ID documents are only in the admin.',
+    });
+    for (const addr of to) await sendSafely(deps.mailer, { to: addr, replyTo: app.email, subject: m.subject, html });
+  } catch (e) {
+    console.error('[teams] staff alert', kind, (e as Error).message);
   }
 }
 

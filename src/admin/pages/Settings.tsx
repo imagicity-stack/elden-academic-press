@@ -85,7 +85,7 @@ function StoreSettings() {
           <TextField label="Support email" type="email" value={s('supportEmail')} onChange={(e) => set('supportEmail', e.target.value)} error={fe('supportEmail')} />
           <TextField label="Support phone" value={s('supportPhone')} onChange={(e) => set('supportPhone', e.target.value)} />
         </div>
-        <TextField label="Send new-order and enquiry alerts to" placeholder="orders@eldenap.in, owner@…" hint="Comma-separated. Empty = the support email." value={s('notifyEmails')} onChange={(e) => set('notifyEmails', e.target.value)} error={fe('notifyEmails')} />
+        <TextField label="Send new-order, enquiry and team registration alerts to" placeholder="orders@eldenap.in, owner@…" hint="Comma-separated. Empty = the support email." value={s('notifyEmails')} onChange={(e) => set('notifyEmails', e.target.value)} error={fe('notifyEmails')} />
       </Card>
       <Card title="Shipping">
         <div className="ad-form-grid">

@@ -167,6 +167,12 @@ describe('DoomsDay Diaries registration', () => {
     const admin = await as(OWNER);
     // Not approved yet: no uploads, and the story brief stays secret.
     expect((await t.call('POST', `/competitions/${SLUG}/team/${app.id}/uploads`, { headers: h, body: { kind: 'comic', contentType: 'application/pdf', size: 1000 } })).json.code).toBe('not_approved');
+    // The organiser is told about the new registration (not the team's own address), with a link to review it.
+    const alert = t.mailer.sent.find((m) => m.subject === 'New registration: The Ink Avengers (DD-0001)');
+    expect(alert).toBeTruthy();
+    expect(alert!.to).not.toBe(TEACHER.email);
+    expect(alert!.html).toContain(`/admin/competitions/${SLUG}/teams/${app.id}`);
+    expect(alert!.html).toContain('(captain)');
     const before = await t.call('GET', `/competitions/${SLUG}/team`, { headers: h });
     expect(before.json.brief).toBeNull();
     expect(before.text).not.toMatch(/Wrong Town/i);
@@ -181,6 +187,10 @@ describe('DoomsDay Diaries registration', () => {
     edit.members[1].idDocKey = await uploadId(h);
     const oldKey = mine.members[1].idDocKey;
     expect((await t.call('PUT', `/competitions/${SLUG}/team/${app.id}`, { headers: h, body: edit })).json.application.status).toBe('pending');
+    // Sent back after "Request changes": the organiser hears about it; another edit while pending: no new alert.
+    expect(t.mailer.sent.filter((m) => m.subject === 'Changes sent: The Ink Avengers (DD-0001)')).toHaveLength(1);
+    expect((await t.call('PUT', `/competitions/${SLUG}/team/${app.id}`, { headers: h, body: edit })).status).toBe(200);
+    expect(t.mailer.sent.filter((m) => m.subject === 'Changes sent: The Ink Avengers (DD-0001)')).toHaveLength(1);
     await expect(t.deps.storage.read('competition-entries', oldKey)).resolves.toBeTruthy(); // memory storage keeps it; the real one deletes it
     // Approve → uploads open.
     t.mailer.sent.length = 0;
