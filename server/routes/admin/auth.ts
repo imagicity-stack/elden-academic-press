@@ -54,6 +54,8 @@ async function authenticate(c: Context<AppEnv>): Promise<AdminSession> {
     // First sign-in of the configured owner, as long as no owner exists yet.
     const [owner] = await db.select({ id: adminUsers.userId }).from(adminUsers).where(eq(adminUsers.role, 'owner')).limit(1);
     if (!owner) [row] = await db.insert(adminUsers).values({ userId, email, role: 'owner', name: 'Owner' }).onConflictDoNothing().returning();
+    // Two first requests at once: the other one may have just added this owner.
+    if (!row) [row] = await db.select().from(adminUsers).where(eq(adminUsers.userId, userId));
   }
   if (!row || !row.active) throw new HttpError(403, 'This account doesn’t have access to the store admin.', 'not_admin');
 

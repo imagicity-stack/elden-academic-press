@@ -44,9 +44,54 @@ function template(seed: boolean) {
   return templates.get(seed)!;
 }
 
+// With TEST_DATABASE_URL (a Postgres server you can create databases on, e.g.
+// postgres://postgres@localhost:55432/postgres), every test runs on a real Postgres through
+// postgres.js, as in production, instead of the in-memory one. The two differ in places
+// (postgres.js can't send a JS Date in hand-written SQL, for one), so run it before a release:
+//   TEST_DATABASE_URL=postgres://… npx vitest run
+const PG_URL = process.env.TEST_DATABASE_URL;
+const pgTemplates = new Map<boolean, Promise<string>>();
+async function realPostgres(seed: boolean): Promise<DB> {
+  const { createHash, randomUUID } = await import('node:crypto');
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { default: postgres } = await import('postgres');
+  const { migrate: migratePg } = await import('drizzle-orm/postgres-js/migrator');
+  const { connectPostgres } = await import('../server/db/client.js');
+  const at = (name: string) => { const u = new URL(PG_URL!); u.pathname = `/${name}`; return u.toString(); };
+  if (!pgTemplates.has(seed)) {
+    pgTemplates.set(seed, (async () => {
+      // One migrated (and seeded) template per version of the migrations and seed; shared by the test workers.
+      const h = createHash('sha1');
+      for (const f of readdirSync(MIGRATIONS_DIR, { recursive: true }).map(String).sort()) if (/\.(sql|json)$/.test(f)) h.update(readFileSync(join(MIGRATIONS_DIR, f)));
+      h.update(readFileSync(new URL('../server/db/seed.ts', import.meta.url)));
+      const name = `elden_tpl_${seed ? 'seed' : 'empty'}_${h.digest('hex').slice(0, 10)}`;
+      const admin = postgres(PG_URL!, { max: 1, onnotice: () => {} });
+      try {
+        await admin`select pg_advisory_lock(4242)`;
+        const [found] = await admin`select 1 from pg_database where datname = ${name}`;
+        if (!found) {
+          await admin.unsafe(`create database "${name}"`);
+          const db = connectPostgres(at(name));
+          await migratePg(db, { migrationsFolder: MIGRATIONS_DIR });
+          if (seed) await seedDemo(db);
+          await (db as DB & { $client: { end(): Promise<void> } }).$client.end();
+        }
+        await admin`select pg_advisory_unlock(4242)`;
+      } finally { await admin.end(); }
+      return name;
+    })());
+  }
+  const tpl = await pgTemplates.get(seed)!;
+  const name = `elden_t_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  const admin = postgres(PG_URL!, { max: 1, onnotice: () => {} });
+  try { await admin.unsafe(`create database "${name}" template "${tpl}"`); } finally { await admin.end(); }
+  return connectPostgres(at(name));
+}
+
 export async function setup(opts: { env?: Record<string, string>; seed?: boolean } = {}) {
-  const pg = (await (await template(opts.seed !== false)).clone()) as PGlite;
-  const db = drizzle(pg, { schema }) as unknown as DB;
+  const db = PG_URL ? await realPostgres(opts.seed !== false)
+    : drizzle((await (await template(opts.seed !== false)).clone()) as PGlite, { schema }) as unknown as DB;
   const env = loadEnv({
     ORDER_LINK_SECRET: 'order-link-secret-for-tests-0123456789',
     RAZORPAY_WEBHOOK_SECRET: WEBHOOK_SECRET,

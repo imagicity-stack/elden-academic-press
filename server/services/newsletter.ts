@@ -1,7 +1,7 @@
 // The newsletter: subscriptions, campaigns, and a batch sender
 // that works within the mailbox's daily limit. Every email carries a personal
 // unsubscribe link and one-click unsubscribe headers (RFC 8058).
-import { and, asc, count, eq, gte, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
 import { PAL } from '../../src/data.js';
 import type { Deps } from '../deps.js';
 import { campaigns, campaignSends, subscribers } from '../db/schema.js';
@@ -250,7 +250,8 @@ export async function processNewsletter(deps: Deps, batch = BATCH, timeBudgetMs 
   const { db, now } = deps;
   const started = Date.now();
   const due = await db.select({ id: campaigns.id }).from(campaigns)
-    .where(and(eq(campaigns.status, 'scheduled'), sql`${campaigns.scheduledAt} <= ${now()}`));
+    // lte(), not sql`… <= ${date}`: on the live site postgres.js can't send a JS Date in hand-written SQL.
+    .where(and(eq(campaigns.status, 'scheduled'), lte(campaigns.scheduledAt, now())));
   for (const c of due) await startCampaign(deps, c.id);
 
   const s = await getSettings(db);

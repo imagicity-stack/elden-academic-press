@@ -3,7 +3,7 @@
 // notices and emails to groups of teams, shortlist and results, settings (dates, pictures,
 // official documents), exports and numbers. Store owner only. Every action is audit-logged.
 import { Hono, type Context } from 'hono';
-import { and, asc, desc, eq, ilike, inArray, isNotNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import type { AppEnv } from '../../app.js';
@@ -81,7 +81,8 @@ adminTeams.get('/:slug/teams/stats', async (c) => {
     .innerJoin(teamApplications, eq(teamApplications.id, teamFiles.applicationId)).where(and(inComp, eq(teamApplications.status, 'approved'), sql`${teamFiles.replacedAt} is null`)).groupBy(teamFiles.kind);
   const since = new Date(now().getTime() - 21 * 86400_000);
   const daily = await db.select({ d: sql<string>`to_char(${teamApplications.createdAt} at time zone 'Asia/Kolkata', 'YYYY-MM-DD')`, n: sql<number>`count(*)::int` })
-    .from(teamApplications).where(and(inComp, sql`${teamApplications.createdAt} >= ${since}`)).groupBy(sql`1`).orderBy(sql`1`);
+    // gte(), not sql`… >= ${since}`: on the live site postgres.js can't send a JS Date in hand-written SQL.
+    .from(teamApplications).where(and(inComp, gte(teamApplications.createdAt, since))).groupBy(sql`1`).orderBy(sql`1`);
   const total = byStatus.reduce((n, x) => n + x.n, 0);
   return c.json({
     total, byStatus: Object.fromEntries(byStatus.map((x) => [x.k, x.n])),
