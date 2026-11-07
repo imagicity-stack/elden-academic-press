@@ -20,7 +20,7 @@
 
 /* The featured card: full width, the picture beside the text on a wider screen */
 .comp__wide { grid-column: 1 / -1; }
-.comp-card--wide .comp-card__img { aspect-ratio: 5 / 4; }
+.comp-card--wide .comp-card__img { aspect-ratio: 4 / 3; }
 @media (min-width: 720px) {
   .comp-card--wide { display: grid; grid-template-columns: 1.15fr 1fr; }
   .comp-card--wide .comp-card__body { justify-content: center; gap: 12px; padding: clamp(24px, 4vw, 48px); }

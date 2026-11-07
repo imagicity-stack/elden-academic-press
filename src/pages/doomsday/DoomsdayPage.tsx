@@ -48,7 +48,7 @@ function Banner({ c, info, className }: { c: TeamComp; info: Info | null; classN
   if (!c.image) return null;
   return (
     <img src={c.image} srcSet={c.imageSmall ? `${c.imageSmall} 800w, ${c.image} 1400w` : undefined} sizes="(min-width: 960px) 46vw, 100vw"
-      width={1400} height={1120} alt={alt} className={className} fetchPriority="high" />
+      width={1400} height={1050} alt={alt} className={className} fetchPriority="high" />
   );
 }
 
