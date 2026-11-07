@@ -14,6 +14,7 @@ import { audit, requireAdmin, requireRole } from './auth.js';
 import { adminNewsletter } from './newsletter.js';
 import { adminCompetitions } from './competitions.js';
 import { adminTeams } from './teams.js';
+import { adminPopups } from './popups.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
 import { adminCategories, adminInventory, adminProducts, adminUploads } from './products.js';
@@ -45,6 +46,10 @@ admin.route('/coupons', adminCoupons);
 admin.route('/enquiries', adminEnquiries);
 admin.route('/resources', adminResources);
 admin.route('/newsletter', adminNewsletter);
+// Popups: managers and the owner.
+admin.use('/popups', requireRole('manager'));
+admin.use('/popups/*', requireRole('manager'));
+admin.route('/popups', adminPopups);
 // Competitions: the store owner only, for now.
 admin.use('/competitions', requireRole('owner'));
 admin.use('/competitions/*', requireRole('owner'));

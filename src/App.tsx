@@ -29,6 +29,7 @@ import { Newsletter } from './pages/Newsletter';
 import { NotFound } from './pages/NotFound';
 import { OrderStatus, Track } from './pages/OrderStatus';
 import { StudyHub } from './pages/StudyHub';
+import { PopupHost } from './components/popups/PopupHost';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -93,6 +94,7 @@ export function App() {
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
+      <PopupHost />
     </SiteProvider>
     </CartProvider>
     </CatalogProvider>

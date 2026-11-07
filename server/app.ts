@@ -12,6 +12,7 @@ import { competitionPage } from './routes/og.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
 import { handleCspReport } from './routes/cspReport.js';
+import { publicPopups } from './routes/popups.js';
 import { meta } from './routes/meta.js';
 import { newsletter } from './routes/newsletter.js';
 import { customerOrders } from './routes/orders.js';
@@ -111,6 +112,7 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/competitions', competitions);
   app.route('/competition-info', competitionInfo);
   app.route('/newsletter', newsletter);
+  app.route('/popups', publicPopups);
   app.route('/meta', meta);
   app.route('/cron', cron);
   app.route('/dev', dev);

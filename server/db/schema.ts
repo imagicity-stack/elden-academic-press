@@ -1,8 +1,9 @@
 // Store database schema (Postgres / Supabase). All money is integer paise.
 import { sql } from 'drizzle-orm';
 import type { OrderSource } from '../../src/shared/attribution.js';
+import type { PopupAudience, PopupContent, PopupDesign, PopupFrequency, PopupTrigger } from '../../src/shared/popups.js';
 import {
-  boolean, check, date, index, integer, jsonb, pgEnum, pgSequence, pgTable, serial, smallint, text, timestamp, uniqueIndex, uuid,
+  boolean, check, date, index, integer, jsonb, pgEnum, pgSequence, pgTable, primaryKey, serial, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
 
 /** One file of an e-book: where it's stored, its file name, and a label for buyers ("Part 1"). */
@@ -940,3 +941,34 @@ export const notificationLog = pgTable('notification_log', {
   sentAt: timestamp('sent_at', { withTimezone: true }),
   createdAt: timestamps.createdAt,
 }, (t) => [index('notification_retry_idx').on(t.status, t.createdAt), index('notification_registration_idx').on(t.registrationId)]);
+
+/* ---------------- Popups (Admin → Popups) ---------------- */
+
+/** A popup built in the admin (src/shared/popups.ts describes each part). */
+export const popups = pgTable('popups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  /** 'draft' | 'live' | 'paused'. Only live ones reach the website. */
+  status: text('status').notNull().default('draft'),
+  /** When several could open on a page, the highest goes first. */
+  priority: integer('priority').notNull().default(0),
+  content: jsonb('content').$type<PopupContent>().notNull(),
+  design: jsonb('design').$type<PopupDesign>().notNull(),
+  trigger: jsonb('trigger').$type<PopupTrigger>().notNull(),
+  audience: jsonb('audience').$type<PopupAudience>().notNull(),
+  frequency: jsonb('frequency').$type<PopupFrequency>().notNull(),
+  startsAt: timestamp('starts_at', { withTimezone: true }),
+  endsAt: timestamp('ends_at', { withTimezone: true }),
+  createdBy: text('created_by').notNull().default(''),
+  ...timestamps,
+}, (t) => [index('popups_status_idx').on(t.status)]);
+
+/** Counts per popup per day (India time): shown, button clicked, closed, signed up. */
+export const popupStats = pgTable('popup_stats', {
+  popupId: uuid('popup_id').notNull().references(() => popups.id, { onDelete: 'cascade' }),
+  day: date('day', { mode: 'string' }).notNull(),
+  views: integer('views').notNull().default(0),
+  clicks: integer('clicks').notNull().default(0),
+  closes: integer('closes').notNull().default(0),
+  conversions: integer('conversions').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.popupId, t.day] })]);
