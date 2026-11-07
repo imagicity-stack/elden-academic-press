@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { body, HttpError, rateLimit, zEmail, zPhone, zText } from '../lib/http.js';
 import { checkNewsletterToken, confirmSubscription, subscribe, unsubscribe, welcome } from '../services/newsletter.js';
+import { countPopup } from '../services/popups.js';
 import { eventIdHeader, report, visitOf } from '../services/tracking.js';
 
 export const newsletter = new Hono<AppEnv>();
@@ -18,7 +19,9 @@ newsletter.post('/subscribe', async (c) => {
     email: zEmail,
     phone: zPhone,
     name: zText(120).optional(),
-    source: z.enum(['footer', 'newsletter-page', 'home']).default('footer'),
+    source: z.enum(['footer', 'newsletter-page', 'home', 'popup']).default('footer'),
+    /** Signed up through this popup: counted as its sign-up. */
+    popupId: z.uuid().optional(),
     consent: z.literal(true, { error: 'Tick the box to confirm you’d like our emails' }),
     /** Honeypot: real people never fill this in. */
     website: z.string().max(0).optional(),
@@ -26,6 +29,7 @@ newsletter.post('/subscribe', async (c) => {
   await rateLimit(deps.db, `subscribe:${c.get('ip')}`, 10, 3600);
   const r = await subscribe(deps, { email: input.email, phone: input.phone, name: input.name, source: input.source, ip: c.get('ip') });
   if (!r.already) {
+    if (input.source === 'popup' && input.popupId) await countPopup(deps.db, input.popupId, 'conversions', deps.now());
     await welcome(deps, r.row, 'newsletter');
     const visit = visitOf(c);
     await report(deps, visit.consent, {

@@ -19,6 +19,7 @@ const Enquiries = lazy(() => import('./pages/Enquiries'));
 const StudyHubAdmin = lazy(() => import('./pages/StudyHub'));
 const Settings = lazy(() => import('./pages/Settings'));
 const NewsletterAdmin = lazy(() => import('./pages/Newsletter'));
+const PopupsAdmin = lazy(() => import('./pages/Popups'));
 const CompetitionsAdmin = lazy(() => import('./pages/Competitions'));
 
 export interface Me { userId: string; email: string; name: string; role: 'owner' | 'manager' | 'staff'; aal: string; mfaRequired: boolean; mfaSatisfied: boolean }
@@ -205,7 +206,7 @@ function SetPassword({ onDone }: { onDone: () => void }) {
 
 /* ---------------- Layout ---------------- */
 
-const NAV: { to: string; label: string; icon: string; count?: keyof Counts; owner?: boolean; end?: boolean }[] = [
+const NAV: { to: string; label: string; icon: string; count?: keyof Counts; owner?: boolean; manage?: boolean; end?: boolean }[] = [
   { to: '/admin', label: 'Dashboard', icon: 'M3 12h7V3H3zM14 21h7v-9h-7zM14 3v5h7V3zM3 21h7v-5H3z', end: true },
   { to: '/admin/orders', label: 'Orders', icon: 'M6 2h12l2 5v14H4V7zM4 7h16M9 11h6', count: 'toFulfil' },
   { to: '/admin/products', label: 'Products', icon: 'M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM18 20V7M8 8h6' },
@@ -213,6 +214,7 @@ const NAV: { to: string; label: string; icon: string; count?: keyof Counts; owne
   { to: '/admin/customers', label: 'Customers', icon: 'M16 19a4 4 0 0 0-8 0M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19a3 3 0 0 0-3-3M4 19a3 3 0 0 1 3-3' },
   { to: '/admin/discounts', label: 'Discounts', icon: 'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01' },
   { to: '/admin/newsletter', label: 'Newsletter', icon: 'M3 6h18v12H3zM3 7l9 6 9-6' },
+  { to: '/admin/popups', label: 'Popups', icon: 'M4 5h16v14H4zM8 9h8M8 13h5M15 16l3 3', manage: true },
   { to: '/admin/competitions', label: 'Competitions', icon: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3', owner: true },
   { to: '/admin/enquiries', label: 'Enquiries', icon: 'M4 5h16v11H8l-4 4zM8 9h8M8 12h5', count: 'newEnquiries' },
   { to: '/admin/study-hub', label: 'Study Hub', icon: 'M12 4v12M7 11l5 5 5-5M5 20h14' },
@@ -239,7 +241,7 @@ function Shell({ me }: { me: Me }) {
             <button type="button" className="ad-side__menu" onClick={() => setMenu(!menu)} aria-expanded={menu}>{menu ? 'Close' : 'Menu'}</button>
           </div>
           <nav className="ad-nav">
-            {NAV.filter((n) => !n.owner || me.role === 'owner').map((n) => (
+            {NAV.filter((n) => (!n.owner || me.role === 'owner') && (!n.manage || canManage(me))).map((n) => (
               <div key={n.to} className="ad-nav__item">
                 <NavLink to={n.to} end={n.end} className={({ isActive }) => 'ad-nav__link' + (isActive ? ' is-active' : '')}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d={n.icon} /></svg>
@@ -279,6 +281,8 @@ function Shell({ me }: { me: Me }) {
               <Route path="/admin/newsletter" element={<NewsletterAdmin />} />
               <Route path="/admin/newsletter/:tab" element={<NewsletterAdmin />} />
               <Route path="/admin/newsletter/campaigns/:id" element={<NewsletterAdmin />} />
+              <Route path="/admin/popups" element={<PopupsAdmin />} />
+              <Route path="/admin/popups/:id" element={<PopupsAdmin />} />
               <Route path="/admin/competitions" element={<CompetitionsAdmin />} />
               <Route path="/admin/competitions/:slug" element={<CompetitionsAdmin />} />
               <Route path="/admin/competitions/:slug/teams/:id" element={<CompetitionsAdmin />} />

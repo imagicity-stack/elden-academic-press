@@ -1062,6 +1062,49 @@ ALTER TABLE "orders" ADD COLUMN "channel" text DEFAULT 'unknown' NOT NULL;--> st
 ALTER TABLE "orders" ADD COLUMN "source" jsonb;--> statement-breakpoint
 CREATE INDEX "orders_channel_idx" ON "orders" USING btree ("channel");
 
+-- ===== 0014_popups =====
+
+CREATE TABLE "popup_stats" (
+	"popup_id" uuid NOT NULL,
+	"day" date NOT NULL,
+	"views" integer DEFAULT 0 NOT NULL,
+	"clicks" integer DEFAULT 0 NOT NULL,
+	"closes" integer DEFAULT 0 NOT NULL,
+	"conversions" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "popup_stats_popup_id_day_pk" PRIMARY KEY("popup_id","day")
+);
+--> statement-breakpoint
+CREATE TABLE "popups" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" text NOT NULL,
+	"status" text DEFAULT 'draft' NOT NULL,
+	"priority" integer DEFAULT 0 NOT NULL,
+	"content" jsonb NOT NULL,
+	"design" jsonb NOT NULL,
+	"trigger" jsonb NOT NULL,
+	"audience" jsonb NOT NULL,
+	"frequency" jsonb NOT NULL,
+	"starts_at" timestamp with time zone,
+	"ends_at" timestamp with time zone,
+	"created_by" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "popup_stats" ADD CONSTRAINT "popup_stats_popup_id_popups_id_fk" FOREIGN KEY ("popup_id") REFERENCES "public"."popups"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "popups_status_idx" ON "popups" USING btree ("status");--> statement-breakpoint
+-- Only the store's server reads these tables: lock them against Supabase's public API keys.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['popups', 'popup_stats'] LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);
+    END IF;
+  END LOOP;
+END $$;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -1080,7 +1123,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('1a5897f0da323e1f734702bbbd3a84d2b6e97939b93b98b60b9ceee6df9b1e40', 1793889801033),
   ('eb2aca73b402e91f1681d3967203712ba529f8785b8d68e4e47e9704ccef2790', 1793906418992),
   ('67ca6b68c889731c089bd83f44e3b7dd68024d6f48a03c96ccf0bb5770284db4', 1793974722937),
-  ('ca67e5eb7c1a0c925e749fd5047d33769bce7929f647b088b20df06a62e2efb8', 1794060116138);
+  ('ca67e5eb7c1a0c925e749fd5047d33769bce7929f647b088b20df06a62e2efb8', 1794060116138),
+  ('7489535686d0e412f9126ae7ae8eef71e2658b9c8cc8a2c0f7441b09e41c36ec', 1794075566599);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

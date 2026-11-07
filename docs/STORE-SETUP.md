@@ -284,6 +284,21 @@ The site notes how each visitor arrived: the link's UTM tags, an ad-click marker
 - Instagram bio: `https://eldenap.in/?utm_source=instagram&utm_medium=bio`
 - A poster's QR code: `https://eldenap.in/?utm_source=poster&utm_medium=qr&utm_campaign=book-fair`
 
+## 14. Popups
+
+**One-time:** run [`0014_popups.sql`](supabase-updates/0014_popups.sql) in Supabase → SQL Editor before this version goes live.
+
+**Admin → Popups** (managers and the owner): **New popup** opens a gallery of templates (welcome offer with a discount code, exit-intent coupon, announcement bar, competition promo, new book, big launch, blank). The builder has five tabs, with a live preview for computer and phone:
+- *Content:* the goal (email sign-up, discount code, link or announcement), heading, text, a picture, the button, a discount code (visitors can copy it or apply it to their cart), a “No thanks” link and an optional countdown. Sign-ups join the newsletter with the same consent box as the rest of the site and get the welcome email.
+- *Design:* centred, slide-in, top or bottom bar, or full screen; size, colours (or a ready palette), heading style, rounding, how much the page is dimmed, and the entrance.
+- *When it opens:* after some seconds, at a scroll depth, when the visitor is about to leave (phones: after some seconds), on the Nth page of a visit, or from a link ending in `#popup-<id>`. How often: once per visit, once every few days, or only once, and not again after a sign-up or click.
+- *Who sees it:* pages (e.g. `/books/*`), computers or phones, first visit or returning, signed in or not, where they came from (Meta ads, Google search… as in Orders → Where orders came from), a campaign name, and whether their cart has books.
+- *Schedule:* start and end dates (India time), and a priority when two could open on the same page.
+
+**Publish** makes it live; the website picks it up within a minute. **Preview on the site** opens it on the real site straight away (draft or not, nothing counted). The results show how many times it was shown, sign-ups or clicks, the rate, closes, a day-by-day chart, and paid orders that used its discount code. Visits by people signed in to the admin aren't counted.
+
+**Built in for every popup:** never at checkout or on order pages, never over the cookie choice or another window, at most one per page, two minutes between different popups, Esc and × always close it, keyboard focus stays inside a centred one, full-screen and centred popups become a bottom sheet on phones (Google lowers the ranking of pages with full-screen popups on phones), and email sign-up popups are never shown to signed-in student accounts.
+
 ## Running costs
 
 | Service | Cost |

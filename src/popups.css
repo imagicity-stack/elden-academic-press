@@ -1,0 +1,135 @@
+/* Popups built in Admin → Popups (src/components/popups). Colours, rounding and the overlay come
+   from each popup's design as CSS variables. On phones a centred or full-screen popup becomes a
+   bottom sheet. ".pp--contained" draws it inside the builder's preview frame instead of the window. */
+
+.pp { --pp-shadow: 0 30px 80px -30px rgba(11, 18, 32, .55); color: var(--pp-text); font-family: var(--f-text, system-ui, -apple-system, 'Segoe UI', sans-serif); }
+.pp *, .pp *::before, .pp *::after { box-sizing: border-box; }
+.pp .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+/* Where it sits */
+.pp--modal, .pp--fullscreen { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; }
+.pp--fullscreen { padding: 0; }
+.pp--slide { position: fixed; z-index: 80; bottom: 20px; right: 20px; width: min(380px, calc(100vw - 32px)); }
+.pp--slide.pp--bottom-left { right: auto; left: 20px; }
+.pp--slide.pp--small { width: min(330px, calc(100vw - 32px)); }
+.pp--slide.pp--large { width: min(440px, calc(100vw - 32px)); }
+.pp--bar { left: 0; right: 0; z-index: 80; }
+.pp--bar.pp--top { position: relative; }
+.pp--bar.pp--bottom { position: fixed; bottom: 0; }
+.pp__overlay { position: absolute; inset: 0; background: rgba(11, 18, 32, var(--pp-overlay)); }
+
+/* The card */
+.pp__box { position: relative; width: 100%; max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; background: var(--pp-bg); color: var(--pp-text); border-radius: var(--pp-radius); box-shadow: var(--pp-shadow); outline: none; }
+.pp--modal .pp__box { max-width: 460px; }
+.pp--modal.pp--small .pp__box { max-width: 380px; }
+.pp--modal.pp--large .pp__box { max-width: 640px; }
+.pp--fullscreen .pp__box { max-width: none; height: 100%; max-height: none; border-radius: 0; display: grid; place-items: center; box-shadow: none; }
+.pp--fullscreen .pp__body { max-width: 680px; padding: 48px 32px; }
+.pp--img-side .pp__box { display: grid; grid-template-columns: 42% 1fr; align-items: stretch; }
+.pp--slide.pp--img-side .pp__box { grid-template-columns: 112px 1fr; }
+.pp--fullscreen.pp--img-side .pp__box { grid-template-columns: 1fr 1fr; place-items: stretch; }
+.pp--fullscreen.pp--img-side .pp__body { align-self: center; }
+.pp--img-background .pp__box { background-image: linear-gradient(rgba(11, 18, 32, .45), rgba(11, 18, 32, .62)), var(--pp-bg-image); background-size: cover; background-position: center; }
+.pp__img { display: block; width: 100%; height: 100%; max-height: 240px; object-fit: cover; }
+.pp--img-side .pp__img { max-height: none; }
+.pp--slide.pp--img-top .pp__img { max-height: 180px; }
+
+.pp__body { display: flex; flex-direction: column; gap: 12px; padding: 28px 28px 24px; }
+.pp--slide .pp__body { padding: 20px 20px 18px; gap: 10px; }
+.pp--center .pp__body { align-items: center; text-align: center; }
+.pp--left .pp__body { align-items: flex-start; text-align: left; }
+
+/* Words */
+.pp__eyebrow { font: 700 11.5px/1.2 var(--f-mono, ui-monospace, monospace); letter-spacing: .1em; text-transform: uppercase; opacity: .72; }
+.pp__heading { margin: 0; padding-right: 22px; font: 700 clamp(22px, 3vw, 30px)/1.12 var(--f-text, system-ui, sans-serif); letter-spacing: -.015em; color: inherit; }
+.pp--center .pp__heading { padding: 0 22px; }
+.pp--small .pp__heading { font-size: 21px; }
+.pp--large .pp__heading { font-size: clamp(26px, 3.6vw, 38px); }
+.pp--fullscreen .pp__heading { font-size: clamp(34px, 5vw, 60px); }
+.pp--font-serif .pp__heading { font-family: var(--f-serif, Georgia, serif); font-weight: 600; letter-spacing: -.01em; }
+.pp--font-display .pp__heading { font-family: var(--f-display, system-ui, sans-serif); font-weight: 800; letter-spacing: -.025em; }
+.pp__text { margin: 0; font-size: 15.5px; line-height: 1.55; opacity: .86; }
+.pp__text p, .pp__text ul, .pp__text ol { margin: 0 0 8px; }
+.pp__text p:last-child { margin-bottom: 0; }
+.pp__text a { color: inherit; text-decoration: underline; }
+.pp--fullscreen .pp__text { font-size: 18px; }
+.pp__countdown .comp-countdown { font-size: 14px; color: inherit; opacity: .9; }
+.pp__countdown b { font-weight: 700; }
+
+/* Buttons */
+.pp__primary { appearance: none; border: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 24px; background: var(--pp-accent); color: var(--pp-accent-text); font: 700 15px/1 var(--f-text, system-ui, sans-serif); border-radius: calc(var(--pp-radius) * .6); transition: transform .15s, filter .15s; }
+.pp--center .pp__primary { width: 100%; }
+.pp__primary:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+.pp__primary:disabled { opacity: .6; cursor: progress; }
+.pp__primary:focus-visible, .pp__dismiss:focus-visible, .pp__close:focus-visible, .pp__coupon-btn:focus-visible { outline: 3px solid var(--pp-accent); outline-offset: 2px; }
+.pp__primary--small { min-height: 34px; padding: 0 14px; font-size: 13.5px; width: auto !important; }
+.pp__dismiss { appearance: none; border: 0; background: none; padding: 4px 6px; color: inherit; opacity: .65; font: 500 14px var(--f-text, system-ui, sans-serif); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.pp__dismiss:hover { opacity: 1; }
+.pp__close { position: absolute; top: 10px; right: 10px; z-index: 2; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--pp-bg) 78%, transparent); color: var(--pp-text); cursor: pointer; }
+.pp__close svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.pp--img-background .pp__close { background: rgba(255, 255, 255, .18); color: #FFFFFF; }
+
+/* Email sign-up */
+.pp__form { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.pp__input { width: 100%; height: 46px; padding: 0 14px; border: 1.5px solid color-mix(in srgb, var(--pp-text) 22%, transparent); border-radius: calc(var(--pp-radius) * .5); background: color-mix(in srgb, var(--pp-bg) 94%, var(--pp-text)); color: var(--pp-text); font: 400 15px var(--f-text, system-ui, sans-serif); }
+.pp__input::placeholder { color: color-mix(in srgb, var(--pp-text) 55%, transparent); }
+.pp__input:focus { outline: none; border-color: var(--pp-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pp-accent) 25%, transparent); }
+.pp__agree { display: flex; align-items: flex-start; gap: 8px; text-align: left; font-size: 12.5px; line-height: 1.45; opacity: .8; }
+.pp__agree input { margin-top: 2px; accent-color: var(--pp-accent); flex: none; }
+.pp__error { color: #E5484D; font-size: 13.5px; text-align: left; }
+
+/* Discount code */
+.pp__coupon { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px; border: 2px dashed color-mix(in srgb, var(--pp-text) 38%, transparent); border-radius: calc(var(--pp-radius) * .6); }
+.pp__code { font: 700 22px/1 var(--f-mono, ui-monospace, monospace); letter-spacing: .08em; padding: 4px 8px; color: inherit; background: none; }
+.pp__coupon-btn { appearance: none; border: 1.5px solid currentColor; background: transparent; color: inherit; border-radius: 999px; padding: 7px 13px; font: 600 13px var(--f-text, system-ui, sans-serif); cursor: pointer; }
+.pp__coupon--compact { width: auto; padding: 4px 6px; border-width: 1.5px; }
+.pp__coupon--compact .pp__code { font-size: 14px; }
+.pp__coupon--compact .pp__coupon-btn { padding: 4px 9px; font-size: 12px; }
+
+/* Bar */
+.pp__bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; min-height: 44px; padding: 8px 52px 8px 16px; background: var(--pp-bg); color: var(--pp-text); font-size: 14.5px; line-height: 1.35; box-shadow: 0 1px 0 rgba(11, 18, 32, .08); }
+.pp--bottom .pp__bar { box-shadow: 0 -10px 30px -18px rgba(11, 18, 32, .45); }
+.pp--left .pp__bar { justify-content: flex-start; }
+.pp__bar-text b { font-weight: 700; }
+.pp__bar-text span { opacity: .85; }
+.pp__bar .pp__close { top: 50%; right: 8px; width: 30px; height: 30px; transform: translateY(-50%); background: transparent; }
+
+/* Phones: centred and full-screen popups become a bottom sheet; slide-ins span the width. */
+@media (max-width: 640px) {
+  .pp--modal:not(.pp--contained), .pp--fullscreen:not(.pp--contained) { place-items: end center; padding: 0; }
+  .pp--modal:not(.pp--contained) .pp__box, .pp--fullscreen:not(.pp--contained) .pp__box { max-width: none; height: auto; max-height: 88dvh; border-radius: var(--pp-radius) var(--pp-radius) 0 0; display: block; animation-name: pp-up !important; }
+  .pp--fullscreen:not(.pp--contained) .pp__body { padding: 28px 22px 26px; }
+  .pp--fullscreen:not(.pp--contained) .pp__heading { font-size: 28px; }
+  .pp:not(.pp--contained).pp--img-side .pp__box { display: block; }
+  .pp:not(.pp--contained) .pp__img { max-height: 180px; }
+  .pp--slide:not(.pp--contained) { left: 12px !important; right: 12px !important; bottom: 12px; width: auto !important; }
+  .pp__bar { font-size: 13.5px; }
+}
+.pp--contained.pp--mobile.pp--modal, .pp--contained.pp--mobile.pp--fullscreen { place-items: end center; padding: 0; }
+.pp--contained.pp--mobile.pp--modal .pp__box, .pp--contained.pp--mobile.pp--fullscreen .pp__box { max-width: none; height: auto; max-height: 88%; border-radius: var(--pp-radius) var(--pp-radius) 0 0; display: block; animation-name: pp-up !important; }
+.pp--contained.pp--mobile.pp--fullscreen .pp__body { padding: 28px 22px 26px; }
+.pp--contained.pp--mobile.pp--fullscreen .pp__heading { font-size: 28px; }
+.pp--contained.pp--mobile.pp--img-side .pp__box { display: block; }
+.pp--contained.pp--mobile .pp__img { max-height: 180px; }
+.pp--contained.pp--mobile.pp--slide { left: 12px !important; right: 12px !important; bottom: 12px; width: auto !important; }
+
+/* Inside the builder's preview frame */
+.pp--contained.pp--modal, .pp--contained.pp--fullscreen { position: absolute; z-index: 1; }
+.pp--contained .pp__box { max-height: calc(100% - 32px); }
+.pp--contained.pp--fullscreen .pp__box { max-height: none; }
+.pp--contained.pp--slide { position: absolute; z-index: 1; }
+.pp--contained.pp--bar { position: absolute; z-index: 1; }
+.pp--contained.pp--bar.pp--top { top: 0; }
+
+/* Motion (none for people who ask for less) */
+@keyframes pp-fade { from { opacity: 0; } }
+@keyframes pp-zoom { from { opacity: 0; transform: scale(.92); } }
+@keyframes pp-up { from { opacity: 0; transform: translateY(28px); } }
+@keyframes pp-down { from { transform: translateY(-100%); } }
+.pp__overlay { animation: pp-fade .3s ease-out both; }
+.pp--anim-fade .pp__box, .pp--anim-fade .pp__bar { animation: pp-fade .35s ease-out both; }
+.pp--anim-zoom .pp__box { animation: pp-zoom .38s cubic-bezier(.2, .9, .3, 1.15) both; }
+.pp--anim-zoom .pp__bar { animation: pp-fade .35s ease-out both; }
+.pp--anim-slide .pp__box, .pp--anim-slide.pp--bottom .pp__bar { animation: pp-up .42s cubic-bezier(.2, .8, .2, 1) both; }
+.pp--anim-slide.pp--top .pp__bar { animation: pp-down .42s cubic-bezier(.2, .8, .2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .pp *, .pp__overlay { animation: none !important; transition: none !important; } }
