@@ -15,7 +15,7 @@ import { isStateCode, stateName } from '../lib/states.js';
 import { ageOn, checkTeam, RESULT_TEXT, STATUS_TEXT, type TeamInput } from '../../src/shared/teams.js';
 import {
   assertOpen, canUpload, code, datesOf, ID_TYPES, loadApplication, mediaUrl, membersOf, noticeReaches, registrationState, requireAccess,
-  sendTeamEmail, settingsFor, teamCompetition, type App, type Member, type TeamComp, type TeamFile, type TeamSettings,
+  sendTeamEmail, sendTeamStaffAlert, settingsFor, teamCompetition, type App, type Member, type TeamComp, type TeamFile, type TeamSettings,
 } from '../services/teams.js';
 import { briefFor } from '../services/briefs.js';
 import { profileOf, requireCustomer } from './account.js';
@@ -208,7 +208,7 @@ teams.post('/:slug/team', async (c) => {
     return row;
   });
   const x = (await loadApplication(db, app.id))!;
-  const mail = sendTeamEmail(deps, comp, x.app, x.members, 'received');
+  const mail = Promise.all([sendTeamEmail(deps, comp, x.app, x.members, 'received'), sendTeamStaffAlert(deps, comp, x.app, x.members, 'new')]);
   if (deps.defer) deps.defer(mail); else await mail;
   return c.json({ application: view(comp, s, x, me, now()) }, 201);
 });
@@ -241,7 +241,9 @@ teams.put('/:slug/team/:id{[0-9a-f-]{36}}', async (c) => {
   const kept = new Set(checked.team.members.map((m) => m.idDocKey));
   for (const k of existing) if (!kept.has(k)) await deps.storage.remove('competition-entries', k).catch(() => {});
   const y = (await loadApplication(db, x.app.id))!;
-  const mail = sendTeamEmail(deps, comp, y.app, y.members, 'updated');
+  // The organiser hears about it only when it comes back after "Request changes" (a pending one is already in the queue).
+  const mail = Promise.all([sendTeamEmail(deps, comp, y.app, y.members, 'updated'),
+    x.app.status === 'changes_requested' ? sendTeamStaffAlert(deps, comp, y.app, y.members, 'resubmitted') : null]);
   if (deps.defer) deps.defer(mail); else await mail;
   return c.json({ application: view(comp, s, y, me, now()) });
 });
