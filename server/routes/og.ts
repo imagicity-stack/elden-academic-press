@@ -31,7 +31,8 @@ export async function competitionPage(deps: Deps, slug: string, origin: string):
   const site = deps.env.SITE_URL.replace(/\/$/, '');
   const title = `${comp.title} — Elden Academic Press`;
   const description = (comp.tagline || 'A competition by Elden Academic Press.').slice(0, 200);
-  const image = comp.image ? (/^https:\/\//.test(comp.image) ? comp.image : `${site}${comp.image.startsWith('/') ? '' : '/'}${comp.image}`) : null;
+  const pic = comp.shareImage || comp.image;
+  const image = pic ? (/^https:\/\//.test(pic) ? pic : `${site}${pic.startsWith('/') ? '' : '/'}${pic}`) : null;
   const url = `${site}/competitions/${comp.slug}`;
   let html = await indexHtml(origin);
   html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`);
@@ -40,6 +41,7 @@ export async function competitionPage(deps: Deps, slug: string, origin: string):
   html = setMeta(html, 'property', 'og:description', description);
   html = setMeta(html, 'property', 'og:url', url);
   if (image) html = setMeta(html, 'property', 'og:image', image);
+  if (image) html = setMeta(html, 'property', 'og:image:alt', comp.title);
   html = setMeta(html, 'name', 'twitter:card', image ? 'summary_large_image' : 'summary');
   if (comp.unlisted) html = html.replace('</head>', '    <meta name="robots" content="noindex" />\n  </head>');
   html = html.replace('</head>', `    <link rel="canonical" href="${esc(url)}" />\n  </head>`);

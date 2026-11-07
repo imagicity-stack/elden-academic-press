@@ -1,13 +1,21 @@
-// DoomsDay Diaries: the official rules and terms, from "Doom Picked the Wrong Town: Terms
-// and Conditions and Official Rules" (6 Nov 2026). Lines changed to match how registration
-// works on the website are marked CHANGED; keep the official PDF in step with them.
+// DoomsDay Diaries: the official rules and terms, from the Organiser's "Terms and Conditions
+// and Official Rules" (6 Nov 2026). Lines changed to match how registration works on the
+// website are marked CHANGED; keep the official PDF in step with them.
+// The story brief (and the comic's title and hashtag) is not here: it's kept on the server
+// (server/services/briefs.ts) and shown only to approved teams.
 // Text uses the small Markdown of RichText: **bold**, lists with "1." or "-".
 
 export const INSTAGRAM = 'eldenacademicpress';
-export const HASHTAG = '#DoomPickedTheWrongTown';
 
-export const TOPIC = 'Doom Picked the Wrong Town';
-export const HOOK = 'Doctor Doom has given your town 24 hours. Create the hero who stops him. Submit a comic of at least 40 pages by 5 December 2026, 11:59 PM IST.';
+/** One line for the public page: what you make, without giving the story away. */
+export const HOOK = 'Form a team, create an original hero and make a comic of at least 40 pages. The story brief is revealed once your team is approved.';
+
+/** How it works, for the public page. */
+export const STEPS: [string, string][] = [
+  ['Register your team', 'Sign in with Google and register 2 to 4 members in one form, with a Writer and an Artist at least.'],
+  ['Get approved', 'We check every registration, usually within 48 hours, and email you.'],
+  ['Unlock the brief', 'Your team page opens the secret story brief. Make your comic and upload it by the deadline.'],
+];
 
 export const RULES_SHORT = `1. **Who can enter:** students and members of schools, colleges and other institutions in India, aged 8 to 24 on 6 November 2026. Entry is free.
 2. **Teams only:** solo entries are not accepted. A team has 2 to 4 members. School and college teams are from the same school or college; teams from other institutions may mix. Every team needs a Writer and an Artist.
@@ -59,14 +67,6 @@ export const PROFILES_AND_CHECKS = `- Every member gives their real name, date o
 - Employees of the Organiser and their immediate families may enter but cannot win prizes.`;
 // CHANGED from the PDF: an ID document for every member at registration (second point).
 
-export const BRIEF_LEAD = 'Doom picked the wrong town. He has 24 hours. Your town has one hero. Draw them.';
-export const BRIEF = 'At midnight, the sky cracks open over your streets. Every screen in the city flashes one message: “24 HOURS. THEN YOUR TOWN IS MINE.” The world’s heroes are too far away. Your town has one chance: a hero nobody has heard of. Yet.';
-export const BRIEF_MUST = `1. **An original hero** from your town, with a name, a power and a reason to fight.
-2. **An original General:** the monster or warrior Doctor Doom sends first to attack your town. You design it and name it.
-3. **Doctor Doom** as the villain behind the attack. He may appear in the story, but your hero and your General must be the stars.
-4. **A real town or city in India,** ideally your own, with places a reader could recognise.
-5. **A 24-hour story:** the threat begins and ends within one day.`;
-
 export const PAGES = `1. **Minimum 40 story pages, maximum 60.** The cover, title page and credits page do not count towards the 40.
 2. A page is one portrait A4 sheet (or the same shape in digital art).
 3. Every story page has at least 2 panels. A full-page splash panel is allowed on up to 4 pages.
@@ -91,7 +91,7 @@ export const INSTAGRAM_RULES = `Every team member aged 13 or above must follow t
 2. Instagram does not allow accounts for children under 13. Members under 13 do not need an account. A parent or guardian may follow the page on their behalf.
 3. The Organiser may check follows at the shortlist stage. A shortlisted member aged 13 or above who is not following may be asked to follow within 24 hours, and a team may be disqualified if they do not.
 4. People’s Choice votes are the likes on the Organiser’s official post for each shortlisted comic. Bought likes, bot accounts or like-exchange groups lead to disqualification.
-5. Teams may share their own entry on social media after submitting. Tag @${INSTAGRAM} and use ${HASHTAG}.
+5. Teams may share their own entry on social media after submitting. Tag @${INSTAGRAM} and use the hashtag given with the story brief.
 6. This competition is not sponsored, endorsed, administered by or associated with Instagram or Meta. Every entrant releases Instagram and Meta from any liability connected with it.`;
 
 export const ORIGINAL = `1. The hero, the General, the story, the dialogue and the art must be created by the team members for this competition.
@@ -132,7 +132,7 @@ export const PRIZE_RULES = `1. Tickets or e-vouchers are for a film, city and sh
 6. Any tax on a prize is the winner’s responsibility.`;
 
 export const TERMS: [string, string][] = [
-  ['1. Organiser', 'The competition “Doom Picked the Wrong Town” is run by Elden Academic Press, the publishing imprint of The Elden Heights School, Silwar, Hazaribagh, Jharkhand (“the Organiser”). Contact: hello@eldenap.in. Website: eldenap.in.'],
+  ['1. Organiser', 'The competition “DoomsDay Diaries” is run by Elden Academic Press, the publishing imprint of The Elden Heights School, Silwar, Hazaribagh, Jharkhand (“the Organiser”). Contact: hello@eldenap.in. Website: eldenap.in.'],
   ['2. Ownership of entries', `1. The team keeps the copyright in its own hero, General, story, dialogue and art.
 2. Each team member gives the Organiser a free, non-exclusive, worldwide licence for 3 years to display, reproduce and share the entry, in full or in part, on eldenap.in, on the Organiser’s social media and in a free digital showcase. Credit is given as first name, age group and city.
 3. The Organiser will not sell the comics or use them in paid products.
@@ -166,5 +166,5 @@ A prize given to a team later found ineligible may be taken back.`],
   ['9. Law and disputes', 'These Terms are governed by the laws of India. Any dispute is subject to the courts at Hazaribagh, Jharkhand.'],
   ['10. Contact', 'Questions about the competition: hello@eldenap.in.'],
 ];
-// CHANGED from the PDF: 3.1 (who registers and submits) and 4.1 (ID documents and
-// guardian details are collected).
+// CHANGED from the PDF: 1 (named by the competition, not the story), 3.1 (who registers and
+// submits) and 4.1 (ID documents and guardian details are collected).

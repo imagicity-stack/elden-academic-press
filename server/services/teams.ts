@@ -30,7 +30,8 @@ export interface TeamSettings {
   bannerKey: string | null;
   artKey: string | null;
   sponsorKeys: string[];
-  /** The official rules and terms as a PDF (and an optional separate topic document). */
+  /** The official rules and terms as a PDF (and an optional separate topic document). Approved teams only:
+   *  they name the story's title, which the public page keeps secret. */
   rulesDocKey: string | null;
   topicDocKey: string | null;
   /** Overrides of the dates in the code (ISO with +05:30). */
@@ -142,7 +143,7 @@ export async function sendTeamEmail(deps: Deps, c: TeamComp, app: App, members: 
       },
       approved: {
         subject: `Approved: ${app.teamName} is in ${c.title}`, title: 'Your team is approved',
-        intro: `Great news: ${esc(app.teamName)} is approved. The competition section is now open on your team page: upload your comic and your rough pencil sketches by <strong>${esc(istDateTime(d.submissionDeadline))}</strong>.`,
+        intro: `Great news: ${esc(app.teamName)} is approved. The competition section is now open on your team page: read the story brief there, then upload your comic and your rough pencil sketches by <strong>${esc(istDateTime(d.submissionDeadline))}</strong>.`,
         body: section(facts) + (app.reviewNote ? note(app.reviewNote) : ''), cta: 'Open the competition section',
       },
       changes: {

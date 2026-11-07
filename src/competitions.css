@@ -9,11 +9,36 @@
 
 .comp-card { display: flex; flex-direction: column; height: 100%; border: 1.5px solid var(--line); background: #FFFFFF; color: inherit; text-decoration: none; transition: transform .25s, box-shadow .25s; }
 .comp-card:hover, .comp-card:focus-visible { transform: translateY(-3px); box-shadow: 0 18px 40px -24px rgba(11, 18, 32, .35); }
-.comp-card__img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--paper); }
+.comp-card__media { position: relative; overflow: hidden; background: var(--paper); }
+.comp-card__img { display: block; width: 100%; height: 100%; aspect-ratio: 16 / 9; object-fit: cover; transition: transform .5s; }
+.comp-card:hover .comp-card__img { transform: scale(1.03); }
 .comp-card__body { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px 20px 22px; }
 .comp-card__title { margin: 0; font: 650 clamp(20px, 2.4vw, 24px)/1.15 var(--f-display); letter-spacing: -.02em; color: var(--ink); }
 .comp-card__tag { margin: 0; font: 400 15px/1.5 var(--f-text); color: var(--muted); }
 .comp-card__when { margin-top: auto; padding-top: 6px; font: 500 13.5px/1.4 var(--f-text); color: var(--ink); }
+.comp-card__go { font: 600 15px var(--f-text); color: var(--accent); }
+
+/* The featured card: full width, the picture beside the text on a wider screen */
+.comp__wide { grid-column: 1 / -1; }
+.comp-card--wide .comp-card__img { aspect-ratio: 5 / 4; }
+@media (min-width: 720px) {
+  .comp-card--wide { display: grid; grid-template-columns: 1.15fr 1fr; }
+  .comp-card--wide .comp-card__body { justify-content: center; gap: 12px; padding: clamp(24px, 4vw, 48px); }
+  .comp-card--wide .comp-card__title { font-size: clamp(28px, 3.6vw, 44px); }
+  .comp-card--wide .comp-card__tag { font-size: 17px; }
+  .comp-card--wide .comp-card__when { margin-top: 4px; }
+}
+
+/* A competition with a comic look of its own (DoomsDay Diaries) */
+.comp-card--comic { border: 3px solid #0B1220; box-shadow: 6px 6px 0 #0B1220; background: #FFF8E6; background-image: radial-gradient(circle at 1.5px 1.5px, rgba(11, 18, 32, .12) 1.3px, transparent 1.7px); background-size: 9px 9px; }
+.comp-card--comic:hover, .comp-card--comic:focus-visible { transform: translate(-3px, -3px); box-shadow: 9px 9px 0 #0B1220; }
+.comp-card--comic .comp-card__media { border-bottom: 3px solid #0B1220; }
+@media (min-width: 720px) { .comp-card--comic.comp-card--wide .comp-card__media { border-bottom: 0; border-right: 3px solid #0B1220; } }
+.comp-card--comic .comp-card__title { font-weight: 800; text-transform: uppercase; letter-spacing: -.025em; color: #0B1220; }
+.comp-card--comic .comp-card__tag { color: #0B1220; }
+.comp-card--comic .comp-badge { border: 2.5px solid #0B1220; box-shadow: 2px 2px 0 #0B1220; font-weight: 700; }
+.comp-card--comic .comp-badge--open { background: #d9ff4d; color: #0B1220; }
+.comp-card--comic .comp-card__go { align-self: flex-start; margin-top: 6px; padding: 12px 18px; background: #FF3B1F; color: #FFFFFF; border: 3px solid #0B1220; box-shadow: 4px 4px 0 #0B1220; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
 
 .comp-badge { display: inline-flex; align-items: center; padding: 5px 9px; font: 500 11.5px/1 var(--f-mono); letter-spacing: .05em; text-transform: uppercase; background: var(--paper); color: var(--ink); }
 .comp-badge--open { background: var(--accent); color: #FFFFFF; }

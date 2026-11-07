@@ -42,13 +42,13 @@
 .dd-hero .comp-countdown { color: rgba(255, 255, 255, .8); }
 .dd-hero .comp-countdown b { color: var(--dd-acid); }
 .dd-link-light { color: #FFFFFF; font: 600 15px var(--f-text); text-decoration: underline; text-underline-offset: 4px; }
-.dd-hero__art { position: relative; }
-.dd-art-svg, .dd-banner { display: block; width: 100%; height: auto; border: 4px solid var(--dd-ink); box-shadow: 8px 8px 0 var(--dd-ink); background: var(--dd-ink); }
-.dd-banner { aspect-ratio: 3 / 2; object-fit: cover; }
+/* The banner comes first on a phone, beside the text on a wide screen. */
+.dd-hero__art { position: relative; order: -1; }
+@media (min-width: 960px) { .dd-hero__art { order: 0; } }
+.dd-banner { display: block; width: 100%; height: auto; border: 4px solid var(--dd-ink); box-shadow: 8px 8px 0 var(--dd-ink); background: var(--dd-ink); transform: rotate(.6deg); }
+@media (max-width: 959px) { .dd-hero .dd-title { font-size: clamp(40px, 11vw, 80px); } .dd-hero .dd-caption { display: none; } }
 .dd-bubble { position: relative; padding: 14px 18px; background: #FFFFFF; color: var(--dd-ink); border: 3px solid var(--dd-ink); border-radius: 22px; font: 500 15.5px/1.5 var(--f-text); box-shadow: 4px 4px 0 var(--dd-ink); }
 .dd-bubble::after { content: ''; position: absolute; left: 34px; bottom: -16px; border: 8px solid transparent; border-top: 14px solid var(--dd-ink); }
-.dd-bubble--hero { position: absolute; right: 8px; bottom: -14px; max-width: 78%; font: 800 clamp(13px, 2.4vw, 17px)/1.25 var(--f-display); text-transform: uppercase; transform: rotate(2deg); }
-.dd-bubble--hero::after { left: auto; right: 40px; bottom: auto; top: -22px; border-top-color: transparent; border-bottom: 14px solid var(--dd-ink); }
 .dd-bubble--sad { background: #FFECE8; }
 
 /* Buttons */
@@ -59,6 +59,7 @@
 
 /* At a glance */
 .dd-facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 28px; }
+.dd .wrap.dd-facts { margin-top: 28px; }
 @media (min-width: 760px) { .dd-facts { grid-template-columns: repeat(6, 1fr); } }
 .dd-fact { display: flex; flex-direction: column; gap: 4px; padding: 14px; background: #FFFFFF; border: 3px solid var(--dd-ink); box-shadow: 4px 4px 0 var(--dd-ink); }
 .dd-fact:nth-child(odd) { transform: rotate(-.6deg); }
@@ -68,14 +69,34 @@
 .dd-fact b { font: 800 17px/1.2 var(--f-display); text-transform: uppercase; color: var(--dd-ink); }
 
 /* Sections and panels */
-.dd-section { margin-top: clamp(40px, 7vw, 72px); }
+/* (.dd .wrap.… beats the site's ".site .wrap { margin: 0 auto }") */
+.dd-section, .dd .wrap.dd-section { margin-top: clamp(40px, 7vw, 72px); }
 .dd-section > .dd-lead { margin: 0 0 16px; max-width: 70ch; }
 .dd-panel { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 3px solid var(--dd-ink); box-shadow: var(--dd-shadow); }
 @media (min-width: 640px) { .dd-panel { padding: 26px; } }
 .dd-panel--dark { background: var(--dd-green); color: #FFFFFF; background-image: radial-gradient(circle at 1.5px 1.5px, rgba(217, 255, 77, .18) 1.3px, transparent 1.7px); background-size: 9px 9px; }
 .dd-panel--cta { background: var(--dd-paper); background-image: var(--dd-dots); background-size: 9px 9px; align-items: flex-start; }
-.dd-brief__grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
-@media (min-width: 900px) { .dd-brief__grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+/* How it works: three numbered panels */
+.dd-how { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 18px; }
+@media (min-width: 820px) { .dd-how { grid-template-columns: repeat(3, 1fr); } }
+.dd-how li { padding-top: 34px; }
+.dd-how li:nth-child(2) { background: var(--dd-paper); background-image: var(--dd-dots); background-size: 9px 9px; }
+.dd-how li:nth-child(3) { background: var(--dd-green); color: #FFFFFF; }
+.dd-how li:nth-child(3) .dd-h3, .dd-how li:nth-child(3) .dd-lead { color: #FFFFFF; }
+.dd-how em { position: absolute; top: -18px; left: 16px; width: 44px; height: 44px; display: grid; place-items: center; background: var(--dd-red); color: #FFFFFF; border: 3px solid var(--dd-ink); border-radius: 50%; font: 800 20px var(--f-display); font-style: normal; box-shadow: 3px 3px 0 var(--dd-ink); }
+
+/* Two blocks side by side on a wide screen (age groups and prizes; the rules and key dates) */
+.dd-twin { display: grid; grid-template-columns: 1fr; gap: clamp(40px, 7vw, 72px) 32px; }
+@media (min-width: 960px) { .dd-twin { grid-template-columns: 1fr 1fr; align-items: start; } .dd-twin .dd-groups { grid-template-columns: 1fr 1fr; } }
+.dd-twin--rules { gap: 24px; }
+@media (min-width: 960px) { .dd-twin--rules { grid-template-columns: 1.25fr .75fr; } .dd-twin--rules .dd-timeline { grid-template-columns: 1fr; } }
+.dd-section > .dd-rules__more { margin: 18px 0 0; }
+
+/* The story brief (approved teams only) */
+.dd-brief { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 900px) { .dd-brief { grid-template-columns: 1fr 1fr; align-items: start; } }
+.dd-brief .dd-caption { align-self: flex-start; }
+.dd-brief__title { margin: 0; font: 800 clamp(26px, 4.4vw, 40px)/1 var(--f-display); text-transform: uppercase; letter-spacing: -.02em; color: var(--dd-yellow); text-shadow: 3px 3px 0 var(--dd-ink); }
 .dd-brief__lead { margin: 0; font: 800 clamp(20px, 3vw, 28px)/1.15 var(--f-display); text-transform: uppercase; color: var(--dd-acid); }
 .dd-panel--dark p { margin: 0; font: 400 16.5px/1.6 var(--f-text); }
 .dd-rich { font: 400 15.5px/1.6 var(--f-text); color: var(--ink); }
@@ -103,11 +124,7 @@
 .dd-timeline b { font: 800 15.5px/1.2 var(--f-display); text-transform: uppercase; }
 .dd-timeline span { font: 400 14px/1.4 var(--f-text); color: var(--muted); }
 
-/* Judging and prizes */
-.dd-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.dd-bars li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font: 500 14.5px var(--f-text); }
-.dd-bars b { font: 800 16px var(--f-display); }
-.dd-bars i { grid-column: 1 / -1; display: block; height: 12px; background: var(--dd-red); border: 2px solid var(--dd-ink); }
+/* Prizes */
 .dd-prizes { margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .dd-prizes div { padding: 12px 14px; background: var(--dd-paper); border: 2px solid var(--dd-ink); }
 .dd-prizes dt { font: 800 14.5px/1.2 var(--f-display); text-transform: uppercase; }
@@ -123,9 +140,9 @@
 .dd-winners small { color: var(--muted); }
 .dd-medal { align-self: flex-start; padding: 3px 8px; background: var(--dd-yellow); border: 2px solid var(--dd-ink); font: 800 12px var(--f-display); text-transform: uppercase; }
 
-/* Documents */
-.dd-doclinks { display: grid; grid-template-columns: 1fr; gap: 12px; }
-@media (min-width: 760px) { .dd-doclinks { grid-template-columns: repeat(4, 1fr); } }
+/* Footer: Instagram and the disclaimer */
+.dd-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.dd-foot .dd-small { max-width: 80ch; }
 .dd-doc { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: #FFFFFF; border: 3px solid var(--dd-ink); box-shadow: 4px 4px 0 var(--dd-ink); color: var(--dd-ink); font: 800 16px/1.2 var(--f-display); text-transform: uppercase; text-decoration: none; transition: transform .15s; }
 .dd-doc:hover { transform: translate(-2px, -2px); }
 .dd-doc small { font: 400 13px var(--f-text); text-transform: none; color: var(--muted); }

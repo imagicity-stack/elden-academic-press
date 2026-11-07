@@ -1,6 +1,6 @@
 // Admin → Competitions: each competition built on request appears here by itself, with
 // everyone who registered (one person or a group) and a CSV export.
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { downloadFile, fmtDate, useAdmin } from '../api';
 import { Badge, Btn, Card, Empty, ErrorBox, Loading, Page, type Tone, useAction } from '../ui';
 import { findCompetition, istDateTime, PHASE_LABEL, type Phase } from '../../shared/competitions';
@@ -21,6 +21,7 @@ export default function Competitions() {
 
 function List() {
   const { data, error, reload } = useAdmin<{ items: Row[] }>('/competitions');
+  const navigate = useNavigate();
   return (
     <Page title="Competitions" subtitle="Every competition on the website, with the people who registered. New competitions are added on request and appear here by themselves.">
       {error ? <ErrorBox error={error} retry={reload} /> : !data ? <Loading /> : data.items.length === 0 ? (
@@ -32,8 +33,8 @@ function List() {
               <thead><tr><th>Competition</th><th>Status</th><th>Registration</th><th className="ad-num">Registrations</th><th className="ad-num">People</th></tr></thead>
               <tbody>
                 {data.items.map((c) => (
-                  <tr key={c.slug}>
-                    <td><Link to={`/admin/competitions/${c.slug}`} className="ad-strong">{c.title}</Link><div className="ad-muted">{c.tagline}{c.unlisted && ' · not listed on the website'}</div></td>
+                  <tr key={c.slug} onClick={() => navigate(`/admin/competitions/${c.slug}`)}>
+                    <td><Link to={`/admin/competitions/${c.slug}`} className="ad-strong" onClick={(e) => e.stopPropagation()}>{c.title}</Link><div className="ad-muted">{c.tagline}{c.unlisted && ' · not listed on the website'}</div></td>
                     <td><Badge tone={TONE[c.phase]}>{PHASE_LABEL[c.phase]}</Badge></td>
                     <td className="ad-muted">{istDateTime(c.opensAt)}<br />to {istDateTime(c.closesAt)}</td>
                     {c.team ? (
