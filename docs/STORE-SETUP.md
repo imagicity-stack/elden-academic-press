@@ -141,7 +141,7 @@ Customers can sign in at **eldenap.in/account** with Google to read their e-book
 1. Set `VITE_SITE_LIVE=true` temporarily on a **Preview** deployment, or test on production before announcing.
 2. Buy a printed book and an e-book, and one printed book with cash on delivery (only the advance is charged). In Razorpay's test window use UPI ID `success@razorpay` (or a [test card](https://razorpay.com/docs/payments/payments/test-card-details/)).
 3. Check: the order page and e-book download work; both confirmation emails arrive; the order appears in the admin; mark it shipped (customer gets the tracking email); refund it (Razorpay test dashboard shows the refund).
-4. Open the browser console during the payment: if no “Content-Security-Policy” warnings appear, change the header name `Content-Security-Policy-Report-Only` to `Content-Security-Policy` in `vercel.json` to enforce it.
+4. The Content Security Policy is enforced: if the payment window doesn't open, search **Vercel → Logs** for `[csp]` to see what was blocked (see section 12).
 
 ## 7. Go live
 
@@ -236,6 +236,26 @@ The website already sends everything Google needs; these are the settings on Goo
 - *Exports:* participants CSV, one row per member, with or without contact and guardian details (recorded in Settings → Activity).
 
 **Other competitions** are built on request: ask Claude for one (title, dates, description, rules, who can enter, individual, group or team, and what the form asks). It's added to `src/shared/competitions.ts` and appears on **/competitions** and in **Admin → Competitions** by itself.
+
+## 12. Security
+
+**Already built in.** HTTPS only (HSTS); an enforced Content Security Policy (only the site's own scripts and those of Google, Razorpay and Meta can run); no framing of the site; prices, payments and webhooks checked on the server; every database query parameterised; every form checked on the server, rate-limited and with a hidden spam trap; admin sign-in with two-step verification; each customer sees only their own orders and teams; uploaded files checked by content, size-limited, photo location data removed, kept private and opened only through short-lived, logged links; database tables locked to the server (row-level security); spreadsheet exports safe to open in Excel; no secrets in the code.
+
+**After each deploy that changes vercel.json:** open the site, open the payment window at checkout once (you can close it without paying) and try *Sign in with Google*. Then in **Vercel → Logs**, search for `[csp]`. Anything the policy blocked is listed with its address; ask Claude to allow it if it's a service you use. **If you add a tag from another company in Google Tag Manager**, its address has to be added to the policy in `vercel.json` too, or it won't run.
+
+**In your accounts (once):**
+1. **Two-step sign-in everywhere:** GitHub, Vercel, Supabase, Razorpay, Google Workspace (Admin console → Security → 2-Step Verification → *Enforce*), Meta Business, and the company where eldenap.in is registered. Turn on the domain's *registrar lock* there too.
+2. **Email authentication for eldenap.in** (stops others sending mail as you; check at [mxtoolbox.com](https://mxtoolbox.com/SuperTool.aspx) → *SPF*, *DMARC* and *DKIM*):
+   - SPF: a TXT record on `eldenap.in`: `v=spf1 include:_spf.google.com ~all`. (If you send with Resend instead, add the records Resend shows under *Domains*.)
+   - DKIM: Google Admin → Apps → Google Workspace → Gmail → **Authenticate email** → *Generate new record*, add it at your DNS provider, then **Start authentication**.
+   - DMARC: a TXT record on `_dmarc.eldenap.in`: `v=DMARC1; p=none; rua=mailto:hello@eldenap.in`. After two weeks of reports showing only your own mail, change `p=none` to `p=quarantine`.
+3. **GitHub → the repository → Settings → Code security:** turn on *Dependabot alerts* and *Dependabot security updates*. (Weekly update pull requests are already set up in `.github/dependabot.yml`.)
+4. **Supabase → Advisors → Security Advisor:** it should show nothing marked *Error*. (*RLS enabled, no policy* is intended, see step 1.)
+5. **Backups:** Supabase Pro backs up daily. Once, restore a backup into a new project to see that it works.
+6. **Uptime alert:** a free monitor at [UptimeRobot](https://uptimerobot.com) on `https://eldenap.in/api/health` emails you if the site or its database goes down (that address answers 503 when something is wrong).
+7. **Razorpay:** live keys only in Vercel's *Production* environment, test keys in *Preview*; webhook secret set (step 2).
+
+**If something leaks or looks wrong:** change the key at its provider (Razorpay, Supabase, Google, Meta), update it in **Vercel → Settings → Environment Variables**, and redeploy. Sign out every admin from Supabase → Authentication → Users if an admin account may be affected. In India, CERT-In asks for certain cyber incidents to be reported within 6 hours ([cert-in.org.in](https://www.cert-in.org.in)); under the DPDP rules, as they come into force, a personal data breach is also reported to the people affected and to the Data Protection Board.
 
 ## Running costs
 

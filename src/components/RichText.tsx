@@ -1,16 +1,21 @@
 // Small Markdown (**bold**, *italic*, [links](https://…), lists, ## headings),
-// drawn as React elements, so no raw HTML ever reaches the page.
+// drawn as React elements, so no raw HTML ever reaches the page. Links: see safeHref.
 import type { ReactNode } from 'react';
+import { safeHref } from '../shared/links';
 
 function inline(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /\*\*(.+?)\*\*|\*([^*]+)\*|\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+|\/[^\s)]*)\)/g;
+  const re = /\*\*(.+?)\*\*|\*([^*]+)\*|\[([^\]]+)\]\(([^\s)]+)\)/g;
   let last = 0, m: RegExpExecArray | null, i = 0;
   while ((m = re.exec(text))) {
     if (m.index > last) out.push(text.slice(last, m.index));
     if (m[1]) out.push(<strong key={`${key}-${i++}`}>{m[1]}</strong>);
     else if (m[2]) out.push(<em key={`${key}-${i++}`}>{m[2]}</em>);
-    else out.push(<a key={`${key}-${i++}`} href={m[4]} {...(m[4].startsWith('/') ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>{m[3]}</a>);
+    else {
+      const href = safeHref(m[4]);
+      // An address that isn't allowed stays as plain text.
+      out.push(href ? <a key={`${key}-${i++}`} href={href} {...(href.startsWith('/') ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>{m[3]}</a> : m[0]);
+    }
     last = m.index + m[0].length;
   }
   if (last < text.length) out.push(text.slice(last));

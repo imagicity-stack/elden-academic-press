@@ -1,0 +1,16 @@
+# Dependabot: GitHub opens a pull request when a package this site uses has an update, once a
+# week, minor and patch updates grouped into one PR. Security fixes come as soon as they're
+# published (turn on "Dependabot security updates" in GitHub → Settings → Code security).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
