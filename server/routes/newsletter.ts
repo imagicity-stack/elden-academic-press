@@ -23,7 +23,7 @@ newsletter.post('/subscribe', async (c) => {
     /** Signed up through this popup: counted as its sign-up. */
     popupId: z.uuid().optional(),
     consent: z.literal(true, { error: 'Tick the box to confirm you’d like our emails' }),
-    /** "Elden Academic Press may call or WhatsApp me about new books" (forms that show it). */
+    /** "Subscribe to calls": we may call or WhatsApp them about new books (forms that show it). */
     callConsent: z.boolean().optional(),
     /** Honeypot: real people never fill this in. */
     website: z.string().max(0).optional(),
