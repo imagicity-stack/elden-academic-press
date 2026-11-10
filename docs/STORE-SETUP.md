@@ -310,6 +310,8 @@ The site notes how each visitor arrived: the link's UTM tags, an ad-click marker
 
 ## Good to know
 
+- **Link previews and book pages**: a shared link to a book (`/books/<slug>`) shows that book's title, description and cover on WhatsApp, Facebook and in search results. The server builds the page from the database (`server/routes/og.ts`), with the book's content and structured data already in the HTML. Visitors see it at once, and the full page takes over when its scripts have loaded. A book with no uploaded cover has no preview picture: upload a cover in Admin → Products to get one. The site as a whole no longer sets a preview address or picture, so other pages show only the site's name and description. Competition pages set their own.
+
 - **Unpaid checkouts** hold printed stock for 30 minutes (Settings), then a job every 10 minutes releases it. If someone pays late, the stock is re-taken, or the order is flagged *Needs attention* if it sold out meanwhile.
 - **Needs attention** also flags duplicate payments and amount mismatches — check the dashboard.
 - **GST**: prices include GST. Printed books are set to 0% and e-books to 18% by default (per product). A printed copy that includes the e-book free is charged and taxed as a printed book. Invoice numbers run per financial year (`EAP/27-28/00001`). Confirm rates, HSN/SAC codes (4901 / 998431) and the bundle split with your accountant.

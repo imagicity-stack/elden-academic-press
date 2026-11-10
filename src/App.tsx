@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import './fonts';
@@ -30,6 +30,7 @@ import { NotFound } from './pages/NotFound';
 import { OrderStatus, Track } from './pages/OrderStatus';
 import { StudyHub } from './pages/StudyHub';
 import { PopupHost } from './components/popups/PopupHost';
+import { dropPrerenderUnless } from './prerender';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -37,6 +38,8 @@ function ScrollToTop() {
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   // Meta page view (only after the visitor accepted cookies).
   useEffect(() => { track('PageView'); }, [pathname]);
+  // A ready-made page from the server belongs to its own address only.
+  useLayoutEffect(() => dropPrerenderUnless(pathname), [pathname]);
   return null;
 }
 

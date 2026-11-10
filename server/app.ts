@@ -8,7 +8,7 @@ import { RazorpayError } from './lib/razorpay.js';
 import { account, type Customer } from './routes/account.js';
 import { competitions } from './routes/competitions.js';
 import { competitionInfo, teams } from './routes/teams.js';
-import { competitionPage } from './routes/og.js';
+import { bookPage, competitionPage } from './routes/og.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
 import { handleCspReport } from './routes/cspReport.js';
@@ -48,6 +48,20 @@ export function createApp(getDeps: () => Promise<Deps>) {
     }
     // Not found or not ready: the app's own page (the trailing slash skips this route).
     return c.redirect(`/competitions/${encodeURIComponent(slug)}/`, 302);
+  });
+
+  // A book's page with its own link-preview tags, structured data and content (vercel.json sends /books/<slug> here).
+  root.get('/books/:slug', async (c) => {
+    const slug = c.req.param('slug');
+    try {
+      const page = await bookPage(await getDeps(), slug, new URL(c.req.url).origin);
+      await tagCatalog(); // saving a book in the admin clears it
+      return c.html(page.html, page.status, { 'Cache-Control': 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400' });
+    } catch (e) {
+      console.warn('[og] book page', (e as Error).message);
+    }
+    // Something failed: the app's own page (the trailing slash skips this route).
+    return c.redirect(`/books/${encodeURIComponent(slug)}/`, 302);
   });
 
   // Product feed for Google Merchant Center and Meta Commerce Manager (vercel.json rewrites /feeds/* here).
