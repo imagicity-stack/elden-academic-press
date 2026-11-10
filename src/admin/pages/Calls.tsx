@@ -65,7 +65,7 @@ function Overview() {
     <div className="ad-stack">
       {!st.connected && (
         <div className="ad-warn">
-          <b>Sarvam isn't connected yet.</b> Checkouts are being saved and calls queued, but nothing is dialled until the connection is set up (Settings tab has the details).
+          <b>Outgoing calls aren't connected yet.</b> Customers who ring our numbers already reach the agents{st.webhook ? ' and show up here' : ''}. Checkouts are being saved and our calls queued, but the website can't place them until the Sarvam calling connection is added (Settings tab has the details).
         </div>
       )}
       <Card title="On and off">
@@ -382,7 +382,8 @@ function SettingsTab() {
       </div>
       <Card title="Connection">
         <dl className="ad-dl">
-          <dt>Voice agents</dt><dd>{st.connected ? <Badge tone="green">Connected ({st.provider})</Badge> : <Badge tone="amber">Not connected</Badge>}</dd>
+          <dt>Incoming calls</dt><dd><Badge tone="green">Answered by the agents on Sarvam</Badge></dd>
+          <dt>Outgoing calls</dt><dd>{st.connected ? <Badge tone="green">Connected ({st.provider})</Badge> : <Badge tone="amber">Not connected yet</Badge>}</dd>
           <dt>Call results</dt><dd>{st.webhook ? <Badge tone="green">Webhook ready</Badge> : <Badge tone="amber">CALLS_WEBHOOK_SECRET not set</Badge>}</dd>
         </dl>
         <TextArea label="Call-end webhook address (for Sarvam)" readOnly rows={2}
