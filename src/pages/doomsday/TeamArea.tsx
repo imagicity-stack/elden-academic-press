@@ -33,6 +33,8 @@ export interface TeamData {
   applications: TeamApp[]; registration: { open: boolean; reason: string };
   dates: { opensAt: string; closesAt: string; submissionDeadline: string; resultsOn: string };
   profile: Profile | null; brief: StoryBrief | null; rulesDocUrl: string | null; topicDocUrl: string | null;
+  /** The comic kit: for anyone with a team that registered successfully, once the organiser has uploaded it. */
+  kit: { name: string; size: number } | null;
 }
 
 export function StoryBriefPanel({ brief, topicDocUrl }: { brief: StoryBrief; topicDocUrl?: string | null }) {
@@ -88,7 +90,8 @@ export function TeamArea({ c, account }: { c: TeamComp; account: ReturnType<type
     const live = d.applications.filter((a) => !['rejected', 'withdrawn'].includes(a.status));
     body = (
       <>
-        {justSent && <SentPanel app={justSent} newsletter={state.data.newsletter} onClose={() => setJustSent(null)} />}
+        {justSent && <SentPanel app={justSent} newsletter={state.data.newsletter} kit={Boolean(d.kit)} onClose={() => setJustSent(null)} />}
+        {d.kit && <KitPanel c={c} kit={d.kit} />}
         {d.applications.map((a) => <TeamDashboard key={a.id} c={c} app={a} data={d} onChange={load} onEdit={() => setMode({ kind: 'edit', app: a })} />)}
         {profile && !profile.completed ? (
           <div className="dd-panel">
@@ -120,13 +123,35 @@ export function TeamArea({ c, account }: { c: TeamComp; account: ReturnType<type
   );
 }
 
-function SentPanel({ app, newsletter, onClose }: { app: TeamApp; newsletter: string | null; onClose: () => void }) {
+/** The comic kit: a download for every registered team (the link the server gives works for 5 minutes). */
+function KitPanel({ c, kit }: { c: TeamComp; kit: NonNullable<TeamData['kit']> }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const download = async () => {
+    setBusy(true); setErr(null);
+    try { window.location.assign((await authApi<{ url: string }>(`/competitions/${c.slug}/team/kit`)).url); }
+    catch (e) { setErr(errorMessage(e)); }
+    finally { setBusy(false); }
+  };
+  const size = kit.size ? ` · ${(kit.size / 1024 / 1024).toFixed(1)} MB` : '';
+  return (
+    <div className="dd-panel dd-panel--cta dd-kit">
+      <h3 className="dd-h3">Your comic kit</h3>
+      <p className="dd-lead">Everything your team needs to start creating. Download it any time from here.</p>
+      <button type="button" className="btn dd-btn" disabled={busy} onClick={download}>{busy ? 'Opening…' : 'Download the comic kit'}</button>
+      <span className="dd-small">PDF{size}</span>
+      {err && <div className="form-error" role="alert">{err}</div>}
+    </div>
+  );
+}
+
+function SentPanel({ app, newsletter, kit, onClose }: { app: TeamApp; newsletter: string | null; kit: boolean; onClose: () => void }) {
   const [news, setNews] = useState<'ask' | 'busy' | 'done'>(newsletter === 'subscribed' ? 'done' : 'ask');
   return (
     <motion.div className="dd-panel dd-sent" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}>
       <div className="dd-pow" aria-hidden="true">SENT!</div>
       <h3 className="dd-h3">Application {app.code} received</h3>
-      <p className="dd-lead">Your status is <b>Pending verification</b>. We usually check registrations within 48 hours and email you as soon as we have.</p>
+      <p className="dd-lead">Your status is <b>Pending verification</b>. We usually check registrations within 48 hours and email you as soon as we have.{kit && <> Your <b>comic kit</b> is just below, and in your email.</>}</p>
       {newsletter !== 'subscribed' && news !== 'done' && (
         <div className="dd-news">
           <span>Want to hear about future competitions and new books? (Optional, and separate from competition emails.)</span>

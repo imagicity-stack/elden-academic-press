@@ -7,7 +7,7 @@ import type { Deps } from '../deps.js';
 import type { Q } from '../db/client.js';
 import { competitionSettings, teamApplications, teamFiles, teamMembers, type NoticeAudience } from '../db/schema.js';
 import { esc } from '../lib/format.js';
-import { addressList, sendSafely } from '../lib/mail.js';
+import { addressList, sendSafely, type Attachment } from '../lib/mail.js';
 import { stateName } from '../lib/states.js';
 import { HttpError, notFound } from '../lib/http.js';
 import { findCompetition, istDateTime, type Competition } from '../../src/shared/competitions.js';
@@ -42,11 +42,39 @@ export interface TeamSettings {
   /** Stop new registrations without changing dates. */
   registrationPaused: boolean;
   resultsPublished: boolean;
+  /** The comic kit, a PDF in the private competition-files bucket: every registered team gets it, by
+   *  email when they register and on their team page. kitName and kitSize (bytes) as uploaded. */
+  kitKey: string | null;
+  kitName: string;
+  kitSize: number;
 }
 const DEFAULTS: TeamSettings = {
   bannerKey: null, artKey: null, sponsorKeys: [], rulesDocKey: null, topicDocKey: null,
   closesAt: null, submissionDeadline: null, resultsOn: null, registrationPaused: false, resultsPublished: false,
+  kitKey: null, kitName: '', kitSize: 0,
 };
+
+/** The comic kit is attached to the registration email up to this size; above it, the email points to the team page. */
+export const KIT_ATTACH_MAX = 15 * 1024 * 1024;
+/** Teams in these states have registered successfully (and get the comic kit). */
+export const REGISTERED_STATUSES = ['pending', 'changes_requested', 'approved'] as const;
+export const kitFileName = (s: Pick<TeamSettings, 'kitName'>) => s.kitName || 'DoomsDay-Diaries-comic-kit.pdf';
+
+/** The comic kit for the registration email: attached when it's small enough to send, else a pointer to the team page. Never throws. */
+async function kitForEmail(deps: Deps, ts: TeamSettings): Promise<{ html: string; attachments?: Attachment[] }> {
+  const name = kitFileName(ts);
+  if (ts.kitSize > 0 && ts.kitSize <= KIT_ATTACH_MAX) {
+    try {
+      const content = await deps.storage.read('competition-files', ts.kitKey!);
+      if (content.length <= KIT_ATTACH_MAX) {
+        return { html: section(p(`Your <strong>comic kit</strong> is attached to this email (${esc(name)}). It’s also on your team page whenever you need it.`)), attachments: [{ filename: name, content, contentType: 'application/pdf' }] };
+      }
+    } catch (e) {
+      console.error('[teams] comic kit for the email', (e as Error).message);
+    }
+  }
+  return { html: section(p('Your <strong>comic kit</strong> is ready: download it from your team page (the button below).')) };
+}
 
 export async function settingsFor(db: Q, slug: string): Promise<TeamSettings> {
   const [row] = await db.select().from(competitionSettings).where(eq(competitionSettings.slug, slug));
@@ -164,12 +192,14 @@ export async function sendTeamEmail(deps: Deps, c: TeamComp, app: App, members: 
       },
     };
     const m = t[kind];
+    // A new registration gets the comic kit (if the organiser has uploaded one).
+    const kit = kind === 'received' && ts.kitKey ? await kitForEmail(deps, ts) : null;
     for (const to of recipients(app, members)) {
       await sendSafely(deps.mailer, {
-        to, replyTo: s.supportEmail, subject: m.subject,
+        to, replyTo: s.supportEmail, subject: m.subject, ...(kit?.attachments ? { attachments: kit.attachments } : {}),
         html: layout(deps, s, {
           preheader: m.title, kicker: c.title, title: m.title, intro: m.intro,
-          body: m.body + section(button(url, m.cta, INK), '4px 32px 32px'),
+          body: m.body + (kit?.html ?? '') + section(button(url, m.cta, INK), '4px 32px 32px'),
           footerNote: `You’re getting this because a team was registered for ${esc(c.title)} on eldenap.in with this email address. Results: ${esc(dayLabel(d.resultsOn))}.`,
         }),
       });
