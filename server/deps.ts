@@ -9,7 +9,7 @@ import { waitUntil } from '@vercel/functions';
 import { supabaseAuthUser, supabaseAuthUsers, type AuthUser } from './lib/authUsers.js';
 import { consoleMailer, resendMailer, smtpMailer, type Mailer } from './lib/mail.js';
 import { metaHttp, type Meta } from './lib/meta.js';
-import type { CallProvider } from './lib/callProvider.js';
+import { sarvamCalls, type CallProvider } from './lib/callProvider.js';
 import { razorpayHttp, razorpaySimulator, type Razorpay } from './lib/razorpay.js';
 import { localStorage, supabaseStorage, type Storage } from './lib/storage.js';
 
@@ -66,7 +66,15 @@ async function buildDeps(env: Env): Promise<Deps> {
   const authUsers = sbAdmin ? supabaseAuthUsers(...sbAdmin) : undefined;
   const authUser = sbAdmin ? supabaseAuthUser(...sbAdmin) : undefined;
   const meta = env.VITE_META_PIXEL_ID && env.META_CAPI_TOKEN ? metaHttp(env.VITE_META_PIXEL_ID, env.META_CAPI_TOKEN, env.META_TEST_EVENT_CODE) : null;
-  return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task.finally(afterConnectionsClose)) : undefined };
+  const calls = sarvamCallsFrom(env);
+  return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, calls, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task.finally(afterConnectionsClose)) : undefined };
+}
+
+/** Outgoing calls through Sarvam, once its key, workspace and both campaign ids are set; else null. */
+export function sarvamCallsFrom(env: Env, fetchImpl?: typeof fetch): CallProvider | null {
+  const { SARVAM_API_KEY: apiKey, SARVAM_ORG_ID: orgId, SARVAM_WORKSPACE_ID: workspaceId, SARVAM_CART_CAMPAIGN_ID: cartCampaignId, SARVAM_FEEDBACK_CAMPAIGN_ID: feedbackCampaignId } = env;
+  if (!apiKey || !orgId || !workspaceId || !cartCampaignId || !feedbackCampaignId) return null;
+  return sarvamCalls({ apiKey, orgId, workspaceId, cartCampaignId, feedbackCampaignId, fetch: fetchImpl });
 }
 
 /** First local run: fill the embedded database with the demo catalogue and sample files. */

@@ -56,12 +56,12 @@ export function NewsletterForm({ source, dark = false }: { source: Source; dark?
       <label className="tick nl-form__agree">
         <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} required />
         <span className="tick__box" aria-hidden="true" />
-        <span>Yes, email me about new books, sample papers and offers. I can unsubscribe any time.</span>
+        <span>Subscribe to newsletter</span>
       </label>
       <label className="tick nl-form__agree">
         <input type="checkbox" checked={callOk} onChange={(e) => setCallOk(e.target.checked)} />
         <span className="tick__box" aria-hidden="true" />
-        <span>Elden Academic Press may call or WhatsApp me about new books</span>
+        <span>Subscribe to calls</span>
       </label>
       <input type="text" name="website" tabIndex={-1} autoComplete="off" className="hp" aria-hidden="true" />
       {error && <div className="form-error" role="alert">{error}</div>}

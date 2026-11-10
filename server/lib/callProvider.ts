@@ -2,9 +2,9 @@
 // (services/calls.ts); a provider only starts one call and later reports how it went, through
 // POST /api/calls/webhook/<secret> (normalised by callResultFrom below).
 //
-// The Sarvam connection itself is added once its API is confirmed (SARVAM_API_KEY and the
-// agents' ids in Vercel); until then deps.calls is unset and the admin shows "not connected",
-// while everything else (leads, queue, settings, do-not-call) works.
+// The Sarvam connection (sarvamCalls below) is used once SARVAM_API_KEY, SARVAM_ORG_ID,
+// SARVAM_WORKSPACE_ID and both campaign ids are set in Vercel; until then deps.calls is unset and
+// the admin shows "not connected", while everything else (leads, queue, settings, do-not-call) works.
 import type { CallKind } from '../../src/shared/calls.js';
 
 export interface StartCall {
@@ -98,4 +98,65 @@ export function memoryCalls(): CallProvider & { started: StartCall[]; fail?: boo
     },
   };
   return p;
+}
+
+export interface SarvamCallsConfig {
+  /** Voice Agents workspace API key (apps.sarvam.ai → Settings → API Key), sent as X-API-Key. */
+  apiKey: string;
+  /** From the dashboard address: apps.sarvam.ai/…/orgs/<org>/workspaces/<workspace>/… */
+  orgId: string;
+  workspaceId: string;
+  cartCampaignId: string;
+  feedbackCampaignId: string;
+  fetch?: typeof fetch;
+  baseUrl?: string;
+}
+
+/** Sarvam's error body: { error: { message } }, FastAPI's { detail }, or plain text. */
+function sarvamError(status: number, text: string): string {
+  let msg = text.trim();
+  try {
+    const j = obj(JSON.parse(text));
+    const detail = j.detail;
+    msg = str(obj(j.error).message) || str(j.message)
+      || (Array.isArray(detail) ? detail.map((d) => str(obj(d).msg) || str(d)).join('; ') : str(detail)) || msg;
+  } catch { /* not JSON */ }
+  return `Sarvam ${status}: ${msg || 'no details'}`.slice(0, 280);
+}
+
+/**
+ * Places calls through Sarvam's outgoing campaigns: one campaign per kind (each on its own agent
+ * and number, already scheduled with its dialling hours and call-end webhook). Starting a call adds
+ * the customer to that campaign as a one-person cohort ("Stream cohort"), with our call id as
+ * user_identifier: Sarvam sends it back in the call-end webhook.
+ * POST https://apps.sarvam.ai/api/scheduling/v1/orgs/{org}/workspaces/{ws}/campaigns/{id}/cohorts/stream
+ */
+export function sarvamCalls(cfg: SarvamCallsConfig): CallProvider {
+  const fetchImpl = cfg.fetch ?? fetch;
+  const base = (cfg.baseUrl ?? 'https://apps.sarvam.ai').replace(/\/+$/, '');
+  const e = encodeURIComponent;
+  return {
+    name: 'sarvam',
+    async start({ callId, kind, phone, variables }) {
+      const campaignId = kind === 'cart' ? cfg.cartCampaignId : cfg.feedbackCampaignId;
+      const url = `${base}/api/scheduling/v1/orgs/${e(cfg.orgId)}/workspaces/${e(cfg.workspaceId)}/campaigns/${e(campaignId)}/cohorts/stream`;
+      // Sarvam takes string values only.
+      const appVariables = Object.fromEntries(Object.entries(variables ?? {}).map(([k, v]) => [k, str(v)]));
+      const res = await fetchImpl(url, {
+        method: 'POST',
+        headers: { 'X-API-Key': cfg.apiKey, 'Content-Type': 'application/json', Accept: 'application/json' },
+        // Cohort names: 1-50 letters, digits, spaces, _ and -.
+        body: JSON.stringify({ name: `${kind}-${callId}`.replace(/[^\w -]/g, '-').slice(0, 50), users: [{ user_phone_number: phone, user_identifier: callId, app_variables: appVariables }] }),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(sarvamError(res.status, text));
+      let body: Record<string, unknown> = {};
+      try { body = obj(JSON.parse(text)); } catch { /* empty or not JSON */ }
+      const result = obj(body.result);
+      if (body.status === 'failed' || (Number(result.valid_records) === 0 && Number(result.rejected_records) > 0)) {
+        throw new Error(`Sarvam rejected the number or its details (cohort ${str(body.cohort_id) || 'unknown'})`);
+      }
+      return { providerCallId: str(body.cohort_id) || callId };
+    },
+  };
 }
