@@ -25,6 +25,20 @@ async function addSubscribers(emails: string[]) {
 }
 
 describe('newsletter sign-up', () => {
+  it('records the call permission only when the call box is ticked; unsubscribing withdraws it', async () => {
+    const row = async (email: string) => (await t.db.select().from(subscribers).where(eq(subscribers.email, email)))[0];
+    await t.call('POST', '/newsletter/subscribe', { body: { email: 'call@example.com', phone: '9876543210', consent: true, callConsent: true } });
+    expect(await row('call@example.com')).toMatchObject({ callConsent: true });
+    expect((await row('call@example.com')).callConsentAt).not.toBeNull();
+    await t.call('POST', '/newsletter/subscribe', { body: { email: 'nocall@example.com', phone: '9876543211', consent: true, callConsent: false } });
+    expect(await row('nocall@example.com')).toMatchObject({ callConsent: false });
+    await t.call('POST', '/newsletter/subscribe', { body: { email: 'popup@example.com', phone: '9876543212', consent: true } });
+    expect(await row('popup@example.com')).toMatchObject({ callConsent: false });
+    const { unsubscribe } = await import('../server/services/newsletter.js');
+    await unsubscribe(t.deps, 'call@example.com');
+    expect(await row('call@example.com')).toMatchObject({ status: 'unsubscribed', callConsent: false });
+  });
+
   it('subscribes from the form when the box is ticked, with a welcome email instead of a confirmation', async () => {
     const noPhone = await t.call('POST', '/newsletter/subscribe', { body: { email: 'reader@example.com', consent: true } });
     expect(noPhone.status).toBe(400);

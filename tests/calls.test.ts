@@ -314,6 +314,40 @@ describe('order feedback', () => {
   });
 });
 
+describe('feedback calls to earlier buyers', () => {
+  async function paidOrder() {
+    const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
+    const o = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }], contact, shipping: address } });
+    await t.call('POST', '/checkout/verify', { body: t.razorpay.simulatePayment(o.json.razorpay.orderId) });
+    await t.db.update(orders).set({ fulfillmentStatus: 'delivered', deliveredAt: new Date('2026-11-10T12:00:00+05:30') });
+  }
+
+  it('are called only when switched on, once a month per number, and never if they unticked the box', async () => {
+    await settings({ enabled: true, cart: { enabled: false }, feedback: { enabled: true, daysAfter: 3 } });
+    await paidOrder();
+    await paidOrder();
+    at('2026-11-14T11:30:00+05:30');
+    expect((await runCalls(t.deps)).queued).toBe(0); // no saved checkout with the tick
+    await settings({ feedback: { allBuyers: true, lookbackDays: 30 } });
+    expect((await runCalls(t.deps)).queued).toBe(1); // two orders, one call
+    const [c] = await allCalls();
+    expect(c).toMatchObject({ kind: 'feedback', leadId: null, variables: { customer_name: 'Asha', books_bought: 'Mathematics Today' } });
+    expect(c.phone).toMatch(/^\+91\d{10}$/);
+  });
+
+  it('someone who unticked the call box is left alone', async () => {
+    await settings({ enabled: true, cart: { enabled: false }, feedback: { enabled: true, daysAfter: 3, allBuyers: true, lookbackDays: 30 } });
+    await lead();
+    await lead({ consent: false });
+    await paidOrder();
+    at('2026-11-14T11:30:00+05:30');
+    const [l] = await t.db.select().from(checkoutLeads);
+    expect(l).toMatchObject({ consent: false });
+    expect(l.orderId).not.toBeNull();
+    expect((await runCalls(t.deps)).queued).toBe(0);
+  });
+});
+
 describe('Admin → Calls', () => {
   it('settings, stats, call detail; staff only', async () => {
     expect((await t.call('GET', '/admin/calls/settings')).status).toBe(401);

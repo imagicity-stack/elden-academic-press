@@ -97,6 +97,7 @@ interface Stats {
   cart: KindStats; feedback: KindStats; recovered: { orders: number; revenue: number }; couponsGiven: number;
   rating: { average: number | null; count: number }; openIssues: number; leads: { total: number; paid: number };
   daily: { day: string; placed: number; answered: number }[];
+  subscribersCallable: number;
 }
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const Stat = ({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) => (
@@ -114,6 +115,7 @@ function StatsView({ d }: { d: Stats }) {
         <Stat label="Feedback calls answered" value={`${d.feedback.answered} / ${d.feedback.attempted}`} sub={`${pct(d.feedback.answerRate)} answer rate`} />
         <Stat label="Average rating" value={d.rating.average == null ? '—' : `${d.rating.average.toFixed(1)} / 5`} sub={`${d.rating.count} rating${d.rating.count === 1 ? '' : 's'}`} />
         <Stat label="Problems to look at" value={<Link to="/admin/calls/log?issues=1">{d.openIssues}</Link>} sub="reported on feedback calls" />
+        <Stat label="Subscribers who allow calls" value={d.subscribersCallable} sub="ticked the box on the newsletter form" />
         <Stat label="Incoming calls" value={d.cart.incoming + d.feedback.incoming} sub="customers who rang our numbers" />
         <Stat label="Waiting to be called" value={<Link to="/admin/calls/queue">{d.cart.queued + d.feedback.queued}</Link>} />
       </div>
@@ -368,6 +370,14 @@ function SettingsTab() {
         <Card title="Order feedback">
           <TextField label="Call after (days)" type="number" min={1} max={30} value={s.feedback.daysAfter} onChange={(e) => setS({ ...s, feedback: { ...s.feedback, daysAfter: Number(e.target.value) } })}
             hint="Days after payment. Printed books wait until they've shipped." />
+          <div className="ad-mt">
+            <Check label="Also call earlier buyers" checked={s.feedback.allBuyers} onChange={(v) => setS({ ...s, feedback: { ...s.feedback, allBuyers: v } })}
+              hint="Buyers who never saw the call box (orders before it existed). Anyone who unticked it is never called. One feedback call a month per number." />
+          </div>
+          {s.feedback.allBuyers && (
+            <TextField label="Orders paid in the last (days)" type="number" min={7} max={90} value={s.feedback.lookbackDays}
+              onChange={(e) => setS({ ...s, feedback: { ...s.feedback, lookbackDays: Number(e.target.value) } })} />
+          )}
           <div className="ad-field ad-mt"><span className="ad-label">New titles the agent may mention (up to 5)</span>
             <div className="ad-stack-sm">{data.books.map((b) => <Check key={b.id} label={b.title} checked={s.feedback.newBookIds.includes(b.id)} onChange={() => toggleBook(b.id)} />)}</div>
           </div>

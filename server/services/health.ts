@@ -119,6 +119,7 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
       ['0013_order_source', () => db.select({ v: orders.channel }).from(orders).limit(1)],
       ['0014_popups', () => db.select({ v: popups.id }).from(popups).limit(1)],
       ['0015_calls', () => db.select({ v: calls.id }).from(calls).limit(1)],
+      ['0016_subscriber_call_consent', () => db.select({ v: subscribers.callConsent }).from(subscribers).limit(1)],
     ];
     checks.database = 'ok';
     for (const [file, probe] of updates) {

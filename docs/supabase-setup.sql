@@ -1186,6 +1186,11 @@ BEGIN
   END LOOP;
 END $$;
 
+-- ===== 0016_subscriber_call_consent =====
+
+ALTER TABLE "subscribers" ADD COLUMN "call_consent" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "subscribers" ADD COLUMN "call_consent_at" timestamp with time zone;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -1206,7 +1211,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('67ca6b68c889731c089bd83f44e3b7dd68024d6f48a03c96ccf0bb5770284db4', 1793974722937),
   ('ca67e5eb7c1a0c925e749fd5047d33769bce7929f647b088b20df06a62e2efb8', 1794060116138),
   ('7489535686d0e412f9126ae7ae8eef71e2658b9c8cc8a2c0f7441b09e41c36ec', 1794075566599),
-  ('2da95727ebe54578ee765746eae40b632665e677c534ce7d0d6b760e78f8554f', 1794318591431);
+  ('2da95727ebe54578ee765746eae40b632665e677c534ce7d0d6b760e78f8554f', 1794318591431),
+  ('de313d410cc8760b7d8c8e81ec8a6a04bb1d8f7b93c2be7d9a2df2550262a73d', 1794322914293);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

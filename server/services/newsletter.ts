@@ -32,13 +32,15 @@ const oneClickUrl = (deps: Deps, email: string) => `${site(deps)}/api/newsletter
  * (The footer form's tick box, a new account, a paid order with the newsletter box
  * ticked, staff with consent, an import.)
  */
-export async function subscribe(deps: Deps, input: { email: string; name?: string; phone?: string; source: string; ip?: string | null }) {
+export async function subscribe(deps: Deps, input: { email: string; name?: string; phone?: string; source: string; ip?: string | null; callConsent?: boolean }) {
   const { db, now } = deps;
   const email = input.email.trim().toLowerCase();
   const [existing] = await db.select().from(subscribers).where(eq(subscribers.email, email));
   const details = {
     ...(input.name ? { name: input.name } : {}),
     ...(input.phone ? { phone: input.phone } : {}),
+    // The call box, only where the form showed it: ticked records when; unticked withdraws it.
+    ...(input.callConsent === true ? { callConsent: true, callConsentAt: now() } : input.callConsent === false ? { callConsent: false } : {}),
     updatedAt: sql`now()`,
   };
   if (existing?.status === 'subscribed') {
@@ -70,7 +72,7 @@ export async function confirmSubscription(deps: Deps, email: string, token: stri
 
 export async function unsubscribe(deps: Deps, email: string) {
   await deps.db.update(subscribers)
-    .set({ status: 'unsubscribed', unsubscribedAt: deps.now(), updatedAt: sql`now()` })
+    .set({ status: 'unsubscribed', unsubscribedAt: deps.now(), callConsent: false, updatedAt: sql`now()` })
     .where(and(eq(subscribers.email, email.toLowerCase()), inArray(subscribers.status, ['pending', 'subscribed'])));
 }
 

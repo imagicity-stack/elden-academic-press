@@ -440,6 +440,9 @@ export const subscribers = pgTable('subscribers', {
   consentAt: timestamp('consent_at', { withTimezone: true }),
   consentIp: text('consent_ip'),
   unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
+  /** Ticked "Elden Academic Press may call or WhatsApp me about new books" when signing up. */
+  callConsent: boolean('call_consent').notNull().default(false),
+  callConsentAt: timestamp('call_consent_at', { withTimezone: true }),
   ...timestamps,
 }, (t) => [index('subscribers_status_idx').on(t.status)]);
 

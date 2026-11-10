@@ -64,8 +64,11 @@ const zSettings = z.object({
   cart: z.object({
     enabled: z.boolean(), delayMinutes: z.number().int().min(15).max(4320),
     discountCode: z.string().trim().toUpperCase().max(40), discountOffer: z.string().trim().max(120),
-  }),
-  feedback: z.object({ enabled: z.boolean(), daysAfter: z.number().int().min(1).max(30), newBookIds: z.array(z.string().uuid()).max(5) }),
+  }).partial(),
+  feedback: z.object({
+    enabled: z.boolean(), daysAfter: z.number().int().min(1).max(30), newBookIds: z.array(z.string().uuid()).max(5),
+    allBuyers: z.boolean(), lookbackDays: z.number().int().min(7).max(90),
+  }).partial(),
   hours: z.object({ start: hhmm, end: hhmm, days: z.array(z.enum(DAYS)).min(1) }).refine((h) => h.start < h.end, 'The start must be before the end'),
   maxRetries: z.number().int().min(0).max(5),
   retryAfterMinutes: z.number().int().min(30).max(1440),
