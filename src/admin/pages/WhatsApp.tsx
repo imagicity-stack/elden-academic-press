@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { adminApi, useAdmin } from '../api';
 import { Badge, Btn, Card, Check, Empty, ErrorBox, Loading, Page, TextArea, TextField, Toggle, useAction, type Tone } from '../ui';
-import { WA_STATUS_LABEL, WA_TEMPLATES, type WaKind, type WaStatus, type WhatsAppSettings } from '../../shared/whatsapp';
+import { WA_STATUS_LABEL, WA_TEMPLATES, type WaKind, type WaStatus, type WaTemplateDef, type WhatsAppSettings } from '../../shared/whatsapp';
 
 const TABS = [['', 'Inbox'], ['sent', 'Sent'], ['new-books', 'New books'], ['settings', 'Settings']] as const;
 const STATUS_TONE: Record<WaStatus, Tone> = { queued: 'blue', sent: 'grey', delivered: 'green', read: 'green', failed: 'red', skipped: 'grey', received: 'blue' };
@@ -189,8 +189,8 @@ function NewBooks() {
         <div className="ad-mt"><Btn kind="primary" busy={busy === 'send'} disabled={!message.trim() || !audience.data?.count} onClick={() => send()}>Send to everyone</Btn></div>
       </Card>
       <Card title="What they'll get">
-        <div className="wa-msg wa-msg--out"><div className="wa-msg__body">{t.text.replace('{{1}}', 'Asha').replace('{{2}}', message || '…').replace('{{3}}', link)}</div></div>
-        <p className="ad-muted ad-mt">The exact wording is the <span className="ad-code">{t.name}</span> template approved in WhatsApp Manager; this preview uses the site's text.</p>
+        <TemplatePreview t={t} values={['Asha', message || '…']} />
+        <p className="ad-muted ad-mt">The button opens {link || 'your link'}. The wording is the <span className="ad-code">{t.name}</span> template, as last updated in Meta from Settings.</p>
       </Card>
     </div>
   );
@@ -237,7 +237,7 @@ function SettingsTab() {
           {data.templates.map((t) => (
             <div key={t.key} className="ad-mt">
               <TextField label={`${t.label} (${t.category === 'MARKETING' ? 'Marketing' : 'Utility'})`} value={s.templates[t.key]} onChange={(e) => setS({ ...s, templates: { ...s.templates, [t.key]: e.target.value } })}
-                hint={<>Variables: {t.vars.map((v, i) => `{{${i + 1}}} ${v}`).join(', ')}. Text: “{t.text}”</>} />
+                hint={<>Variables: {t.vars.map((v, i) => `{{${i + 1}}} ${v}`).join(', ')}; the “{t.button.label}” button opens a page on the site.</>} />
             </div>
           ))}
         </Card>
@@ -269,11 +269,15 @@ function Templates({ enabled }: { enabled: boolean }) {
   const { data, error, reload } = useAdmin<{
     language: string;
     account: { id: string; phoneNumberId: string; numberInAccount: boolean | null; numbers: { id: string; number: string }[] };
-    items: { key: string; name: string; status: string; language: string; otherLanguages: { language: string; status: string }[]; rejectedReason: string }[];
+    items: { key: string; name: string; status: string; language: string; otherLanguages: { language: string; status: string }[]; rejectedReason: string; outdated: boolean }[];
   }>(enabled ? '/whatsapp/templates' : null);
   const { busy, run } = useAction();
   const [results, setResults] = useState<{ name: string; result: string }[] | null>(null);
-  const create = () => run('create', () => adminApi<{ results: { name: string; result: string }[] }>('/whatsapp/templates/create', { method: 'POST' })).then((r) => { if (r) { setResults(r.results); reload(); } });
+  const [open, setOpen] = useState<string | null>(null);
+  const sync = () => {
+    if (!window.confirm('Update all templates in Meta to the current designs? Meta reviews each changed one again (usually minutes, sometimes a day); messages using it wait until it is approved.')) return;
+    run('sync', () => adminApi<{ results: { name: string; result: string }[] }>('/whatsapp/templates/sync', { method: 'POST' })).then((r) => { if (r) { setResults(r.results); reload(); } });
+  };
   return (
     <Card title="Templates in WhatsApp" actions={enabled ? <Btn size="sm" onClick={reload}>Check again</Btn> : undefined}>
       {!enabled ? <p className="ad-muted">Add WHATSAPP_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID in Vercel to create the templates from here and see whether Meta approved them.</p>
@@ -296,14 +300,20 @@ function Templates({ enabled }: { enabled: boolean }) {
               <thead><tr><th>Template</th><th>Meta ({data.language})</th></tr></thead>
               <tbody>{data.items.map((t) => (
                 <tr key={t.key}>
-                  <td><strong>{KIND_LABEL[t.key as WaKind] ?? t.key}</strong><br /><span className="ad-code">{t.name}</span></td>
-                  <td><Badge tone={TPL_TONE[t.status] ?? 'grey'}>{t.status === 'MISSING' ? `Not in ${t.language}` : t.status.toLowerCase()}</Badge>{t.rejectedReason && <><br /><small className="ad-neg">{t.rejectedReason}</small></>}
+                  <td>
+                    <strong>{KIND_LABEL[t.key as WaKind] ?? t.key}</strong><br /><span className="ad-code">{t.name}</span>
+                    <br /><button type="button" className="ad-link" onClick={() => setOpen(open === t.key ? null : t.key)}>{open === t.key ? 'Hide design' : 'See design'}</button>
+                    {open === t.key && <TemplatePreview t={WA_TEMPLATES.find((x) => x.key === t.key)!} />}
+                  </td>
+                  <td><Badge tone={TPL_TONE[t.status] ?? 'grey'}>{t.status === 'MISSING' ? `Not in ${t.language}` : t.status.toLowerCase()}</Badge>
+                    {t.outdated && <> <Badge tone="blue">New design ready</Badge></>}
+                    {t.rejectedReason && <><br /><small className="ad-neg">{t.rejectedReason}</small></>}
                     {t.otherLanguages.length > 0 && <><br /><small className="ad-muted">Also: {t.otherLanguages.map((o) => `${o.language} ${o.status.toLowerCase()}`).join(', ')}</small></>}</td>
                 </tr>
               ))}</tbody>
             </table>
             <p className="ad-muted ad-mt">Messages use only approved templates; until then they fail with Meta's reason, shown in Sent. Review usually takes minutes, sometimes a day.</p>
-            {data.items.some((t) => t.status === 'MISSING') && <Btn kind="primary" busy={busy === 'create'} onClick={create}>Create the missing templates</Btn>}
+            {data.items.some((t) => t.status === 'MISSING' || t.outdated) && <Btn kind="primary" busy={busy === 'sync'} onClick={sync}>Update all templates in Meta</Btn>}
             {results && <ul className="ad-mt">{results.map((r) => <li key={r.name}><span className="ad-code">{r.name}</span>: {r.result}</li>)}</ul>}
           </>
         )}
@@ -331,6 +341,33 @@ function Diagnose() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/* ---------------- A template as the customer sees it ---------------- */
+
+/** WhatsApp's own formatting: *bold*, _italic_, line breaks. */
+function waFormat(text: string) {
+  return text.split('\n').map((line, i) => (
+    <span key={i}>{i > 0 && <br />}{line.split(/(\*[^*]+\*|_[^_]+_)/g).map((part, j) => (
+      /^\*[^*]+\*$/.test(part) ? <strong key={j}>{part.slice(1, -1)}</strong> : /^_[^_]+_$/.test(part) ? <em key={j}>{part.slice(1, -1)}</em> : part
+    ))}</span>
+  ));
+}
+
+function TemplatePreview({ t, values }: { t: WaTemplateDef; values?: string[] }) {
+  const v = values ?? t.samples;
+  const text = t.text.replace(/\{\{(\d+)\}\}/g, (_, n) => v[Number(n) - 1] ?? t.samples[Number(n) - 1] ?? '');
+  return (
+    <div className="wa-tpl ad-mt">
+      <div className="wa-tpl__bubble">
+        <div className="wa-tpl__header">{t.header}</div>
+        <div className="wa-tpl__body">{waFormat(text)}</div>
+        <div className="wa-tpl__footer">{t.footer}</div>
+      </div>
+      <div className="wa-tpl__button">↗ {t.button.label}</div>
+      {t.quickReply && <div className="wa-tpl__button">{t.quickReply}</div>}
     </div>
   );
 }

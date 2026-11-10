@@ -7,23 +7,30 @@ import { hmacHex } from '../server/lib/crypto.js';
 import { memoryCalls } from '../server/lib/callProvider.js';
 import { memoryWhatsApp, parseWebhook, verifyWhatsAppSignature, whatsappHttp, whatsappTemplatesHttp } from '../server/lib/whatsapp.js';
 import { runCalls } from '../server/services/calls.js';
-import { nextDaytime, runWhatsApp } from '../server/services/whatsapp.js';
+import { nextDaytime, runWhatsApp, templateComponents } from '../server/services/whatsapp.js';
+import { WA_TEMPLATES } from '../src/shared/whatsapp.js';
 import { address, contact, setup, supabaseToken } from './helpers.js';
 
 const reply = (status: number, body: unknown) => vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
   new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
 
 describe('the Cloud API client', () => {
-  it('sends a template with its body variables, as digits-only "to"', async () => {
+  it('sends a template with its body variables and the button\'s path, as digits-only "to"', async () => {
     const f = reply(200, { messaging_product: 'whatsapp', messages: [{ id: 'wamid.ABC' }] });
-    const r = await whatsappHttp({ token: 'tok', phoneNumberId: '123456', fetch: f }).sendTemplate('+919876543210', 'elden_order_confirmed', 'en', ['Asha', '1042', '₹798.00', 'https://x\\n  y']);
+    const r = await whatsappHttp({ token: 'tok', phoneNumberId: '123456', fetch: f }).sendTemplate('+919876543210', 'elden_order_confirmed', 'en', ['Asha', '1042', '₹798.00 \\n  ok'], 'order/1042?t=abc');
     expect(r).toEqual({ id: 'wamid.ABC' });
     const [url, init] = f.mock.calls[0];
     expect(url).toBe('https://graph.facebook.com/v24.0/123456/messages');
     expect(init?.headers).toMatchObject({ Authorization: 'Bearer tok' });
     expect(JSON.parse(String(init?.body))).toEqual({
       messaging_product: 'whatsapp', recipient_type: 'individual', to: '919876543210', type: 'template',
-      template: { name: 'elden_order_confirmed', language: { code: 'en' }, components: [{ type: 'body', parameters: ['Asha', '1042', '₹798.00', 'https://x\\n y'].map((text) => ({ type: 'text', text })) }] },
+      template: {
+        name: 'elden_order_confirmed', language: { code: 'en' },
+        components: [
+          { type: 'body', parameters: ['Asha', '1042', '₹798.00 \\n ok'].map((text) => ({ type: 'text', text })) },
+          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: 'order/1042?t=abc' }] },
+        ],
+      },
     });
   });
 
@@ -33,14 +40,22 @@ describe('the Cloud API client', () => {
       .rejects.toThrow('WhatsApp 400 (132001): Template name does not exist in the translation: template name (x) does not exist in en');
   });
 
-  it('creates and lists templates in the WhatsApp Business Account', async () => {
+  it('creates, edits and lists templates in the WhatsApp Business Account', async () => {
     const f = reply(200, { id: '99', status: 'PENDING', category: 'UTILITY' });
-    await whatsappTemplatesHttp({ token: 't', businessAccountId: 'waba1', fetch: f }).create({ name: 'elden_ebook_ready', language: 'en', category: 'UTILITY', text: 'Hi {{1}}, ready: {{2}} ok', samples: ['Asha', 'x'] });
+    const api = whatsappTemplatesHttp({ token: 't', businessAccountId: 'waba1', fetch: f });
+    const components = templateComponents(WA_TEMPLATES.find((x) => x.key === 'ebook_ready')!, 'https://eldenap.in');
+    await api.create({ name: 'elden_ebook_ready', language: 'en', category: 'UTILITY', components });
     const [url, init] = f.mock.calls[0];
     expect(url).toBe('https://graph.facebook.com/v24.0/waba1/message_templates');
-    expect(JSON.parse(String(init?.body))).toEqual({ name: 'elden_ebook_ready', language: 'en', category: 'UTILITY', components: [{ type: 'BODY', text: 'Hi {{1}}, ready: {{2}} ok', example: { body_text: [['Asha', 'x']] } }] });
+    const sent = JSON.parse(String(init?.body));
+    expect(sent).toMatchObject({ name: 'elden_ebook_ready', language: 'en', category: 'UTILITY' });
+    expect(sent.components.map((c: any) => c.type)).toEqual(['HEADER', 'BODY', 'FOOTER', 'BUTTONS']);
+    expect(sent.components[3].buttons[0]).toEqual({ type: 'URL', text: 'Download my e-book', url: 'https://eldenap.in/{{1}}', example: ['https://eldenap.in/order/1042?t=abc123'] });
+    await api.edit('1234', components);
+    expect(f.mock.calls[1][0]).toBe('https://graph.facebook.com/v24.0/1234');
+    expect(JSON.parse(String(f.mock.calls[1][1]?.body))).toEqual({ components });
     const l = reply(200, { data: [{ name: 'elden_ebook_ready', language: 'en', status: 'APPROVED', category: 'UTILITY', rejected_reason: 'NONE' }] });
-    expect(await whatsappTemplatesHttp({ token: 't', businessAccountId: 'waba1', fetch: l }).list()).toEqual([{ name: 'elden_ebook_ready', language: 'en', status: 'APPROVED', category: 'UTILITY', rejectedReason: '' }]);
+    expect(await whatsappTemplatesHttp({ token: 't', businessAccountId: 'waba1', fetch: l }).list()).toEqual([{ id: '', name: 'elden_ebook_ready', language: 'en', status: 'APPROVED', category: 'UTILITY', rejectedReason: '', components: [] }]);
   });
 
   it('reads webhook deliveries and checks their signature', () => {
@@ -174,7 +189,8 @@ describe('automatic messages', () => {
     at('2026-11-10T11:40:00+05:30');
     expect(await runWhatsApp(t.deps)).toMatchObject({ queued: 1, sent: 1 });
     expect(wa.sent[0]).toMatchObject({ to: '+919876543210', template: 'elden_cart_reminder', language: 'en' });
-    expect(wa.sent[0].params).toEqual(['Asha', 'Mathematics Today x2', expect.stringMatching(/^₹/), expect.stringMatching(/^https:\/\/eldenap\.in\/checkout\?resume=/)]);
+    expect(wa.sent[0].params).toEqual(['Asha', 'Mathematics Today x2', expect.stringMatching(/^₹/)]);
+    expect(wa.sent[0].button).toMatch(/^checkout\?resume=/);
     expect((await runWhatsApp(t.deps)).queued).toBe(0);
   });
 
@@ -193,12 +209,12 @@ describe('automatic messages', () => {
     await lead();
     const o = await pay();
     expect(wa.sent).toHaveLength(1);
-    expect(wa.sent[0]).toMatchObject({ template: 'elden_order_confirmed', params: ['Asha', String(o.number), expect.stringMatching(/^₹/), expect.stringContaining('/order/')] });
+    expect(wa.sent[0]).toMatchObject({ template: 'elden_order_confirmed', params: ['Asha', String(o.number), expect.stringMatching(/^₹/)], button: expect.stringMatching(new RegExp(`^order/${o.number}\\?t=`)) });
     const h = await admin();
     await t.call('POST', `/admin/orders/${o.id}/fulfillment`, { headers: h, body: { status: 'packed' } });
     await t.call('POST', `/admin/orders/${o.id}/fulfillment`, { headers: h, body: { status: 'shipped', courier: 'India Post', trackingNumber: 'EK123456789IN', notify: true } });
     expect(wa.sent[1]).toMatchObject({ template: 'elden_order_shipped' });
-    expect(wa.sent[1].params?.[2]).toBe('India Post tracking number EK123456789IN');
+    expect(wa.sent[1].params?.[2]).toBe('Courier: India Post · Tracking number: EK123456789IN');
   });
 
   it('no consent at checkout: no order messages', async () => {
@@ -236,8 +252,8 @@ describe('after a Sarvam call', () => {
     await callHook({ metadata: { call_id: c.id }, status: 'completed', duration: 80, variables: { call_outcome: 'will_order', wants_link: true, discount_offered: true } });
     expect(wa.sent).toHaveLength(1);
     expect(wa.sent[0]).toMatchObject({ template: 'elden_call_followup' });
-    expect(wa.sent[0].params?.[1]).toBe('Here is the link to finish your order; use code COMEBACK10 at checkout.');
-    expect(wa.sent[0].params?.[2]).toMatch(/resume=.*&coupon=COMEBACK10$/);
+    expect(wa.sent[0].params?.[1]).toBe('Your cart is saved: tap the button below to finish your order. Use code *COMEBACK10* at checkout.');
+    expect(wa.sent[0].button).toMatch(/^checkout\?resume=.*&coupon=COMEBACK10$/);
     // The same report again: no second message.
     await callHook({ metadata: { call_id: c.id }, status: 'completed', variables: { call_outcome: 'will_order' } });
     expect(wa.sent).toHaveLength(1);
@@ -270,7 +286,9 @@ describe('new books', () => {
     await waSettings({ enabled: true });
     const test = await t.call('POST', '/admin/whatsapp/new-books', { headers: h, body: { ...body, testPhone: '9999988888' } });
     expect(test.json.queued).toBe(1);
-    expect(wa.sent[0]).toMatchObject({ to: '+919999988888', template: 'elden_new_books', params: ['there', 'Mathematics Today 2027 is out.', 'https://eldenap.in/books'] });
+    expect(wa.sent[0]).toMatchObject({ to: '+919999988888', template: 'elden_new_books', params: ['there', 'Mathematics Today 2027 is out.'], button: 'books' });
+    // The button only opens pages on our own site.
+    expect((await t.call('POST', '/admin/whatsapp/new-books', { headers: h, body: { ...body, link: 'https://example.com/x', testPhone: '9999988888' } })).status).toBe(400);
     const all = await t.call('POST', '/admin/whatsapp/new-books', { headers: h, body });
     expect(all.json.queued).toBe(1);
     expect(wa.sent[1]).toMatchObject({ to: '+919876543210' });
@@ -278,22 +296,47 @@ describe('new books', () => {
 });
 
 describe('templates', () => {
-  it('creates the missing ones in the WhatsApp account and reports their status', async () => {
+  it('follows Meta\'s rules: no variable at the start or end, none side by side, short buttons', () => {
+    for (const x of WA_TEMPLATES) {
+      expect(x.text).not.toMatch(/^\{\{|\}\}$/);
+      expect(x.text).not.toMatch(/\}\}\s*\{\{/);
+      expect(x.text.match(/\{\{\d+\}\}/g)).toHaveLength(x.vars.length);
+      expect(x.samples).toHaveLength(x.vars.length);
+      expect(x.header.length).toBeLessThanOrEqual(60);
+      expect(x.header).not.toMatch(/\{\{|[*_~]|\p{Extended_Pictographic}/u);
+      expect(x.footer.length).toBeLessThanOrEqual(60);
+      expect(x.button.label.length).toBeLessThanOrEqual(25);
+      expect(x.text.length).toBeLessThanOrEqual(1024);
+      expect(`${x.text} ${x.footer}`).not.toMatch(/\bstop\b/i); // no "reply STOP" lines
+    }
+  });
+
+  it('updates all of them in Meta: edits the changed, creates the missing, leaves the matching', async () => {
     const created: string[] = [];
+    const edited: string[] = [];
+    const current = templateComponents(WA_TEMPLATES.find((x) => x.key === 'shipped')!, 'https://eldenap.in');
     t.deps.whatsappTemplates = {
-      async list() { return [{ name: 'elden_order_confirmed', language: 'en', status: 'APPROVED', category: 'UTILITY', rejectedReason: '' }]; },
-      async create(x) { created.push(x.name); expect(x.text).not.toMatch(/^\{\{|\}\}$/); return { id: '1', status: 'PENDING' }; },
+      async list() {
+        return [
+          { id: 'tpl-1', name: 'elden_order_confirmed', language: 'en', status: 'APPROVED', category: 'UTILITY', rejectedReason: '', components: [{ type: 'BODY', text: 'old text' }] },
+          { id: 'tpl-2', name: 'elden_order_shipped', language: 'en', status: 'APPROVED', category: 'UTILITY', rejectedReason: '', components: current },
+        ];
+      },
+      async create(x) { created.push(x.name); return { id: '1', status: 'PENDING' }; },
+      async edit(id) { edited.push(id); },
       async phoneNumbers() { return [{ id: 'other-number', number: '+1 555-000-0000' }]; },
       async numberInfo() { return {}; },
     };
     const h = await admin();
     const list = await t.call('GET', '/admin/whatsapp/templates', { headers: h });
-    expect(list.json.items.find((x: any) => x.key === 'order_confirmed').status).toBe('APPROVED');
+    expect(list.json.items.find((x: any) => x.key === 'order_confirmed')).toMatchObject({ status: 'APPROVED', outdated: true });
+    expect(list.json.items.find((x: any) => x.key === 'shipped')).toMatchObject({ status: 'APPROVED', outdated: false });
     expect(list.json.items.find((x: any) => x.key === 'cart').status).toBe('MISSING');
     expect(list.json.account.numberInAccount).toBe(false); // WHATSAPP_PHONE_NUMBER_ID isn't one of the account's numbers
-    const r = await t.call('POST', '/admin/whatsapp/templates/create', { headers: h });
-    expect(r.json.results.find((x: any) => x.key === 'order_confirmed').result).toBe('already there');
-    expect(created).toHaveLength(6);
+    const r = await t.call('POST', '/admin/whatsapp/templates/sync', { headers: h });
+    expect(r.json.results.find((x: any) => x.key === 'shipped').result).toBe('already up to date');
+    expect(edited).toEqual(['tpl-1']);
+    expect(created).toHaveLength(5);
   });
 });
 
@@ -302,6 +345,7 @@ describe('template language', () => {
     t.deps.whatsappTemplates = {
       async list() { return [{ name: 'elden_new_books', language: 'en_US', status: 'APPROVED', category: 'MARKETING', rejectedReason: '' }]; },
       async create() { return { id: '1', status: 'PENDING' }; },
+      async edit() {},
       async phoneNumbers() { return []; },
       async numberInfo() { return {}; },
     };
@@ -326,6 +370,7 @@ describe('diagnose', () => {
     t.deps.whatsappTemplates = {
       async list() { return [{ name: 'elden_new_books', language: 'en', status: 'APPROVED', category: 'MARKETING', rejectedReason: '' }]; },
       async create() { return { id: '1', status: 'PENDING' }; },
+      async edit() {},
       async phoneNumbers() { return [{ id: '222', number: '+1 555-747-5125' }]; },
       async numberInfo(id) { if (id !== '111') throw new Error('bad'); return { display_phone_number: '+91 70000 00000' }; },
     };

@@ -340,7 +340,7 @@ With all five set, Admin → Calls shows **Outgoing calls: Connected (sarvam)**;
 
 **One-time:** run [`0017_whatsapp.sql`](supabase-updates/0017_whatsapp.sql) in Supabase → SQL Editor before this version goes live.
 
-The site sends WhatsApp messages from the business number **+1 555-747-5125** ("Elden Academic Press", in the WhatsApp account of the **Elden Academic Press** business portfolio, ID `1115840267620875`) through Meta's WhatsApp Cloud API, and shows customers' replies in **Admin → WhatsApp** (managers and the owner). Only to people who agreed: a checkout with *"Elden Academic Press may call or WhatsApp me"* ticked, or a newsletter subscriber with *"Subscribe to calls"* ticked. Anyone who replies **STOP** gets no more messages (and a confirmation); **START** undoes it.
+The site sends WhatsApp messages from the business number **+1 555-747-5125** ("Elden Academic Press", in the WhatsApp account of the **Elden Academic Press** business portfolio, ID `1115840267620875`) through Meta's WhatsApp Cloud API, and shows customers' replies in **Admin → WhatsApp** (managers and the owner). Only to people who agreed: a checkout with *"Elden Academic Press may call or WhatsApp me"* ticked, or a newsletter subscriber with *"Subscribe to calls"* ticked. Anyone who writes **STOP** gets no more messages (and a confirmation); **START** undoes it.
 
 | Message (template) | When | Category |
 |---|---|---|
@@ -369,7 +369,7 @@ Each message is a switch in *Admin → WhatsApp → Settings*, under a master sw
 | `WHATSAPP_VERIFY_TOKEN` | your verify token |
 
 5. **Webhook:** the app's *WhatsApp → Configuration → Webhook*: callback URL `https://eldenap.in/api/whatsapp/webhook`, the same verify token, then *Manage* → subscribe to **messages**. Publish the app (App mode: *Live*) so real messages arrive.
-6. **Templates:** *Admin → WhatsApp → Settings → Templates in WhatsApp → Create the missing templates*. The site creates all seven (language `en`) and shows Meta's review: messages go out only once a template is *approved* (usually minutes, sometimes a day). A rejected one shows Meta's reason; edit it in WhatsApp Manager, or create one with another name and put that name under *Template names*.
+6. **Templates:** *Admin → WhatsApp → Settings → Templates in WhatsApp → Update all templates in Meta*. Each template has a short title, a friendly message, a footer ("Elden Academic Press · eldenap.in") and a button (*Complete my order*, *View my order*, *Track my order*, *Download my e-book*, *Continue*, *Explore new books*) that opens the customer's own page on the site. *See design* shows each one as it looks on a phone. The button creates missing templates, updates ones whose design changed (shown as *New design ready*) and leaves the rest; Meta reviews each new or changed one (usually minutes, sometimes a day) and messages wait until it is *approved*. Meta allows about one edit per template per day. The designs live in `src/shared/whatsapp.ts`. A rejected one shows Meta's reason. The messages have no "stop" button or line; a customer who writes STOP is still respected.
 7. **Payment:** WhatsApp Manager → the account → *Payment settings*: add a card. Meta charges per marketing and utility message (replies within 24 hours of the customer's message are free).
 8. Switch on what you want in *Settings*. The number starts at 250 customers a day; Meta raises it as quality stays good.
 

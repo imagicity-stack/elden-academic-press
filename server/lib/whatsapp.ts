@@ -7,19 +7,23 @@ import { GRAPH_VERSION } from './meta.js';
 
 export interface WhatsApp {
   name: string;
-  /** A template approved in WhatsApp Manager, with its body variables in order. */
-  sendTemplate(to: string, template: string, language: string, params: string[]): Promise<{ id: string }>;
+  /** An approved template: its body variables in order, and the path for its link button (if it has one). */
+  sendTemplate(to: string, template: string, language: string, params: string[], buttonPath?: string): Promise<{ id: string }>;
   /** Free text: only within 24 hours of the customer's last message. */
   sendText(to: string, text: string): Promise<{ id: string }>;
 }
 
-export interface WaTemplateInfo { name: string; language: string; status: string; category: string; rejectedReason: string }
-export interface WaTemplateSpec { name: string; language: string; category: 'UTILITY' | 'MARKETING'; text: string; samples: string[] }
+/** A template's parts as Meta stores them (HEADER, BODY, FOOTER, BUTTONS). */
+export type WaComponent = Record<string, unknown>;
+export interface WaTemplateInfo { id?: string; name: string; language: string; status: string; category: string; rejectedReason: string; components?: WaComponent[] }
+export interface WaTemplateSpec { name: string; language: string; category: 'UTILITY' | 'MARKETING'; components: WaComponent[] }
 
-/** Templates in the WhatsApp Business Account: list them, and create the site's. */
+/** Templates in the WhatsApp Business Account: list them, create the site's, and update them. */
 export interface WaTemplates {
   list(): Promise<WaTemplateInfo[]>;
   create(t: WaTemplateSpec): Promise<{ id: string; status: string }>;
+  /** Replace an existing template's content (Meta reviews it again; at most about once a day per template). */
+  edit(id: string, components: WaComponent[]): Promise<void>;
   /** The phone numbers in the same account: the sending number must be one of them to use its templates. */
   phoneNumbers(): Promise<{ id: string; number: string }[]>;
   /** What Meta knows about one phone number id (the one the site sends from). */
@@ -62,9 +66,16 @@ export function whatsappHttp(cfg: { token: string; phoneNumberId: string; fetch?
   }
   return {
     name: 'whatsapp-cloud',
-    sendTemplate: (to, template, language, params) => send({
+    sendTemplate: (to, template, language, params, buttonPath) => send({
       to: waTo(to), type: 'template',
-      template: { name: template, language: { code: language }, components: params.length ? [{ type: 'body', parameters: params.map((p) => ({ type: 'text', text: templateParam(p) })) }] : [] },
+      template: {
+        name: template, language: { code: language },
+        components: [
+          ...(params.length ? [{ type: 'body', parameters: params.map((p) => ({ type: 'text', text: templateParam(p) })) }] : []),
+          // The link button is the first button: its URL ends in {{1}}, filled with this path.
+          ...(buttonPath ? [{ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: buttonPath.slice(0, 2000) }] }] : []),
+        ],
+      },
     }),
     sendText: (to, text) => send({ to: waTo(to), type: 'text', text: { body: text.slice(0, 4096), preview_url: true } }),
   };
@@ -88,10 +99,15 @@ export function whatsappTemplatesHttp(cfg: { token: string; businessAccountId: s
   return {
     async list() {
       const out: WaTemplateInfo[] = [];
-      let next: string | undefined = `${url}?fields=name,language,status,category,rejected_reason&limit=100`;
+      let next: string | undefined = `${url}?fields=id,name,language,status,category,rejected_reason,components&limit=100`;
       for (let page = 0; next && page < 10; page++) {
         const j = await call(next);
-        for (const t of j.data ?? []) out.push({ name: String(t.name), language: String(t.language), status: String(t.status), category: String(t.category ?? ''), rejectedReason: String(t.rejected_reason ?? '') === 'NONE' ? '' : String(t.rejected_reason ?? '') });
+        for (const t of j.data ?? []) {
+          out.push({
+            id: String(t.id ?? ''), name: String(t.name), language: String(t.language), status: String(t.status), category: String(t.category ?? ''),
+            rejectedReason: String(t.rejected_reason ?? '') === 'NONE' ? '' : String(t.rejected_reason ?? ''), components: Array.isArray(t.components) ? t.components : [],
+          });
+        }
         next = j.paging?.next;
       }
       return out;
@@ -99,12 +115,13 @@ export function whatsappTemplatesHttp(cfg: { token: string; businessAccountId: s
     async create(t) {
       const j = await call(url, {
         method: 'POST',
-        body: JSON.stringify({
-          name: t.name, language: t.language, category: t.category,
-          components: [{ type: 'BODY', text: t.text, example: { body_text: [t.samples] } }],
-        }),
+        body: JSON.stringify({ name: t.name, language: t.language, category: t.category, components: t.components }),
       });
       return { id: String(j.id ?? ''), status: String(j.status ?? 'PENDING') };
+    },
+    async edit(id, components) {
+      const base = url.replace(/\/[^/]+\/message_templates$/, '');
+      await call(`${base}/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ components }) });
     },
     async phoneNumbers() {
       const j = await call(`${url.replace(/\/message_templates$/, '/phone_numbers')}?fields=id,display_phone_number`);
@@ -112,7 +129,7 @@ export function whatsappTemplatesHttp(cfg: { token: string; businessAccountId: s
     },
     async numberInfo(phoneNumberId) {
       const base = url.replace(/\/[^/]+\/message_templates$/, '');
-      const j = await call(`${base}/${encodeURIComponent(phoneNumberId)}?fields=id,display_phone_number,verified_name,status,platform_type,code_verification_status,quality_rating`);
+      const j = await call(`${base}/${encodeURIComponent(phoneNumberId)}?fields=id,display_phone_number,verified_name,name_status,status,platform_type,code_verification_status,quality_rating`);
       return Object.fromEntries(Object.entries(j).map(([k, v]) => [k, String(v)]));
     },
   };
@@ -154,13 +171,13 @@ export function parseWebhook(body: unknown): { messages: WaIncoming[]; statuses:
 }
 
 /** For tests and local development: records what it is asked to send. */
-export function memoryWhatsApp(): WhatsApp & { sent: { to: string; template?: string; language?: string; params?: string[]; text?: string }[]; fail?: string } {
-  const sent: { to: string; template?: string; language?: string; params?: string[]; text?: string }[] = [];
+export function memoryWhatsApp(): WhatsApp & { sent: { to: string; template?: string; language?: string; params?: string[]; button?: string; text?: string }[]; fail?: string } {
+  const sent: { to: string; template?: string; language?: string; params?: string[]; button?: string; text?: string }[] = [];
   const w: WhatsApp & { sent: typeof sent; fail?: string } = {
     name: 'test', sent,
-    async sendTemplate(to, template, language, params) {
+    async sendTemplate(to, template, language, params, buttonPath) {
       if (w.fail) throw new Error(w.fail);
-      sent.push({ to, template, language, params: params.map(templateParam) });
+      sent.push({ to, template, language, params: params.map(templateParam), ...(buttonPath !== undefined ? { button: buttonPath } : {}) });
       return { id: `wamid.test-${sent.length}` };
     },
     async sendText(to, text) {

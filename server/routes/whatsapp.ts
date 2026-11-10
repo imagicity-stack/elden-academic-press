@@ -10,7 +10,7 @@ import { body, HttpError, notFound } from '../lib/http.js';
 import { verifyWhatsAppSignature } from '../lib/whatsapp.js';
 import { audit } from './admin/auth.js';
 import {
-  canReply, getWhatsAppSettings, isOptedOut, lastIncoming, newBooksAudience, processWhatsApp, queueNewBooks, recordWebhook, saveWhatsAppSettings, sendReply, whatsappStats,
+  canReply, getWhatsAppSettings, needsUpdate, syncTemplates, isOptedOut, lastIncoming, newBooksAudience, processWhatsApp, queueNewBooks, recordWebhook, saveWhatsAppSettings, sendReply, whatsappStats,
 } from '../services/whatsapp.js';
 import { callableNumber } from '../../src/shared/calls.js';
 import { DEFAULT_WA_SETTINGS, WA_REPLY_WINDOW_MS, WA_TEMPLATES, type WhatsAppSettings } from '../../src/shared/whatsapp.js';
@@ -93,7 +93,11 @@ adminWhatsApp.get('/templates', async (c) => {
       // Only the language the site sends counts: en and en_US are different templates to Meta.
       const m = found.find((x) => x.name === name && x.language === s.language);
       const others = found.filter((x) => x.name === name && x.language !== s.language).map((x) => ({ language: x.language, status: x.status }));
-      return { key: t.key, name, status: m?.status ?? 'MISSING', language: s.language, otherLanguages: others, category: m?.category ?? t.category, rejectedReason: m?.rejectedReason ?? '' };
+      return {
+        key: t.key, name, status: m?.status ?? 'MISSING', language: s.language, otherLanguages: others, category: m?.category ?? t.category, rejectedReason: m?.rejectedReason ?? '',
+        // Meta's copy differs from the site's current design (Update all templates fixes it).
+        outdated: Boolean(m && needsUpdate(t, m, deps.env.SITE_URL)),
+      };
     }),
   });
 });
@@ -130,25 +134,16 @@ adminWhatsApp.get('/diagnose', async (c) => {
   return c.json({ steps });
 });
 
-/** Create the templates that aren't in the WhatsApp account yet (in the settings' language). Meta then reviews them. */
-adminWhatsApp.post('/templates/create', async (c) => {
+/**
+ * Update all templates in Meta to the site's designs: edit those that differ, create those that
+ * are missing, leave matching ones alone. Meta reviews every edited or new one.
+ */
+adminWhatsApp.post('/templates/sync', async (c) => {
   const deps = c.get('deps');
   if (!deps.whatsappTemplates) throw new HttpError(409, 'Set WHATSAPP_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID in Vercel first.');
-  const s = await getWhatsAppSettings(deps.db);
-  let found;
-  try { found = await deps.whatsappTemplates.list(); } catch (e) { throw new HttpError(502, (e as Error).message); }
-  const results: { key: string; name: string; result: string }[] = [];
-  for (const t of WA_TEMPLATES) {
-    const name = s.templates[t.key];
-    if (found.some((x) => x.name === name && x.language === s.language)) { results.push({ key: t.key, name, result: 'already there' }); continue; }
-    try {
-      const r = await deps.whatsappTemplates.create({ name, language: s.language, category: t.category, text: t.text, samples: t.samples });
-      results.push({ key: t.key, name, result: `created (${r.status.toLowerCase()})` });
-    } catch (e) {
-      results.push({ key: t.key, name, result: (e as Error).message });
-    }
-  }
-  await audit(c, 'whatsapp.templates_create', 'whatsapp', null, { results });
+  let results;
+  try { results = await syncTemplates(deps); } catch (e) { throw new HttpError(502, (e as Error).message); }
+  await audit(c, 'whatsapp.templates_sync', 'whatsapp', null, { results });
   return c.json({ results });
 });
 
@@ -221,6 +216,7 @@ adminWhatsApp.post('/new-books', async (c) => {
   const s = await getWhatsAppSettings(deps.db);
   if (!deps.whatsapp) throw new HttpError(409, 'WhatsApp is not connected yet.');
   if (!s.enabled) throw new HttpError(409, 'Switch WhatsApp on first.');
+  if (!input.link.startsWith(`${deps.env.SITE_URL}/`)) throw new HttpError(400, `The button opens a page on our site: use a link starting with ${deps.env.SITE_URL}/`);
   const testPhone = input.testPhone ? callableNumber(input.testPhone) : null;
   if (input.testPhone && !testPhone) throw new HttpError(400, 'Enter a 10-digit Indian mobile number for the test.');
   const r = await queueNewBooks(deps, { message: input.message, link: input.link, testPhone }, c.get('admin').email);

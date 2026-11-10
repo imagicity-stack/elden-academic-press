@@ -12,10 +12,10 @@ import type { Deps } from '../deps.js';
 import type { Q } from '../db/client.js';
 import { checkoutLeads, orders, subscribers, whatsappMessages, whatsappOptOuts, whatsappSettings } from '../db/schema.js';
 import { inr } from '../lib/format.js';
-import { parseWebhook, type WaIncoming, type WaStatusUpdate } from '../lib/whatsapp.js';
+import { parseWebhook, type WaComponent, type WaIncoming, type WaStatusUpdate, type WaTemplateInfo } from '../lib/whatsapp.js';
 import { callableNumber } from '../../src/shared/calls.js';
 import {
-  DEFAULT_WA_SETTINGS, WA_DAY, WA_REPLY_WINDOW_MS, WA_START, WA_STOP, WA_TEMPLATES, type WaKind, type WaStatus, type WaTemplateKey, type WhatsAppSettings,
+  DEFAULT_WA_SETTINGS, WA_DAY, WA_REPLY_WINDOW_MS, WA_START, WA_STOP, WA_TEMPLATES, type WaKind, type WaStatus, type WaTemplateDef, type WaTemplateKey, type WhatsAppSettings,
 } from '../../src/shared/whatsapp.js';
 import { orderLink, type Order } from './orders.js';
 
@@ -57,18 +57,29 @@ const join = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1
 const templateOf = (key: WaTemplateKey) => WA_TEMPLATES.find((t) => t.key === key)!;
 const truthy = (v: unknown) => v === true || /^(true|yes|1)$/i.test(String(v ?? ''));
 
-/** The template's text with the variables filled in: what the inbox shows. */
-export function preview(key: WaTemplateKey, params: string[]) {
-  return templateOf(key).text.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? '');
+/** The template filled in (header, text, button): what the inbox shows. */
+export function preview(key: WaTemplateKey, params: string[], link = '') {
+  const t = templateOf(key);
+  const text = t.text.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? '');
+  return `*${t.header}*\n${text}\n_${t.footer}_\n[${t.button.label}]${link ? ` ${link}` : ''}${t.quickReply ? ` [${t.quickReply}]` : ''}`;
 }
 
-interface Queue { kind: WaTemplateKey; phone: string; name: string; params: string[]; leadId?: string | null; orderId?: string | null; broadcastId?: string | null; dueAt?: Date; createdBy?: string }
+/** A link on our site → the path its template's button adds to the site address ("order/1042?t=…"). */
+export function linkPath(deps: Deps, url: string) {
+  const base = `${deps.env.SITE_URL}/`;
+  return url.startsWith(base) ? url.slice(base.length) : url.replace(/^https?:\/\/[^/]+\/?/, '');
+}
 
-/** Queue one template message. Returns false when it was already queued (same order, lead, send or call). */
+interface Queue { kind: WaTemplateKey; phone: string; name: string; params: string[]; link: string; leadId?: string | null; orderId?: string | null; broadcastId?: string | null; dueAt?: Date; createdBy?: string }
+
+/**
+ * Queue one template message. params holds the body variables, then the button's path last.
+ * Returns false when it was already queued (same order, lead, send or call).
+ */
 async function enqueue(deps: Deps, s: WhatsAppSettings, m: Queue): Promise<boolean> {
   const rows = await deps.db.insert(whatsappMessages).values({
-    phone: m.phone, name: m.name, direction: 'out', kind: m.kind, status: 'queued', template: s.templates[m.kind], params: m.params,
-    body: preview(m.kind, m.params), leadId: m.leadId ?? null, orderId: m.orderId ?? null, broadcastId: m.broadcastId ?? null,
+    phone: m.phone, name: m.name, direction: 'out', kind: m.kind, status: 'queued', template: s.templates[m.kind], params: [...m.params, linkPath(deps, m.link)],
+    body: preview(m.kind, m.params, m.link), leadId: m.leadId ?? null, orderId: m.orderId ?? null, broadcastId: m.broadcastId ?? null,
     dueAt: m.dueAt ?? deps.now(), createdBy: m.createdBy ?? 'system',
   }).onConflictDoNothing().returning({ id: whatsappMessages.id });
   return rows.length > 0;
@@ -95,10 +106,13 @@ export async function orderWhatsApp(deps: Deps, kind: 'order_confirmed' | 'shipp
   if (!lead) return false;
   const name = firstName(o.name) || 'there';
   const link = orderLink(deps, o);
-  const params = kind === 'order_confirmed' ? [name, String(o.number), inr(o.total), link]
-    : kind === 'shipped' ? [name, String(o.number), o.trackingNumber ? `${o.courier ?? 'Courier'} tracking number ${o.trackingNumber}${o.trackingUrl ? ` (${o.trackingUrl})` : ''}` : 'We will share the tracking details soon', link]
-    : [name, String(o.number), link];
-  const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: o.name, params, orderId: o.id, leadId: lead.id });
+  const tracking = o.trackingNumber
+    ? `Courier: ${o.courier ?? 'our courier'} · Tracking number: ${o.trackingNumber}${o.trackingUrl ? ` · Track it at ${o.trackingUrl}` : ''}`
+    : 'We will share the tracking details soon.';
+  const params = kind === 'order_confirmed' ? [name, String(o.number), inr(o.total)]
+    : kind === 'shipped' ? [name, String(o.number), tracking]
+      : [name, String(o.number)];
+  const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: o.name, params, link, orderId: o.id, leadId: lead.id });
   if (queued) await kickWhatsApp(deps);
   return queued;
 }
@@ -122,7 +136,7 @@ export async function planCartMessages(deps: Deps, s: WhatsAppSettings) {
     if (paid) continue;
     const items = join(lead.items.map((i) => `${i.title}${i.quantity > 1 ? ` x${i.quantity}` : ''}`));
     const link = `${deps.env.SITE_URL}/checkout?resume=${lead.resumeToken}`;
-    if (await enqueue(deps, s, { kind: 'cart', phone: lead.phone, name: lead.name, leadId: lead.id, params: [firstName(lead.name) || 'there', items, inr(lead.total), link], dueAt: nextDaytime(t) })) n++;
+    if (await enqueue(deps, s, { kind: 'cart', phone: lead.phone, name: lead.name, leadId: lead.id, params: [firstName(lead.name) || 'there', items, inr(lead.total)], link, dueAt: nextDaytime(t) })) n++;
   }
   return n;
 }
@@ -148,37 +162,39 @@ export async function callWhatsApp(deps: Deps, c: CallInfo, answered: boolean) {
   const name = firstName(c.name || lead.name) || 'there';
   let kind: 'call_followup' | 'missed_call';
   let params: string[];
+  let link: string;
   if (c.kind === 'cart') {
     if (lead.orderId && !answered) return false; // paid meanwhile: nothing to chase
     const coupon = truthy(c.result.discount_offered) && c.variables.discount_code ? c.variables.discount_code : '';
-    const link = lead.orderId && order ? orderLink(deps, order) : `${deps.env.SITE_URL}/checkout?resume=${lead.resumeToken}${coupon ? `&coupon=${encodeURIComponent(coupon)}` : ''}`;
+    link = lead.orderId && order ? orderLink(deps, order) : `${deps.env.SITE_URL}/checkout?resume=${lead.resumeToken}${coupon ? `&coupon=${encodeURIComponent(coupon)}` : ''}`;
     if (!answered) {
       kind = 'missed_call';
-      params = [name, 'the books in your cart', link];
+      params = [name, 'the books in your cart'];
     } else {
       if (['not_interested', 'declined'].includes(c.outcome)) return false;
       kind = 'call_followup';
-      const next = lead.orderId ? 'Your order is confirmed; you can see it here.'
-        : truthy(c.result.wants_link) || c.outcome === 'will_order' ? `Here is the link to finish your order${coupon ? `; use code ${coupon} at checkout` : ''}.`
-          : 'Your cart is saved for whenever you are ready.';
-      params = [name, next, link];
+      const next = lead.orderId ? 'Your order is confirmed: tap the button below to see it.'
+        : truthy(c.result.wants_link) || c.outcome === 'will_order' ? `Your cart is saved: tap the button below to finish your order.${coupon ? ` Use code *${coupon}* at checkout.` : ''}`
+          : 'Your cart is saved for whenever you are ready: tap the button below to see it.';
+      params = [name, next];
     }
   } else {
-    const link = order ? orderLink(deps, order) : `${deps.env.SITE_URL}/books`;
+    link = order ? orderLink(deps, order) : `${deps.env.SITE_URL}/books`;
     if (!answered) {
       kind = 'missed_call';
-      params = [name, order ? `your order #${order.number}` : 'your recent order', link];
+      params = [name, order ? `your order #${order.number}` : 'your recent order'];
     } else {
       kind = 'call_followup';
       const issue = truthy(c.result.issue_reported);
       const books = truthy(c.result.wants_details) && !issue;
       const next = issue ? 'We have passed the problem you mentioned to our team, and they will get back to you soon.'
-        : books ? 'Here are our new books, as promised.' : 'Thank you for your feedback, it helps us a lot.';
-      params = [name, next, books ? `${deps.env.SITE_URL}/books` : link];
+        : books ? 'As promised, our new books are a tap away below.' : 'Thank you for your feedback, it helps us a lot.';
+      params = [name, next];
+      if (books) link = `${deps.env.SITE_URL}/books`;
     }
   }
   // One per call: broadcast_id + phone is unique.
-  const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: c.name || lead.name, params, broadcastId: `call-${c.id}` });
+  const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: c.name || lead.name, params, link, broadcastId: `call-${c.id}` });
   if (queued) await kickWhatsApp(deps);
   return queued;
 }
@@ -208,7 +224,7 @@ export async function queueNewBooks(deps: Deps, input: { message: string; link: 
   const dueAt = input.testPhone ? deps.now() : nextDaytime(deps.now());
   let queued = 0;
   for (const r of to) {
-    if (await enqueue(deps, s, { kind: 'new_books', phone: r.phone, name: r.name, broadcastId, dueAt, createdBy: by, params: [firstName(r.name) || 'there', input.message, input.link] })) queued++;
+    if (await enqueue(deps, s, { kind: 'new_books', phone: r.phone, name: r.name, broadcastId, dueAt, createdBy: by, params: [firstName(r.name) || 'there', input.message], link: input.link })) queued++;
   }
   await kickWhatsApp(deps);
   return { broadcastId, queued };
@@ -238,7 +254,10 @@ export async function processWhatsApp(deps: Deps, limit = 60) {
       if (lead && !lead.consent) { await skip('Consent withdrawn'); continue; }
     }
     try {
-      const r = await deps.whatsapp.sendTemplate(m.phone, m.template, s.language, m.params);
+      // Body variables first, then the button's path (see enqueue).
+      const def = templateOf(m.kind as WaTemplateKey);
+      const n = def?.vars.length ?? m.params.length;
+      const r = await deps.whatsapp.sendTemplate(m.phone, m.template, s.language, m.params.slice(0, n), m.params[n]);
       await db.update(whatsappMessages).set({ waId: r.id, updatedAt: now() }).where(eq(whatsappMessages.id, m.id));
       sent++;
     } catch (e) {
@@ -339,4 +358,66 @@ export async function whatsappStats(db: Q, since: Date) {
     .where(and(eq(whatsappMessages.direction, 'in'), isNull(whatsappMessages.seenAt)));
   const [stopped] = await db.select({ n: sql<number>`count(*)::int` }).from(whatsappOptOuts);
   return { byKind, unread: unread?.n ?? 0, optedOut: stopped?.n ?? 0, audience: (await newBooksAudience(db)).length };
+}
+
+/* ---------------- The templates in Meta ---------------- */
+
+/** A template as Meta wants it: header, body (with examples), footer, link button and quick reply. */
+export function templateComponents(t: WaTemplateDef, siteUrl: string): WaComponent[] {
+  return [
+    { type: 'HEADER', format: 'TEXT', text: t.header },
+    { type: 'BODY', text: t.text, example: { body_text: [t.samples] } },
+    { type: 'FOOTER', text: t.footer },
+    {
+      type: 'BUTTONS',
+      buttons: [
+        { type: 'URL', text: t.button.label, url: `${siteUrl}/{{1}}`, example: [`${siteUrl}/${t.button.sample}`] },
+        ...(t.quickReply ? [{ type: 'QUICK_REPLY', text: t.quickReply }] : []),
+      ],
+    },
+  ];
+}
+
+/** Meta's copy of a template differs from the site's design (or can't be compared). */
+export function needsUpdate(t: WaTemplateDef, existing: WaTemplateInfo, siteUrl: string) {
+  return !existing.components?.length || fingerprint(existing.components) !== fingerprint(templateComponents(t, siteUrl));
+}
+
+/** The parts that matter, to tell whether Meta's copy already matches ours (so it isn't edited needlessly). */
+function fingerprint(components: WaComponent[]) {
+  const by = (type: string) => components.find((c) => String(c.type).toUpperCase() === type) as Record<string, any> | undefined;
+  const buttons = (by('BUTTONS')?.buttons ?? []) as Record<string, unknown>[];
+  return JSON.stringify([by('HEADER')?.text ?? '', by('BODY')?.text ?? '', by('FOOTER')?.text ?? '', buttons.map((b) => [String(b.type).toUpperCase(), b.text ?? '', b.url ?? ''])]);
+}
+
+/**
+ * Bring the WhatsApp account's templates in line with the site's designs: edit those that differ
+ * (Meta reviews them again), create those that are missing, leave matching ones alone.
+ */
+export async function syncTemplates(deps: Deps) {
+  if (!deps.whatsappTemplates) throw new Error('Set WHATSAPP_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID first.');
+  const s = await getWhatsAppSettings(deps.db);
+  const found: WaTemplateInfo[] = await deps.whatsappTemplates.list();
+  const results: { key: string; name: string; result: string; ok: boolean }[] = [];
+  for (const t of WA_TEMPLATES) {
+    const name = s.templates[t.key];
+    const components = templateComponents(t, deps.env.SITE_URL);
+    const existing = found.find((x) => x.name === name && x.language === s.language);
+    try {
+      if (!existing) {
+        const r = await deps.whatsappTemplates.create({ name, language: s.language, category: t.category, components });
+        results.push({ key: t.key, name, ok: true, result: `created, Meta is reviewing it (${r.status.toLowerCase()})` });
+      } else if (existing.components && fingerprint(existing.components) === fingerprint(components)) {
+        results.push({ key: t.key, name, ok: true, result: 'already up to date' });
+      } else if (!existing.id) {
+        results.push({ key: t.key, name, ok: false, result: 'Meta did not return its id, so it cannot be edited from here' });
+      } else {
+        await deps.whatsappTemplates.edit(existing.id, components);
+        results.push({ key: t.key, name, ok: true, result: 'updated, Meta is reviewing it again' });
+      }
+    } catch (e) {
+      results.push({ key: t.key, name, ok: false, result: (e as Error).message });
+    }
+  }
+  return results;
 }
