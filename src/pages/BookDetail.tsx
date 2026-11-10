@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { catalogueHref, relatedTo } from '../catalogue';
@@ -18,6 +18,7 @@ import { NotFound } from './NotFound';
 import { formatName, track } from '../meta';
 import { ga, gaItem } from '../ga';
 import { BookSchema } from '../components/BookSchema';
+import { dropPrerender } from '../prerender';
 
 const TABS = ['Overview', 'Contents'] as const;
 
@@ -25,6 +26,9 @@ export function BookDetail() {
   const { slug } = useParams();
   const { bySlug, status } = useCatalog();
   const book = bySlug(slug);
+  // No such book: the server's ready-made page (if any) gives way to "not found". If the catalogue
+  // failed to load, it stays: it's the book's real content.
+  useLayoutEffect(() => { if (!book && status === 'ready') dropPrerender(); }, [book, status]);
   if (!book) return status === 'loading' ? <div className="wrap page-head" aria-busy="true"><div className="skeleton skeleton--hero" /></div> : <NotFound />;
   // Keyed so tab / format selection resets when moving between books.
   return <BookView key={book.id} book={book} />;
@@ -43,6 +47,8 @@ function BookView({ book }: { book: Product }) {
   const [format, setFormat] = useState<'print' | 'digital'>(print?.available || !digital ? 'print' : 'digital');
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
+  // The app's page is ready: it replaces the server's ready-made copy before the next paint.
+  useLayoutEffect(() => dropPrerender(), []);
 
   useEffect(() => { document.title = `${book.title} — Elden Academic Press`; }, [book.title]);
   useEffect(() => {

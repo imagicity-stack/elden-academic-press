@@ -14,7 +14,7 @@ import { isImage, pdfPageCount, sniff, stripImageMetadata } from '../lib/fileChe
 import { isStateCode, stateName } from '../lib/states.js';
 import { ageOn, checkTeam, RESULT_TEXT, STATUS_TEXT, type TeamInput } from '../../src/shared/teams.js';
 import {
-  assertOpen, canUpload, code, datesOf, ID_TYPES, loadApplication, mediaUrl, membersOf, noticeReaches, registrationState, requireAccess,
+  assertOpen, canUpload, code, datesOf, ID_TYPES, kitFileName, loadApplication, mediaUrl, membersOf, noticeReaches, REGISTERED_STATUSES, registrationState, requireAccess,
   sendTeamEmail, sendTeamStaffAlert, settingsFor, teamCompetition, type App, type Member, type TeamComp, type TeamFile, type TeamSettings,
 } from '../services/teams.js';
 import { briefFor } from '../services/briefs.js';
@@ -101,6 +101,8 @@ teams.get('/:slug/team', async (c) => {
   const [acct] = await db.select().from(accounts).where(eq(accounts.userId, me.userId));
   // The story brief and the official PDFs (which name it) only for an approved team.
   const approved = apps.some((a) => a.status === 'approved');
+  // The comic kit for anyone with a team that registered successfully.
+  const registered = apps.some((a) => (REGISTERED_STATUSES as readonly string[]).includes(a.status));
   return c.json({
     applications: out,
     registration: registrationState(comp, s, now()),
@@ -109,7 +111,23 @@ teams.get('/:slug/team', async (c) => {
     brief: approved ? briefFor(comp.slug) : null,
     rulesDocUrl: approved ? mediaUrl(deps, s.rulesDocKey) : null,
     topicDocUrl: approved ? mediaUrl(deps, s.topicDocKey) : null,
+    kit: registered && s.kitKey ? { name: kitFileName(s), size: s.kitSize } : null,
   });
+});
+
+/** Download the comic kit (a link that works for 5 minutes): for anyone with a team that registered successfully. */
+teams.get('/:slug/team/kit', async (c) => {
+  const deps = c.get('deps');
+  const comp = teamCompetition(c.req.param('slug'));
+  const me = c.get('customer');
+  const s = await settingsFor(deps.db, comp.slug);
+  if (!s.kitKey) throw notFound('The comic kit isn’t available yet.');
+  const byMember = await deps.db.selectDistinct({ id: teamMembers.applicationId }).from(teamMembers).where(eq(teamMembers.email, me.email.toLowerCase()));
+  const [mine] = await deps.db.select({ id: teamApplications.id }).from(teamApplications).where(and(
+    eq(teamApplications.competitionSlug, comp.slug), inArray(teamApplications.status, [...REGISTERED_STATUSES]),
+    or(eq(teamApplications.userId, me.userId), byMember.length ? inArray(teamApplications.id, byMember.map((x) => x.id)) : sql`false`))).limit(1);
+  if (!mine) throw new HttpError(403, 'The comic kit is for registered teams. Register your team to get it.', 'not_registered');
+  return c.json({ url: await deps.storage.signedDownloadUrl('competition-files', s.kitKey, 300, kitFileName(s)) });
 });
 
 /** A one-time link to upload a member's ID document (JPG, PNG or PDF, up to 10 MB), privately. */

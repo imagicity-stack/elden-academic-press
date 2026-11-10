@@ -234,6 +234,7 @@ The website already sends everything Google needs; these are the settings on Goo
 - *Shortlist & results:* set each approved team's result; **Publish results** shows the winners on the page (team name, first names and city, as the terms say).
 - *Settings:* change the dates, pause registration, upload a different hero banner (it replaces the one on the competition page; the card on /competitions keeps the one in the code), artwork, sponsor logos, the official rules PDF and a topic document (both shown only to approved teams, since they name the story), and **Delete ID documents of decided teams** once checks are done (please do this after reviewing).
 - *Exports:* participants CSV, one row per member, with or without contact and guardian details (recorded in Settings → Activity).
+- *Comic kit (Settings → Comic kit):* upload the kit PDF (up to 50 MB). It's stored privately in Supabase (`competition-files` bucket). Every team that registers gets it attached to its “Application received” email, sent to the person who registered and the captain. A kit over 15 MB isn't attached; the email points to the team page instead. Every registered team (pending, approved or asked for changes, but not rejected or withdrawn) can download it from its team page through a 5-minute link. Teams that registered before the upload see it on their page straight away; to email them, send a notice (Notices & email). **Replace** gives out the new file from then on; **Remove** stops giving it out.
 
 **Other competitions** are built on request: ask Claude for one (title, dates, description, rules, who can enter, individual, group or team, and what the form asks). It's added to `src/shared/competitions.ts` and appears on **/competitions** and in **Admin → Competitions** by itself.
 
@@ -309,6 +310,8 @@ The site notes how each visitor arrived: the link's UTM tags, an ad-click marker
 | Google Workspace | Your existing plan (up to 2,000 emails a day per account) |
 
 ## Good to know
+
+- **Link previews and book pages**: a shared link to a book (`/books/<slug>`) shows that book's title, description and cover on WhatsApp, Facebook and in search results. The server builds the page from the database (`server/routes/og.ts`), with the book's content and structured data already in the HTML. Visitors see it at once, and the full page takes over when its scripts have loaded. A book with no uploaded cover has no preview picture: upload a cover in Admin → Products to get one. The site as a whole no longer sets a preview address or picture, so other pages show only the site's name and description. Competition pages set their own.
 
 - **Unpaid checkouts** hold printed stock for 30 minutes (Settings), then a job every 10 minutes releases it. If someone pays late, the stock is re-taken, or the order is flagged *Needs attention* if it sold out meanwhile.
 - **Needs attention** also flags duplicate payments and amount mismatches — check the dashboard.

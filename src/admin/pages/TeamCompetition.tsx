@@ -413,11 +413,13 @@ function Results({ slug, cfg }: { slug: string; cfg: TeamConfig }) {
 /* ---------------- Settings ---------------- */
 
 interface SettingsData {
-  settings: { bannerKey: string | null; artKey: string | null; sponsorKeys: string[]; rulesDocKey: string | null; topicDocKey: string | null; closesAt: string | null; submissionDeadline: string | null; resultsOn: string | null; registrationPaused: boolean; resultsPublished: boolean };
+  settings: { bannerKey: string | null; artKey: string | null; sponsorKeys: string[]; rulesDocKey: string | null; topicDocKey: string | null; closesAt: string | null; submissionDeadline: string | null; resultsOn: string | null; registrationPaused: boolean; resultsPublished: boolean; kitKey: string | null; kitName: string; kitSize: number };
   dates: { closesAt: string; submissionDeadline: string; resultsOn: string };
   defaults: { closesAt: string; submissionDeadline: string; resultsOn: string };
-  urls: { bannerKey: string | null; artKey: string | null; rulesDocKey: string | null; topicDocKey: string | null; sponsorKeys: (string | null)[] };
+  urls: { bannerKey: string | null; artKey: string | null; rulesDocKey: string | null; topicDocKey: string | null; sponsorKeys: (string | null)[]; kitKey: string | null };
+  kit: { attachMaxBytes: number; registeredTeams: number };
 }
+const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(bytes < 1024 * 1024 ? 2 : 1)} MB`;
 /** ISO → "YYYY-MM-DDTHH:mm" in India time, for a datetime input. */
 const toIstInput = (iso: string) => new Date(new Date(iso).getTime() + 330 * 60_000).toISOString().slice(0, 16);
 const fromIstInput = (v: string) => (v ? `${v}:59+05:30` : null);
@@ -468,6 +470,32 @@ function Settings({ slug }: { slug: string }) {
               </label>
             )}
           </div>
+        </div>
+      </Card>
+      <Card title="Comic kit (PDF)">
+        <div className="ad-form">
+          <p className="ad-muted">Every team that registers gets the kit: in the “Application received” email, and on their team page (pending, approved or asked for changes). It’s stored privately; teams download it through short-lived links.</p>
+          {s.kitKey ? (
+            <div className="ad-field">
+              <span className="ad-label">Current kit</span>
+              <span className="ad-inline"><strong>{s.kitName || 'Comic kit'}</strong><span className="ad-muted">{mb(s.kitSize)}</span>{data.urls.kitKey && <a href={data.urls.kitKey} target="_blank" rel="noreferrer">Open ↗</a>}</span>
+              <small className="ad-muted">{s.kitSize <= data.kit.attachMaxBytes
+                ? 'Attached to the registration email.'
+                : `Larger than ${mb(data.kit.attachMaxBytes)}, so the registration email links to the team page instead of attaching it.`}</small>
+            </div>
+          ) : <p><strong>No kit uploaded yet.</strong></p>}
+          <span className="ad-inline">
+            <label className="ad-btn ad-btn--primary ad-btn--sm">{busy === 'kit' ? 'Uploading…' : s.kitKey ? 'Replace the kit' : 'Upload the comic kit'}
+              <input type="file" hidden accept="application/pdf" onChange={(e) => {
+                const f = e.target.files?.[0]; e.target.value = '';
+                if (!f) return;
+                if (f.type && f.type !== 'application/pdf') { window.alert('Please choose a PDF.'); return; }
+                run('kit', () => uploadFile('competition-files', f)).then((r) => r && save({ kitKey: r.path, kitName: r.name, kitSize: r.size }, 'Comic kit uploaded'));
+              }} />
+            </label>
+            {s.kitKey && <button type="button" className="ad-link ad-neg" onClick={() => { if (window.confirm('Stop giving out the comic kit? Teams will no longer see it, and new registration emails won’t include it.')) save({ kitKey: null, kitName: '', kitSize: 0 }, 'Comic kit removed'); }}>Remove</button>}
+          </span>
+          <small className="ad-muted">PDF, up to 50 MB. {data.kit.registeredTeams > 0 && `The ${data.kit.registeredTeams} team${data.kit.registeredTeams === 1 ? '' : 's'} already registered see it on their team page straight away; to email them about it, send a notice (Notices & email tab).`}</small>
         </div>
       </Card>
       <Card title="Identity documents">

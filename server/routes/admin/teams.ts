@@ -14,8 +14,8 @@ import { stateName } from '../../lib/states.js';
 import { istDateTime } from '../../../src/shared/competitions.js';
 import { ageOn, RESULT_TEXT, STATUS_TEXT } from '../../../src/shared/teams.js';
 import {
-  allRecipients, code, datesOf, loadApplication, mediaUrl, membersOf, noticeReaches, sendNoticeEmail, sendTeamEmail, settingsFor, teamCompetition,
-  type TeamComp, type TeamSettings,
+  allRecipients, code, datesOf, KIT_ATTACH_MAX, kitFileName, loadApplication, mediaUrl, membersOf, noticeReaches, sendNoticeEmail, sendTeamEmail, settingsFor, teamCompetition,
+  REGISTERED_STATUSES, type TeamComp, type TeamSettings,
 } from '../../services/teams.js';
 import { deleteIdDocs } from '../teams.js';
 import { audit } from './auth.js';
@@ -294,19 +294,28 @@ const zSettings = z.object({
   bannerKey: zKey, artKey: zKey, sponsorKeys: z.array(z.string().max(300)).max(8), rulesDocKey: zKey, topicDocKey: zKey,
   closesAt: zWhen, submissionDeadline: zWhen, resultsOn: z.string().trim().nullable().refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Use YYYY-MM-DD').transform((v) => v || null),
   registrationPaused: z.boolean(), resultsPublished: z.boolean(),
+  // The comic kit: uploaded to the private competition-files bucket (Admin → uploads), then saved here.
+  kitKey: zKey, kitName: z.string().trim().max(200), kitSize: z.number().int().min(0).max(100 * 1024 * 1024),
 }).partial();
 
-function settingsView(c: Context<AppEnv>, comp: TeamComp, s: TeamSettings) {
+async function settingsView(c: Context<AppEnv>, comp: TeamComp, s: TeamSettings) {
   const deps = c.get('deps');
+  const [registered] = await deps.db.select({ n: sql<number>`count(*)::int` }).from(teamApplications)
+    .where(and(eq(teamApplications.competitionSlug, comp.slug), inArray(teamApplications.status, [...REGISTERED_STATUSES])));
   return {
     settings: s, dates: datesOf(comp, s), defaults: { closesAt: comp.closesAt, submissionDeadline: comp.team.submissionDeadline, resultsOn: comp.team.resultsOn },
-    urls: { bannerKey: mediaUrl(deps, s.bannerKey), artKey: mediaUrl(deps, s.artKey), rulesDocKey: mediaUrl(deps, s.rulesDocKey), topicDocKey: mediaUrl(deps, s.topicDocKey), sponsorKeys: s.sponsorKeys.map((k) => mediaUrl(deps, k)) },
+    urls: {
+      bannerKey: mediaUrl(deps, s.bannerKey), artKey: mediaUrl(deps, s.artKey), rulesDocKey: mediaUrl(deps, s.rulesDocKey), topicDocKey: mediaUrl(deps, s.topicDocKey), sponsorKeys: s.sponsorKeys.map((k) => mediaUrl(deps, k)),
+      // Private: a link for the admin that works for an hour.
+      kitKey: s.kitKey ? await deps.storage.signedDownloadUrl('competition-files', s.kitKey, 3600, kitFileName(s)) : null,
+    },
+    kit: { attachMaxBytes: KIT_ATTACH_MAX, registeredTeams: registered?.n ?? 0 },
   };
 }
 
 adminTeams.get('/:slug/settings', async (c) => {
   const comp = teamCompetition(c.req.param('slug'));
-  return c.json(settingsView(c, comp, await settingsFor(c.get('deps').db, comp.slug)));
+  return c.json(await settingsView(c, comp, await settingsFor(c.get('deps').db, comp.slug)));
 });
 
 adminTeams.put('/:slug/settings', async (c) => {
@@ -317,7 +326,7 @@ adminTeams.put('/:slug/settings', async (c) => {
   await db.insert(competitionSettings).values({ slug: comp.slug, data: next, updatedBy: c.get('admin').email })
     .onConflictDoUpdate({ target: competitionSettings.slug, set: { data: next, updatedBy: c.get('admin').email, updatedAt: sql`now()` } });
   await audit(c, 'competition.settings', 'competition', comp.slug, input);
-  return c.json(settingsView(c, comp, next));
+  return c.json(await settingsView(c, comp, next));
 });
 
 /** Delete the ID documents of teams already decided (approved, rejected or withdrawn): they were only needed for the check. */

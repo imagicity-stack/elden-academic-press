@@ -1,10 +1,15 @@
-// Link previews for competitions. WhatsApp and Facebook don't run JavaScript, so a
-// shared /competitions/<slug> link would show the generic site card. vercel.json
-// sends that one address here: we return the normal page (index.html) with the
-// competition's title, description and image filled in. The app then loads as usual.
+// Link previews for competitions and books. WhatsApp and Facebook don't run JavaScript, so a
+// shared /competitions/<slug> or /books/<slug> link would show the generic site card. vercel.json
+// sends those addresses here: we return the normal page (index.html) with that page's title,
+// description and image filled in. A book page also comes with its content and structured data
+// already in the HTML (for search engines, and for visitors while the app loads); the app then
+// takes over as usual.
 import type { Deps } from '../deps.js';
-import { esc } from '../lib/format.js';
+import { esc, inr } from '../lib/format.js';
+import { loadCatalog, type CatalogItem } from '../services/catalog.js';
 import { findCompetition } from '../../src/shared/competitions.js';
+import { bookDescription, bookImages, bookSchema, bookUrl, jsonLd } from '../../src/shared/bookSchema.js';
+import { LV, PAL } from '../../src/data.js';
 
 let cached: { at: number; origin: string; html: string } | null = null;
 
@@ -65,3 +70,123 @@ export async function competitionPage(deps: Deps, slug: string, requestOrigin: s
   if (comp.team) html = html.replace('</head>', `    <link rel="preload" href="/api/competition-info/${comp.slug}" as="fetch" crossorigin />\n  </head>`);
   return html;
 }
+
+const addToHead = (html: string, tags: string) => html.replace('</head>', `${tags}\n  </head>`);
+
+/**
+ * A book's page: its own title, description, cover and address for link previews, its
+ * structured data, and its content, read from the database. status 404 (with the plain app,
+ * not indexed) when there's no such book on sale.
+ */
+export async function bookPage(deps: Deps, slug: string, requestOrigin: string): Promise<{ status: 200 | 404; html: string }> {
+  const site = deps.env.SITE_URL.replace(/\/$/, '');
+  const [template, catalog] = await Promise.all([indexHtml(pageOrigin(site, requestOrigin)), loadCatalog(deps.db, deps.storage)]);
+  const book = catalog.items.find((b) => b.slug === slug);
+  if (!book) return { status: 404, html: addToHead(template, '    <meta name="robots" content="noindex" />') };
+
+  const url = bookUrl(book.slug, site);
+  const description = bookDescription(book).slice(0, 200);
+  const image = bookImages(book, site)[0];
+  const offer = book.formats.print ?? book.formats.digital;
+  let html = template.replace(/<title>[^<]*<\/title>/, `<title>${esc(`${book.title} — Elden Academic Press`)}</title>`);
+  if (description) {
+    html = setMeta(html, 'name', 'description', description);
+    html = setMeta(html, 'property', 'og:description', description);
+  }
+  html = setMeta(html, 'property', 'og:type', 'product');
+  html = setMeta(html, 'property', 'og:title', book.title);
+  html = setMeta(html, 'property', 'og:url', url);
+  if (image) {
+    html = setMeta(html, 'property', 'og:image', image);
+    html = setMeta(html, 'property', 'og:image:alt', `Cover of ${book.title}`);
+  }
+  if (offer) {
+    html = setMeta(html, 'property', 'product:price:amount', (offer.price / 100).toFixed(2));
+    html = setMeta(html, 'property', 'product:price:currency', 'INR');
+    html = setMeta(html, 'property', 'product:availability', offer.available ? 'in stock' : 'out of stock');
+  }
+  // The same id as the product feed and the Pixel's content_ids, so Meta ties the page to the catalogue item.
+  html = setMeta(html, 'property', 'product:retailer_item_id', book.id);
+  html = setMeta(html, 'name', 'twitter:card', image ? 'summary_large_image' : 'summary');
+  html = addToHead(html, `    <link rel="canonical" href="${esc(url)}" />\n    <style>${PRERENDER_CSS}</style>`);
+  // The page itself, before the app's script runs; the app removes it when its own page is ready.
+  return { status: 200, html: html.replace('<div id="root"></div>', `${prerenderBook(book, image)}\n    <div id="root"></div>`) };
+}
+
+function stockNote(kind: 'print' | 'digital', f: { available: boolean; lowStock: number | null }) {
+  if (kind === 'digital') return f.available ? 'Instant download' : 'Not available';
+  if (!f.available) return 'Out of stock';
+  return f.lowStock ? `Only ${f.lowStock} left` : 'In stock';
+}
+
+/** The book's page as plain HTML: what search engines read, and what a visitor sees until the app loads. */
+function prerenderBook(b: CatalogItem, image: string | undefined): string {
+  const formats = ([['print', b.formats.print?.includesEbook ? 'Printed book + free e-book (PDF)' : 'Printed book'], ['digital', 'E-book (PDF)']] as const)
+    .flatMap(([k, label]) => {
+      const f = b.formats[k];
+      if (!f) return [];
+      const was = f.compareAt && f.compareAt > f.price ? ` <s>${esc(inr(f.compareAt))}</s>` : '';
+      return [`<li><span>${esc(label)}</span> <b>${esc(inr(f.price))}</b>${was} <span class="pr-stock${f.available ? '' : ' is-out'}">${esc(stockNote(k, f))}</span></li>`];
+    });
+  const specs = ([
+    ['ISBN', b.isbn], ['Pages', b.pages ? String(b.pages) : ''], ['Edition', b.edition],
+    [b.boards.length ? 'Board' : 'Exam / series', b.boards.join(', ') || b.classLabel],
+    ['Level', LV[b.level as keyof typeof LV] ?? ''], ['Language', b.language],
+  ] as [string, string][]).filter(([, v]) => v);
+  const tags = [b.category?.name, LV[b.level as keyof typeof LV], b.isNew ? 'New' : ''].filter(Boolean);
+  const by = [b.author ? `by <b>${esc(b.author)}</b>` : '', esc([b.classLabel, b.boards.join(', ')].filter(Boolean).join(' · '))].filter(Boolean).join(' · ');
+  const cover = image
+    ? `<img src="${esc(image)}" alt="Cover of ${esc(b.title)}" />`
+    : (() => {
+      // No uploaded cover: the app draws one in the book's colours; this is a plain version of it.
+      const c = PAL[b.palette] ?? PAL[0];
+      return `<div class="pr-blank" aria-hidden="true" style="background:${esc(c.bg)};color:${esc(c.fg)}"><b>${esc(b.title)}</b>${b.author ? `<span>${esc(b.author)}</span>` : ''}</div>`;
+    })();
+  return `<div id="prerender" data-path="/books/${esc(encodeURIComponent(b.slug))}">
+      <header class="pr-head"><a href="/" class="pr-brand"><img src="/assets/elden-mark-sm.png" width="22" height="29" alt="" />Elden Academic Press</a><nav><a href="/store">Store</a><a href="/contact">Contact</a></nav></header>
+      <main class="pr-main">
+        <nav class="pr-crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/store">Store</a> / <span>${esc(b.title)}</span></nav>
+        <article class="pr-book">
+          <div class="pr-cover">${cover}</div>
+          <div class="pr-info">
+            ${tags.length ? `<p class="pr-tags">${tags.map((t) => esc(t)).join(' · ')}</p>` : ''}
+            <h1>${esc(b.title)}</h1>
+            ${by ? `<p class="pr-by">${by}</p>` : ''}
+            ${b.blurb ? `<p class="pr-blurb">${esc(b.blurb)}</p>` : ''}
+            ${formats.length ? `<ul class="pr-prices">${formats.join('')}</ul>` : ''}
+            ${specs.length ? `<dl class="pr-specs">${specs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` : ''}
+          </div>
+        </article>
+        ${b.description && b.description !== b.blurb ? `<section class="pr-sec"><h2>Overview</h2><p class="pr-desc">${esc(b.description)}</p></section>` : ''}
+        ${b.highlights.length ? `<section class="pr-sec"><h2>What’s inside</h2><ul>${b.highlights.map((h) => `<li>${esc(h)}</li>`).join('')}</ul></section>` : ''}
+        ${b.contents.length ? `<section class="pr-sec"><h2>Contents</h2><ol>${b.contents.map((t) => `<li>${esc(t)}</li>`).join('')}</ol></section>` : ''}
+        <script type="application/ld+json">${jsonLd(bookSchema(b))}</script>
+      </main>
+      <footer class="pr-foot">Elden Academic Press · <a href="/store">All books</a> · <a href="/contact">Contact</a></footer>
+    </div>`;
+}
+
+// The ready-made page's look (the app's own styles arrive with its script). While it's there, the
+// app renders out of sight, and swaps in when its book page is ready (src/prerender.ts).
+const PRERENDER_CSS = [
+  '#prerender~#root{display:none}',
+  "#prerender{font:16px/1.55 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#0B1220;background:#F4F2ED;min-height:100vh}",
+  '#prerender a{color:inherit}#prerender h1,#prerender h2{font-family:inherit;color:#0B1220}',
+  '.pr-head,.pr-main,.pr-foot{max-width:1200px;margin:0 auto;padding-left:20px;padding-right:20px}',
+  '.pr-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:18px;padding-bottom:18px}',
+  '.pr-brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:14px}',
+  '.pr-head nav{display:flex;gap:18px;font-size:15px}',
+  '.pr-main{padding-bottom:48px}.pr-crumbs{font-size:13px;color:#576072;margin:4px 0 24px}',
+  '.pr-book{display:grid;gap:32px}@media(min-width:860px){.pr-book{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px;align-items:start}}',
+  '.pr-cover img,.pr-blank{display:block;width:100%;max-width:min(400px,70vw);height:auto;margin:0 auto;border-radius:6px;box-shadow:0 18px 40px rgba(11,18,32,.18)}',
+  '.pr-blank{aspect-ratio:3/4;background:#1C2638;color:#fff;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;padding:24px;font-size:clamp(20px,5vw,26px);line-height:1.15}.pr-blank span{font-size:14px;opacity:.85}',
+  '.pr-tags{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#576072}',
+  '#prerender h1{font-size:clamp(30px,5vw,46px);line-height:1.08;margin:8px 0 10px}',
+  '.pr-by{margin:0 0 14px;color:#576072}.pr-blurb{margin:0 0 22px;font-size:18px}',
+  '.pr-prices{list-style:none;padding:0;margin:0 0 24px;display:grid;gap:10px}',
+  '.pr-prices li{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;padding:14px 16px;background:#fff;border:1px solid #E4E0D8;border-radius:10px}',
+  '.pr-prices b{font-size:22px}.pr-prices s{color:#8B919D}.pr-stock{font-size:13px;color:#0F7A4F}.pr-stock.is-out{color:#C42D1C}',
+  '.pr-specs{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;margin:0;font-size:14px}.pr-specs dt{color:#576072}.pr-specs dd{margin:0}',
+  '.pr-sec{max-width:760px;margin-top:40px}#prerender h2{font-size:22px;margin:0 0 10px}.pr-desc{white-space:pre-wrap}',
+  '.pr-foot{padding-top:24px;padding-bottom:32px;border-top:1px solid #E4E0D8;font-size:13px;color:#576072}',
+].join('');
