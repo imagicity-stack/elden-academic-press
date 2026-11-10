@@ -1191,6 +1191,53 @@ END $$;
 ALTER TABLE "subscribers" ADD COLUMN "call_consent" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "subscribers" ADD COLUMN "call_consent_at" timestamp with time zone;
 
+-- ===== 0017_whatsapp =====
+
+CREATE TABLE "whatsapp_messages" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"phone" text NOT NULL,
+	"name" text DEFAULT '' NOT NULL,
+	"direction" text NOT NULL,
+	"kind" text NOT NULL,
+	"status" text NOT NULL,
+	"template" text DEFAULT '' NOT NULL,
+	"params" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"body" text DEFAULT '' NOT NULL,
+	"wa_id" text,
+	"error" text DEFAULT '' NOT NULL,
+	"lead_id" uuid,
+	"order_id" uuid,
+	"broadcast_id" text,
+	"due_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"sent_at" timestamp with time zone,
+	"seen_at" timestamp with time zone,
+	"created_by" text DEFAULT 'system' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "whatsapp_messages_wa_id_unique" UNIQUE("wa_id")
+);
+--> statement-breakpoint
+CREATE TABLE "whatsapp_opt_outs" (
+	"phone" text PRIMARY KEY NOT NULL,
+	"reason" text DEFAULT '' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "whatsapp_settings" (
+	"id" integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	"data" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"updated_by" text DEFAULT '' NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "whatsapp_messages" ADD CONSTRAINT "whatsapp_messages_lead_id_checkout_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."checkout_leads"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "whatsapp_messages" ADD CONSTRAINT "whatsapp_messages_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "wa_phone_created_idx" ON "whatsapp_messages" USING btree ("phone","created_at");--> statement-breakpoint
+CREATE INDEX "wa_status_due_idx" ON "whatsapp_messages" USING btree ("status","due_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "wa_order_kind_uq" ON "whatsapp_messages" USING btree ("order_id","kind");--> statement-breakpoint
+CREATE UNIQUE INDEX "wa_lead_kind_uq" ON "whatsapp_messages" USING btree ("lead_id","kind");--> statement-breakpoint
+CREATE UNIQUE INDEX "wa_broadcast_phone_uq" ON "whatsapp_messages" USING btree ("broadcast_id","phone");
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -1212,7 +1259,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('ca67e5eb7c1a0c925e749fd5047d33769bce7929f647b088b20df06a62e2efb8', 1794060116138),
   ('7489535686d0e412f9126ae7ae8eef71e2658b9c8cc8a2c0f7441b09e41c36ec', 1794075566599),
   ('2da95727ebe54578ee765746eae40b632665e677c534ce7d0d6b760e78f8554f', 1794318591431),
-  ('de313d410cc8760b7d8c8e81ec8a6a04bb1d8f7b93c2be7d9a2df2550262a73d', 1794322914293);
+  ('de313d410cc8760b7d8c8e81ec8a6a04bb1d8f7b93c2be7d9a2df2550262a73d', 1794322914293),
+  ('44f53a68827b686d98b0eb0418dce2942b9b6b3732aa849d7cf46a6d5bc6950f', 1794326037898);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

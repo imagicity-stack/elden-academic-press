@@ -238,6 +238,7 @@ function CallDetail({ id }: { id: string }) {
   return (
     <Page title={c.name || c.phone} subtitle={<>{kindLabel(c.kind)}{c.createdBy === INBOUND && ' · Incoming call'} · {c.phone}{data.doNotCall && <> · <Badge tone="red">Do not call</Badge></>}</>} back={{ to: '/admin/calls/log', label: 'Calls' }}
       actions={<>
+        <Link className="ad-btn ad-btn--ghost" to={`/admin/whatsapp?phone=${encodeURIComponent(c.phone)}`}>WhatsApp chat</Link>
         {c.issueOpen && <Btn kind="primary" busy={busy === 'resolve'} onClick={() => act('resolve', 'Marked as handled')}>Problem handled</Btn>}
         {['queued', 'no_answer', 'failed', 'skipped'].includes(c.status) && <Btn busy={busy === 'call-now'} onClick={() => act('call-now', 'Queued to call now')}>Call now</Btn>}
         {c.status === 'queued' && <Btn busy={busy === 'skip'} onClick={() => act('skip', 'Skipped')}>Skip</Btn>}
@@ -399,7 +400,7 @@ function SettingsTab() {
         <TextArea label="Call-end webhook address (for Sarvam)" readOnly rows={2}
           value={st.webhook ? `${location.origin}/api/calls/webhook/<CALLS_WEBHOOK_SECRET>` : 'Set CALLS_WEBHOOK_SECRET in Vercel first.'}
           hint="Replace <CALLS_WEBHOOK_SECRET> with the value you set in Vercel. Sarvam posts each call's result here." />
-        <p className="ad-muted">The agents on Sarvam: “Elden Academic Press – Cart Recovery” and “Elden Academic Press – Order Feedback”, calling from +91 79659 60105 and transferring to +91 73700 02080.</p>
+        <p className="ad-muted">The agents on Sarvam: “Elden Academic Press – Cart Recovery” and “Elden Academic Press – Order Feedback”, calling from +91 79658 60108 and +91 79658 60105 and transferring to +91 73700 02080.</p>
       </Card>
     </div>
   );

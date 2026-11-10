@@ -23,6 +23,7 @@ import {
 } from '../../src/shared/calls.js';
 import { getSettings } from './catalog.js';
 import { button, layout, p, section } from './emails.js';
+import { callWhatsApp } from './whatsapp.js';
 
 export type Call = typeof calls.$inferSelect;
 export type Lead = typeof checkoutLeads.$inferSelect;
@@ -288,7 +289,12 @@ export async function recordCallResult(deps: Deps, raw: unknown): Promise<Call |
   const s = await getCallSettings(db);
   if (r.status !== 'answered') {
     await notAnswered(deps, s, c, r.status === 'failed' ? 'The call failed' : 'No answer');
-    return (await db.select().from(calls).where(eq(calls.id, c.id)))[0];
+    const [after] = await db.select().from(calls).where(eq(calls.id, c.id));
+    // The last try went unanswered: a WhatsApp says we tried, with their link (if switched on).
+    if (after && after.status !== 'queued' && after.createdBy !== INBOUND) {
+      await callWhatsApp(deps, after, false).catch((e) => console.error('[calls] missed-call WhatsApp', (e as Error).message));
+    }
+    return after;
   }
   const v = r.variables;
   const outcome = String(v.call_outcome ?? '').trim();
@@ -349,6 +355,8 @@ async function act(deps: Deps, s: CallSettings, c: Call, v: Record<string, unkno
   const leadId = leadIdOf(c);
   if (c.kind === 'cart' && (truthy(v.wants_link) || c.outcome === 'will_order') && leadId) await tryStep('link email', () => sendResumeLink(deps, c, leadId));
   if (issue) await tryStep('issue alert', () => sendIssueAlert(deps, c, v));
+  // A WhatsApp with the link and what happens next (Admin → WhatsApp → "After a call").
+  await tryStep('WhatsApp', () => callWhatsApp(deps, c, true));
 }
 
 async function sendResumeLink(deps: Deps, c: Call, leadId: string) {

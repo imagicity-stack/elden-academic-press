@@ -15,6 +15,7 @@ import { adminNewsletter } from './newsletter.js';
 import { adminCompetitions } from './competitions.js';
 import { adminTeams } from './teams.js';
 import { adminCalls } from '../calls.js';
+import { adminWhatsApp } from '../whatsapp.js';
 import { adminPopups } from './popups.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
@@ -55,6 +56,10 @@ admin.route('/popups', adminPopups);
 admin.use('/calls', requireRole('manager'));
 admin.use('/calls/*', requireRole('manager'));
 admin.route('/calls', adminCalls);
+// WhatsApp: managers and the owner.
+admin.use('/whatsapp', requireRole('manager'));
+admin.use('/whatsapp/*', requireRole('manager'));
+admin.route('/whatsapp', adminWhatsApp);
 // Competitions: the store owner only, for now.
 admin.use('/competitions', requireRole('owner'));
 admin.use('/competitions/*', requireRole('owner'));

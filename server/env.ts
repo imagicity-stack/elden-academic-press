@@ -55,6 +55,17 @@ const schema = z.object({
   SARVAM_CART_CAMPAIGN_ID: optional,
   SARVAM_FEEDBACK_CAMPAIGN_ID: optional,
 
+  /** WhatsApp Cloud API (Elden Academic Press portfolio): a system user's permanent access token (secret). */
+  WHATSAPP_TOKEN: optional,
+  /** The sending number's "Phone number ID" (WhatsApp Manager / the app's WhatsApp → API setup), not the number itself. */
+  WHATSAPP_PHONE_NUMBER_ID: optional,
+  /** The Meta app's App secret: checks that webhook deliveries really come from Meta. */
+  WHATSAPP_APP_SECRET: optional,
+  /** The WhatsApp Business Account id (WhatsApp Manager → Account tools / the app's API setup): to create and check the templates. */
+  WHATSAPP_BUSINESS_ACCOUNT_ID: optional,
+  /** Any long random string; typed into the app's webhook settings as the "Verify token". */
+  WHATSAPP_VERIFY_TOKEN: optional,
+
   /** The first person to sign in with this email becomes the store owner. */
   ADMIN_OWNER_EMAIL: optional,
   /** Vercel Cron sends this as a bearer token. */
