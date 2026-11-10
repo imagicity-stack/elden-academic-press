@@ -98,6 +98,38 @@ adminWhatsApp.get('/templates', async (c) => {
   });
 });
 
+/**
+ * Diagnose: ask Meta, with the site's own keys, what it sends from and where the templates are.
+ * Each step says what it found; a failed step shows Meta's own error.
+ */
+adminWhatsApp.get('/diagnose', async (c) => {
+  const deps = c.get('deps');
+  const env = deps.env;
+  const s = await getWhatsAppSettings(deps.db);
+  const steps: { label: string; ok: boolean | null; detail: string }[] = [];
+  const phoneId = env.WHATSAPP_PHONE_NUMBER_ID ?? '';
+  const wabaId = env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? '';
+  steps.push({ label: 'Settings in Vercel', ok: Boolean(env.WHATSAPP_TOKEN && phoneId && wabaId), detail: `WHATSAPP_PHONE_NUMBER_ID = ${phoneId || '(not set)'}; WHATSAPP_BUSINESS_ACCOUNT_ID = ${wabaId || '(not set)'}; WHATSAPP_TOKEN ${env.WHATSAPP_TOKEN ? 'set' : '(not set)'}; language = ${s.language}` });
+  const t = deps.whatsappTemplates;
+  if (!t || !phoneId) return c.json({ steps });
+  try {
+    const n = await t.numberInfo(phoneId);
+    steps.push({ label: 'The number the site sends from', ok: true, detail: Object.entries(n).map(([k, v]) => `${k}: ${v}`).join('; ') });
+  } catch (e) { steps.push({ label: 'The number the site sends from', ok: false, detail: (e as Error).message }); }
+  try {
+    const nums = await t.phoneNumbers();
+    const inIt = nums.some((x) => x.id === phoneId);
+    steps.push({ label: `Numbers in WhatsApp account ${wabaId}`, ok: inIt, detail: `${nums.map((x) => `${x.number} (id ${x.id})`).join(', ') || 'none'}${inIt ? '' : ` — ${phoneId} is NOT one of them, so this account's templates can't be sent from it`}` });
+  } catch (e) { steps.push({ label: `Numbers in WhatsApp account ${wabaId}`, ok: false, detail: (e as Error).message }); }
+  try {
+    const all = await t.list();
+    const ours = WA_TEMPLATES.map((x) => s.templates[x.key]);
+    const approved = all.filter((x) => ours.includes(x.name) && x.language === s.language && x.status === 'APPROVED').map((x) => x.name);
+    steps.push({ label: `Templates in account ${wabaId}`, ok: approved.length === ours.length, detail: `${approved.length} of ${ours.length} approved in ${s.language}. All templates there: ${all.map((x) => `${x.name} [${x.language}, ${x.status.toLowerCase()}]`).join(', ') || 'none'}` });
+  } catch (e) { steps.push({ label: `Templates in account ${wabaId}`, ok: false, detail: (e as Error).message }); }
+  return c.json({ steps });
+});
+
 /** Create the templates that aren't in the WhatsApp account yet (in the settings' language). Meta then reviews them. */
 adminWhatsApp.post('/templates/create', async (c) => {
   const deps = c.get('deps');

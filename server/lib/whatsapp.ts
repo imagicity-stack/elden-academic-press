@@ -22,6 +22,8 @@ export interface WaTemplates {
   create(t: WaTemplateSpec): Promise<{ id: string; status: string }>;
   /** The phone numbers in the same account: the sending number must be one of them to use its templates. */
   phoneNumbers(): Promise<{ id: string; number: string }[]>;
+  /** What Meta knows about one phone number id (the one the site sends from). */
+  numberInfo(phoneNumberId: string): Promise<Record<string, string>>;
 }
 
 /** "+919876543210" → "919876543210" (WhatsApp wants digits only). */
@@ -107,6 +109,11 @@ export function whatsappTemplatesHttp(cfg: { token: string; businessAccountId: s
     async phoneNumbers() {
       const j = await call(`${url.replace(/\/message_templates$/, '/phone_numbers')}?fields=id,display_phone_number`);
       return (j.data ?? []).map((p: any) => ({ id: String(p.id), number: String(p.display_phone_number ?? '') }));
+    },
+    async numberInfo(phoneNumberId) {
+      const base = url.replace(/\/[^/]+\/message_templates$/, '');
+      const j = await call(`${base}/${encodeURIComponent(phoneNumberId)}?fields=id,display_phone_number,verified_name,status,platform_type,code_verification_status,quality_rating`);
+      return Object.fromEntries(Object.entries(j).map(([k, v]) => [k, String(v)]));
     },
   };
 }
