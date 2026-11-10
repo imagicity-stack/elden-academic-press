@@ -106,7 +106,7 @@ adminCalls.get('/stats', async (c) => {
 const LIST_FIELDS = {
   id: calls.id, kind: calls.kind, status: calls.status, phone: calls.phone, name: calls.name, outcome: calls.outcome,
   dueAt: calls.dueAt, attempts: calls.attempts, startedAt: calls.startedAt, endedAt: calls.endedAt, durationSeconds: calls.durationSeconds,
-  note: calls.note, issueOpen: calls.issueOpen, createdAt: calls.createdAt,
+  note: calls.note, issueOpen: calls.issueOpen, createdBy: calls.createdBy, createdAt: calls.createdAt,
   rating: sql<string | null>`${calls.result}->>'rating'`,
 };
 

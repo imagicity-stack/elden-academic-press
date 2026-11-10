@@ -306,7 +306,8 @@ The site notes how each visitor arrived: the link's UTM tags, an ad-click marker
 
 **One-time:** run [`0015_calls.sql`](supabase-updates/0015_calls.sql) in Supabase → SQL Editor before this version goes live.
 
-Two voice agents on Sarvam (number +91 79658 60105, persona “Priya”, Hindi and English) make the calls; the website decides who to call and when.
+Two voice agents on Sarvam (persona “Priya”, Hindi and English), each with its own number: **Cart Recovery on +91 79658 60108** and **Order Feedback on +91 79658 60105**. The website decides who to call and when.
+- **Incoming calls:** a customer who rings either number reaches that agent. It greets them, helps (a missed call from us, a question, a problem with an order) and transfers to 7370002080 when a person is needed. The website records the call in Admin → Calls marked *Incoming*, linked by the caller's number to their saved checkout: “send me the link” emails it, “don't call me” adds them to Do not call, a reported problem emails your order alert addresses, and “call me back” repeats our own call for that checkout. Incoming calls are counted apart and don't change the answer rates.
 - **Cart recovery:** someone leaves *“Elden Academic Press may call or WhatsApp me about this order”* ticked at checkout (it starts ticked; unticking is remembered), gives a mobile number and doesn't pay. After the set delay (default 60 minutes) the agent calls, helps them finish, and only if they hesitate twice offers the coupon you set. If they want the link, they get a “Finish your order” email that restores their cart (and the coupon).
 - **Order feedback:** the set number of days after a paid order from a checkout with that tick (default 3; printed books only once shipped), the agent asks how it went and mentions the new titles you choose. A reported problem emails your order alert addresses and shows as an open issue.
 
@@ -314,7 +315,7 @@ Nothing is saved before payment without the tick, and nobody is ever called with
 
 **Admin → Calls** (managers and the owner): *Overview* (the master switch, a switch per agent, answered rate, recovered orders and revenue, coupons given, average rating, open issues, a day-by-day chart), *Call log* (each call's result, transcript, recording and the customer's earlier calls), *Queue* (Call now or Skip), *Checkouts* (who said yes to calls), *Do not call* and *Settings* (hours, days, delay, coupon code and what it gives, feedback day, new titles, retries). Create the coupon in **Discounts** first, then put its code here. Everything starts **off**.
 
-**To connect:** set `CALLS_WEBHOOK_SECRET` in Vercel (a long random string) and set each agent's call-end webhook in Sarvam to `https://eldenap.in/api/calls/webhook/<that string>`. The Sarvam connection for placing calls (`SARVAM_API_KEY`) is added once Sarvam's calling API is confirmed; until then Admin → Calls shows *Not connected* and nothing is dialled, while checkouts, the queue, settings and do-not-call already work. A Vercel cron runs every 10 minutes to queue and place calls.
+**To connect:** set `CALLS_WEBHOOK_SECRET` in Vercel (a long random string) and set each number's call-end webhook in Sarvam to `https://eldenap.in/api/calls/webhook/<that string>`, with metadata `purpose` = `cart_recovery_call_end` (…0108) or `feedback_call_end` (…0105). Both are set already: copy the string at the end of that address into Vercel. The Sarvam connection for placing calls (`SARVAM_API_KEY`) is added once Sarvam's calling API is confirmed; until then Admin → Calls shows *Not connected* and nothing is dialled, while checkouts, the queue, settings and do-not-call already work. A Vercel cron runs every 10 minutes to queue and place calls.
 
 ## Running costs
 
