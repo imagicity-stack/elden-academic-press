@@ -212,7 +212,9 @@ describe('automatic messages', () => {
     wa.fail = 'WhatsApp 400 (132001): Template name does not exist';
     await lead();
     await pay();
-    expect((await msgs())[0]).toMatchObject({ status: 'failed', error: 'WhatsApp 400 (132001): Template name does not exist' });
+    const [m] = await msgs();
+    expect(m.status).toBe('failed');
+    expect(m.error).toMatch(/^WhatsApp 400 \(132001\): Template name does not exist/);
   });
 });
 
@@ -281,13 +283,35 @@ describe('templates', () => {
     t.deps.whatsappTemplates = {
       async list() { return [{ name: 'elden_order_confirmed', language: 'en', status: 'APPROVED', category: 'UTILITY', rejectedReason: '' }]; },
       async create(x) { created.push(x.name); expect(x.text).not.toMatch(/^\{\{|\}\}$/); return { id: '1', status: 'PENDING' }; },
+      async phoneNumbers() { return [{ id: 'other-number', number: '+1 555-000-0000' }]; },
     };
     const h = await admin();
     const list = await t.call('GET', '/admin/whatsapp/templates', { headers: h });
     expect(list.json.items.find((x: any) => x.key === 'order_confirmed').status).toBe('APPROVED');
     expect(list.json.items.find((x: any) => x.key === 'cart').status).toBe('MISSING');
+    expect(list.json.account.numberInAccount).toBe(false); // WHATSAPP_PHONE_NUMBER_ID isn't one of the account's numbers
     const r = await t.call('POST', '/admin/whatsapp/templates/create', { headers: h });
     expect(r.json.results.find((x: any) => x.key === 'order_confirmed').result).toBe('already there');
     expect(created).toHaveLength(6);
+  });
+});
+
+describe('template language', () => {
+  it('a template approved only in en_US does not count for "en", and says so', async () => {
+    t.deps.whatsappTemplates = {
+      async list() { return [{ name: 'elden_new_books', language: 'en_US', status: 'APPROVED', category: 'MARKETING', rejectedReason: '' }]; },
+      async create() { return { id: '1', status: 'PENDING' }; },
+      async phoneNumbers() { return []; },
+    };
+    const r = await t.call('GET', '/admin/whatsapp/templates', { headers: await admin() });
+    expect(r.json.items.find((x: any) => x.key === 'new_books')).toMatchObject({ status: 'MISSING', otherLanguages: [{ language: 'en_US', status: 'APPROVED' }] });
+  });
+
+  it('a 132001 failure explains where to look', async () => {
+    await waSettings({ enabled: true, orderConfirmed: true });
+    wa.fail = 'WhatsApp 404 (132001): Template name does not exist in the translation';
+    await lead();
+    await pay();
+    expect((await msgs())[0].error).toContain('Admin → WhatsApp → Settings → Templates');
   });
 });
