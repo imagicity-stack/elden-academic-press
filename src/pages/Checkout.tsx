@@ -274,12 +274,12 @@ export function Checkout() {
             <label className="tick">
               <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} />
               <span className="tick__box" aria-hidden="true" />
-              <span>Email me about new books and offers<small>A few emails a month. Unsubscribe any time.</small></span>
+              <span>Email me about new books and offers</span>
             </label>
             <label className="tick">
               <input type="checkbox" checked={callOk} onChange={(e) => setCallOk(e.target.checked)} />
               <span className="tick__box" aria-hidden="true" />
-              <span>Elden Academic Press may call or WhatsApp me about this order<small>Only about this order: help finishing it, or a quick check that your books arrived well. Between 10 am and 7 pm, Monday to Saturday.</small></span>
+              <span>Elden Academic Press may call or WhatsApp me about this order</span>
             </label>
           </fieldset>
 
