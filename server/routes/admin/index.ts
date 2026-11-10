@@ -14,6 +14,7 @@ import { audit, requireAdmin, requireRole } from './auth.js';
 import { adminNewsletter } from './newsletter.js';
 import { adminCompetitions } from './competitions.js';
 import { adminTeams } from './teams.js';
+import { adminCalls } from '../calls.js';
 import { adminPopups } from './popups.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
@@ -50,6 +51,10 @@ admin.route('/newsletter', adminNewsletter);
 admin.use('/popups', requireRole('manager'));
 admin.use('/popups/*', requireRole('manager'));
 admin.route('/popups', adminPopups);
+// Calls (voice agents): managers and the owner.
+admin.use('/calls', requireRole('manager'));
+admin.use('/calls/*', requireRole('manager'));
+admin.route('/calls', adminCalls);
 // Competitions: the store owner only, for now.
 admin.use('/competitions', requireRole('owner'));
 admin.use('/competitions/*', requireRole('owner'));

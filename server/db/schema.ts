@@ -2,6 +2,7 @@
 import { sql } from 'drizzle-orm';
 import type { OrderSource } from '../../src/shared/attribution.js';
 import type { PopupAudience, PopupContent, PopupDesign, PopupFrequency, PopupTrigger } from '../../src/shared/popups.js';
+import type { CallKind, CallSettings, CallStatus } from '../../src/shared/calls.js';
 import {
   boolean, check, date, index, integer, jsonb, pgEnum, pgSequence, pgTable, primaryKey, serial, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
@@ -972,3 +973,82 @@ export const popupStats = pgTable('popup_stats', {
   closes: integer('closes').notNull().default(0),
   conversions: integer('conversions').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.popupId, t.day] })]);
+
+/* ---------------- Calls (AI voice agents: cart recovery and order feedback) ---------------- */
+
+/**
+ * A checkout someone started and left: saved as soon as they type a phone number and tick
+ * "you may call or WhatsApp me about this order". order_id is set once they pay.
+ */
+export const checkoutLeads = pgTable('checkout_leads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** The browser's id for this checkout, so typing again updates the same lead. */
+  clientKey: text('client_key').notNull().unique(),
+  /** Secret part of the "finish your order" link. */
+  resumeToken: text('resume_token').notNull().unique(),
+  name: text('name').notNull().default(''),
+  email: text('email').notNull().default(''),
+  phone: text('phone').notNull(),
+  /** [{ productId, kind, quantity, title }] */
+  items: jsonb('items').$type<{ productId: string; kind: string; quantity: number; title: string }[]>().notNull(),
+  total: integer('total').notNull().default(0),
+  consent: boolean('consent').notNull().default(false),
+  orderId: uuid('order_id').references(() => orders.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('checkout_leads_phone_idx').on(t.phone), index('checkout_leads_updated_idx').on(t.updatedAt)]);
+
+/** One call (and its retries) by a voice agent. */
+export const calls = pgTable('calls', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  kind: text('kind').$type<CallKind>().notNull(),
+  status: text('status').$type<CallStatus>().notNull().default('queued'),
+  phone: text('phone').notNull(),
+  name: text('name').notNull().default(''),
+  leadId: uuid('lead_id').references(() => checkoutLeads.id, { onDelete: 'set null' }),
+  orderId: uuid('order_id').references(() => orders.id, { onDelete: 'set null' }),
+  /** What the agent is told at the start of the call (customer_name, cart_items, ...). */
+  variables: jsonb('variables').$type<Record<string, string>>().notNull().default({}),
+  dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  providerCallId: text('provider_call_id'),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+  durationSeconds: integer('duration_seconds'),
+  /** call_outcome as the agent recorded it (will_order, callback, feedback_given, ...). */
+  outcome: text('outcome').notNull().default(''),
+  /** Everything the agent recorded after the call (rating, objection, issue_detail, ...). */
+  result: jsonb('result').$type<Record<string, unknown>>().notNull().default({}),
+  transcript: text('transcript').notNull().default(''),
+  recordingUrl: text('recording_url').notNull().default(''),
+  /** Why it was skipped or failed, in words. */
+  note: text('note').notNull().default(''),
+  /** An issue the customer reported (feedback calls): open until someone marks it handled. */
+  issueOpen: boolean('issue_open').notNull().default(false),
+  createdBy: text('created_by').notNull().default('system'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('calls_status_due_idx').on(t.status, t.dueAt),
+  index('calls_phone_idx').on(t.phone),
+  index('calls_created_idx').on(t.createdAt),
+  uniqueIndex('calls_order_kind_uq').on(t.orderId, t.kind),
+  uniqueIndex('calls_lead_kind_uq').on(t.leadId, t.kind),
+]);
+
+/** Numbers never to call. */
+export const doNotCall = pgTable('do_not_call', {
+  phone: text('phone').primaryKey(),
+  reason: text('reason').notNull().default(''),
+  /** 'customer' (asked on a call), 'admin' (added by hand). */
+  source: text('source').notNull().default('admin'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** The calls settings (Admin → Calls → Settings): one row. */
+export const callSettings = pgTable('call_settings', {
+  id: integer('id').primaryKey().default(1),
+  data: jsonb('data').$type<Partial<CallSettings>>().notNull().default({}),
+  updatedBy: text('updated_by').notNull().default(''),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

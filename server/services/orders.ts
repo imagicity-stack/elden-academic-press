@@ -12,6 +12,7 @@ import { findCoupon, getSettings, loadPricingProducts, type Settings } from './c
 import { paymentMethodLabel } from '../lib/format.js';
 import { sendOrderConfirmation, sendStoreNewOrder } from './emails.js';
 import { subscribe } from './newsletter.js';
+import { leadPaid } from './calls.js';
 import { reportPurchase, type Visit } from './tracking.js';
 import { orderChannel, type OrderSource } from '../../src/shared/attribution.js';
 
@@ -346,6 +347,8 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
     ]).catch((e) => console.error('[mail] order emails failed', (e as Error).message));
     if (deps.defer) deps.defer(emails); else await emails;
     await reportPurchase(deps, result.order, items);
+    // Their saved checkout (if any) is converted, and a waiting cart-recovery call stops.
+    await leadPaid(deps, result.order).catch((e) => console.error('[calls] lead paid', (e as Error).message));
     // The buyer ticked "Email me about new books and offers" at checkout.
     const o = result.order;
     if (o.newsletterOptIn) {

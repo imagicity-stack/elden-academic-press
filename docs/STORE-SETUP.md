@@ -302,6 +302,20 @@ The site notes how each visitor arrived: the link's UTM tags, an ad-click marker
 
 **Built in for every popup:** never at checkout or on order pages, never over the cookie choice or another window, at most one per page, two minutes between different popups, Esc and × always close it, keyboard focus stays inside a centred one, full-screen and centred popups become a bottom sheet on phones (Google lowers the ranking of pages with full-screen popups on phones), and email sign-up popups are never shown to signed-in student accounts.
 
+## 15. Calls (voice agent)
+
+**One-time:** run [`0015_calls.sql`](supabase-updates/0015_calls.sql) in Supabase → SQL Editor before this version goes live.
+
+Two voice agents on Sarvam (number +91 79658 60105, persona “Priya”, Hindi and English) make the calls; the website decides who to call and when.
+- **Cart recovery:** someone leaves *“Elden Academic Press may call or WhatsApp me about this order”* ticked at checkout (it starts ticked; unticking is remembered), gives a mobile number and doesn't pay. After the set delay (default 60 minutes) the agent calls, helps them finish, and only if they hesitate twice offers the coupon you set. If they want the link, they get a “Finish your order” email that restores their cart (and the coupon).
+- **Order feedback:** the set number of days after a paid order from a checkout with that tick (default 3; printed books only once shipped), the agent asks how it went and mentions the new titles you choose. A reported problem emails your order alert addresses and shows as an open issue.
+
+Nothing is saved before payment without the tick, and nobody is ever called without it. Calls go out only in the calling hours (default 10:00–19:00, Monday to Saturday, India time), with retries (default 2, two hours apart). Anyone who says “don't call” on a call, or whom you add in **Do not call**, is never called again. Unticking the box cancels their pending call.
+
+**Admin → Calls** (managers and the owner): *Overview* (the master switch, a switch per agent, answered rate, recovered orders and revenue, coupons given, average rating, open issues, a day-by-day chart), *Call log* (each call's result, transcript, recording and the customer's earlier calls), *Queue* (Call now or Skip), *Checkouts* (who said yes to calls), *Do not call* and *Settings* (hours, days, delay, coupon code and what it gives, feedback day, new titles, retries). Create the coupon in **Discounts** first, then put its code here. Everything starts **off**.
+
+**To connect:** set `CALLS_WEBHOOK_SECRET` in Vercel (a long random string) and set each agent's call-end webhook in Sarvam to `https://eldenap.in/api/calls/webhook/<that string>`. The Sarvam connection for placing calls (`SARVAM_API_KEY`) is added once Sarvam's calling API is confirmed; until then Admin → Calls shows *Not connected* and nothing is dialled, while checkouts, the queue, settings and do-not-call already work. A Vercel cron runs every 10 minutes to queue and place calls.
+
 ## Running costs
 
 | Service | Cost |

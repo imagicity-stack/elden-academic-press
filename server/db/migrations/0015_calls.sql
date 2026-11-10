@@ -1,0 +1,78 @@
+CREATE TABLE "call_settings" (
+	"id" integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	"data" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"updated_by" text DEFAULT '' NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "calls" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"kind" text NOT NULL,
+	"status" text DEFAULT 'queued' NOT NULL,
+	"phone" text NOT NULL,
+	"name" text DEFAULT '' NOT NULL,
+	"lead_id" uuid,
+	"order_id" uuid,
+	"variables" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"due_at" timestamp with time zone NOT NULL,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"provider_call_id" text,
+	"started_at" timestamp with time zone,
+	"ended_at" timestamp with time zone,
+	"duration_seconds" integer,
+	"outcome" text DEFAULT '' NOT NULL,
+	"result" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"transcript" text DEFAULT '' NOT NULL,
+	"recording_url" text DEFAULT '' NOT NULL,
+	"note" text DEFAULT '' NOT NULL,
+	"issue_open" boolean DEFAULT false NOT NULL,
+	"created_by" text DEFAULT 'system' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "checkout_leads" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"client_key" text NOT NULL,
+	"resume_token" text NOT NULL,
+	"name" text DEFAULT '' NOT NULL,
+	"email" text DEFAULT '' NOT NULL,
+	"phone" text NOT NULL,
+	"items" jsonb NOT NULL,
+	"total" integer DEFAULT 0 NOT NULL,
+	"consent" boolean DEFAULT false NOT NULL,
+	"order_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "checkout_leads_client_key_unique" UNIQUE("client_key"),
+	CONSTRAINT "checkout_leads_resume_token_unique" UNIQUE("resume_token")
+);
+--> statement-breakpoint
+CREATE TABLE "do_not_call" (
+	"phone" text PRIMARY KEY NOT NULL,
+	"reason" text DEFAULT '' NOT NULL,
+	"source" text DEFAULT 'admin' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "calls" ADD CONSTRAINT "calls_lead_id_checkout_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."checkout_leads"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "calls" ADD CONSTRAINT "calls_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "checkout_leads" ADD CONSTRAINT "checkout_leads_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "calls_status_due_idx" ON "calls" USING btree ("status","due_at");--> statement-breakpoint
+CREATE INDEX "calls_phone_idx" ON "calls" USING btree ("phone");--> statement-breakpoint
+CREATE INDEX "calls_created_idx" ON "calls" USING btree ("created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "calls_order_kind_uq" ON "calls" USING btree ("order_id","kind");--> statement-breakpoint
+CREATE UNIQUE INDEX "calls_lead_kind_uq" ON "calls" USING btree ("lead_id","kind");--> statement-breakpoint
+CREATE INDEX "checkout_leads_phone_idx" ON "checkout_leads" USING btree ("phone");--> statement-breakpoint
+CREATE INDEX "checkout_leads_updated_idx" ON "checkout_leads" USING btree ("updated_at");--> statement-breakpoint
+-- Only the store's server reads these tables: lock them against Supabase's public API keys.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['checkout_leads', 'calls', 'do_not_call', 'call_settings'] LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);
+    END IF;
+  END LOOP;
+END $$;

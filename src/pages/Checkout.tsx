@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type InputHTMLAttributes } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, api, inr } from '../store/api';
 import { formatLabel, useCatalog, useStoreConfig } from '../store/catalog';
 import { useCart, useQuote } from '../store/cart';
@@ -41,6 +41,20 @@ declare global {
 }
 
 const DETAILS_KEY = 'elden-checkout-details';
+const LEAD_KEY = 'elden-checkout-key';
+const CALL_OK_KEY = 'elden-call-consent';
+
+/** This browser's checkout id: saving the checkout again updates the same record. */
+function leadKey(): string {
+  try {
+    let k = localStorage.getItem(LEAD_KEY);
+    if (!k || !/^[\w-]{16,64}$/.test(k)) {
+      k = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem(LEAD_KEY, k);
+    }
+    return k;
+  } catch { return ''; }
+}
 const blank = { name: '', email: '', phone: '', line1: '', line2: '', city: '', state: '20', pincode: '', note: '' };
 
 function loadRazorpay(): Promise<void> {
@@ -72,6 +86,33 @@ export function Checkout() {
   // Online in full, or cash on delivery (an advance online, the rest in cash; printed books only).
   const [payMode, setPayMode] = useState<'online' | 'cod'>('online');
   const pending = useRef<{ key: string; res: CheckoutResponse } | null>(null);
+  // Permission to call or WhatsApp about this order: starts ticked; remembered if they untick it.
+  const [callOk, setCallOk] = useState(() => { try { return localStorage.getItem(CALL_OK_KEY) !== '0'; } catch { return true; } });
+  const [params, setParams] = useSearchParams();
+
+  // A "finish your order" link: bring back the saved cart and details.
+  useEffect(() => {
+    const token = params.get('resume');
+    const coupon = params.get('coupon');
+    if (!token && !coupon) return;
+    if (coupon) cart.setCoupon(coupon.toUpperCase().slice(0, 40));
+    if (token) {
+      api<{ items: { productId: string; kind: 'print' | 'digital' | 'bundle'; quantity: number }[]; name: string; email: string; phone: string }>(`/checkout/resume/${encodeURIComponent(token)}`)
+        .then((r) => {
+          if (r.items.length) {
+            const key = (l: { productId: string; kind: string }) => l.productId + l.kind;
+            const have = new Set(cart.lines.map(key));
+            for (const l of r.items) if (!have.has(key(l))) cart.add(l);
+          }
+          setD((x: typeof blank) => ({ ...x, name: x.name || r.name, email: x.email || r.email, phone: x.phone || r.phone }));
+          setCallOk(true);
+        })
+        .catch((e) => setNotice(e instanceof Error ? e.message : 'This link has expired.'));
+    }
+    const next = new URLSearchParams(params);
+    next.delete('resume'); next.delete('coupon');
+    setParams(next, { replace: true });
+  }, []);
 
   useEffect(() => { document.title = 'Checkout — Elden Academic Press'; }, []);
   // Meta InitiateCheckout: once per visit to checkout, when the cart's prices are known.
@@ -96,6 +137,27 @@ export function Checkout() {
   const cod = payMode === 'cod' && !codWhy;
   const payNow = quote ? (cod ? codAdvance : quote.total) : 0;
   useEffect(() => { if (payMode === 'cod' && codWhy && codWhy !== 'Loading…') setPayMode('online'); }, [payMode, codWhy]);
+
+  // Save the checkout as it's filled in, only with permission and a mobile number, so it can be
+  // followed up if it isn't finished. Unticking tells the server to stop.
+  const leadSent = useRef('');
+  const everOn = useRef(callOk);
+  useEffect(() => {
+    if (callOk) everOn.current = true;
+    try { localStorage.setItem(CALL_OK_KEY, callOk ? '1' : '0'); } catch { /* ignore */ }
+    const phone = d.phone.replace(/\D/g, '').slice(-10);
+    if (!cart.lines.length || (callOk && phone.length !== 10)) return;
+    const clientKey = leadKey();
+    if (!clientKey) return;
+    const body = { clientKey, name: d.name, email: d.email, phone, consent: callOk, items: cart.lines };
+    const sig = JSON.stringify(body);
+    if (sig === leadSent.current || (!callOk && !everOn.current)) return;
+    const t = setTimeout(() => {
+      leadSent.current = sig;
+      api('/checkout/lead', { body }).catch(() => { leadSent.current = ''; });
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [callOk, d.name, d.email, d.phone, cart.lines]);
 
   const payload = useMemo(() => ({
     items: cart.lines,
@@ -185,6 +247,7 @@ export function Checkout() {
       <div className="wrap page-narrow">
         <h1 className="t-h1">Checkout</h1>
         <p className="t-lead">Your cart is empty.</p>
+        {notice && <div className="form-notice" role="status">{notice}</div>}
         <div><Link to="/catalogue" className="btn btn--ink">Browse the store</Link></div>
       </div>
     );
@@ -211,7 +274,12 @@ export function Checkout() {
             <label className="tick">
               <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} />
               <span className="tick__box" aria-hidden="true" />
-              <span>Email me about new books and offers<small>A few emails a month. Unsubscribe any time.</small></span>
+              <span>Email me about new books and offers</span>
+            </label>
+            <label className="tick">
+              <input type="checkbox" checked={callOk} onChange={(e) => setCallOk(e.target.checked)} />
+              <span className="tick__box" aria-hidden="true" />
+              <span>Elden Academic Press may call or WhatsApp me about this order</span>
             </label>
           </fieldset>
 
