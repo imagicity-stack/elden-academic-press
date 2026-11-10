@@ -8,7 +8,7 @@ import { accountApi, accountsDevMode, accountsEnabled, devSignIn, googleButtonAv
 import { orderPath } from '../store/orderToken';
 import { BookCover } from '../components/BookCover';
 import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem } from '../components/motion';
-import { rememberUser, track } from '../meta';
+import { rememberUser } from '../meta';
 import { ga } from '../ga';
 import { ProfileForm, ProfileOnboarding, shouldOnboard } from '../components/ProfileForm';
 import { accountTypeLabel } from '../shared/competitions';
@@ -119,10 +119,8 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
   const [news, setNews] = useState<NewsletterStatus>(data.newsletter);
   useEffect(() => {
     rememberUser({ email: data.customer.email, name: data.customer.name, phone: data.profile.phone });
-    if (data.newAccount) {
-      track('CompleteRegistration', { content_name: 'Google sign-in', status: 'complete' }, { eventId: `signup-${data.customer.userId}` });
-      ga('sign_up', { method: 'Google' });
-    }
+    // Meta's AccountSignup is sent where the account is loaded (store/account.ts), whichever page they signed in on.
+    if (data.newAccount) ga('sign_up', { method: 'Google' });
   }, [data.newAccount, data.customer.userId]);
   const first = data.customer.name.split(' ')[0] || data.customer.email.split('@')[0];
   return (

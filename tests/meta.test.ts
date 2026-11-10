@@ -139,13 +139,14 @@ describe('leads and sign-ups', () => {
     expect(meta.sent.map((e) => e.name)).toEqual(['Contact', 'CustomizeProduct']);
   });
 
-  it('reports a first Google sign-in as CompleteRegistration, once', async () => {
+  it('reports a first Google sign-in as the custom event AccountSignup, once (CompleteRegistration is for competition registrations)', async () => {
     const auth = { authorization: `Bearer ${await supabaseToken({ sub: '77777777-7777-4777-8777-777777777777', email: 'new@example.com', provider: 'google', name: 'New Reader' })}`, ...accepted };
     const first = await t.call('GET', '/account', { headers: auth });
     expect(first.json.newAccount).toBe(true);
     await t.call('GET', '/account', { headers: auth });
-    const reg = meta.sent.filter((e) => e.name === 'CompleteRegistration');
-    expect(reg).toHaveLength(1);
-    expect(reg[0].eventId).toBe('signup-77777777-7777-4777-8777-777777777777');
+    expect(meta.sent.filter((e) => e.name === 'CompleteRegistration')).toHaveLength(0);
+    const signup = meta.sent.filter((e) => e.name === 'AccountSignup');
+    expect(signup).toHaveLength(1);
+    expect(signup[0].eventId).toBe('signup-77777777-7777-4777-8777-777777777777');
   });
 });

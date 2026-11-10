@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, api } from './api';
 import { setStudentSession } from '../consent';
+import { trackSignup } from '../meta';
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -182,6 +183,8 @@ export function useAccount() {
       // A student's own account: no analytics or ad tracking on this browser.
       setStudentSession(data.profile.type === 'student');
       setState({ status: 'ready', data });
+      // A brand-new account (first sign-in, on whichever page): Meta AccountSignup, once.
+      if (data.newAccount) trackSignup(data.customer.userId);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) { await signOut(); setState({ status: 'signedOut' }); }
       else setState({ status: 'error', message: (e as Error).message });

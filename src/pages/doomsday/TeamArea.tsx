@@ -15,6 +15,7 @@ import { Countdown } from '../../components/Countdown';
 import { GoogleSignIn } from '../../components/GoogleSignIn';
 import { ProfileForm, ProfileOnboarding, shouldOnboard } from '../../components/ProfileForm';
 import { RichText } from '../../components/RichText';
+import { trackRegistration } from '../../meta';
 
 type TeamComp = Competition & { team: TeamConfig };
 interface FileRow { id: string; name: string; size: number; pages: number | null; uploadedAt: string }
@@ -325,6 +326,8 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
         ? await authApi<{ application: TeamApp }>(`/competitions/${c.slug}/team/${edit.id}`, { method: 'PUT', body: team })
         : await authApi<{ application: TeamApp }>(`/competitions/${c.slug}/team`, { method: 'POST', body: team });
       onDone(r.application);
+      // Meta CompleteRegistration for a new registration only (not an edit), after the success screen.
+      if (!edit) trackRegistration(r.application.id, c.slug);
     } catch (e) {
       const list = e instanceof ApiError && (e.details as { problems?: string[] } | undefined)?.problems;
       setServerErrs(list && list.length ? list : [errorMessage(e)]);

@@ -20,6 +20,7 @@ import { report, visitOf } from '../services/tracking.js';
 import { verifySupabaseToken } from './admin/auth.js';
 import { orderStatusLabel } from './orders.js';
 import { downloadLimit, ebookAwaitsDelivery, fileLabel, filesForItems } from '../services/ebooks.js';
+import { SIGNUP_EVENT, signupEventId, signupParams } from '../../src/shared/metaEvents.js';
 
 export interface Customer { userId: string; email: string; name: string; avatar: string | null }
 
@@ -87,16 +88,17 @@ account.get('/', async (c) => {
   const [profile] = await db.insert(accounts).values({ userId: me.userId, email: me.email, name: me.name, avatarUrl: me.avatar })
     .onConflictDoUpdate({ target: accounts.userId, set: { email: me.email, name: me.name, avatarUrl: me.avatar, lastSeenAt: now() } })
     .returning();
-  // First sign-in: a new account also joins the newsletter (the sign-in page says so),
-  // and counts as a registration for Meta (the page fires the Pixel's twin with this id).
+  // First sign-in: a new account also joins the newsletter (the sign-in page says so), and is
+  // reported to Meta as the custom event AccountSignup (the page fires the Pixel's twin with this
+  // id). Competition registrations are the CompleteRegistration events, not sign-ups.
   const newAccount = !known && await justSignedUp(deps, me.userId);
   // Every account is on the newsletter from sign-up (unless they unsubscribed).
   await subscribeNewAccount(deps, me, c.get('ip'));
   if (newAccount) {
     const visit = visitOf(c);
     await report(deps, visit.consent, {
-      name: 'CompleteRegistration', eventId: `signup-${me.userId}`, time: now(), url: `${env.SITE_URL}/account`,
-      user: { ...visit, email: me.email, name: me.name, externalId: me.email }, custom: { content_name: 'Google sign-in', status: 'complete' },
+      name: SIGNUP_EVENT, eventId: signupEventId(me.userId), time: now(), url: `${env.SITE_URL}/account`,
+      user: { ...visit, email: me.email, name: me.name, externalId: me.email }, custom: signupParams(),
     });
   }
   const [sub] = await db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, me.email));

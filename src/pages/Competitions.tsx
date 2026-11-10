@@ -13,6 +13,7 @@ import { RichText } from '../components/RichText';
 import { Reveal, SplitWords } from '../components/motion';
 import { NotFound } from './NotFound';
 import { DoomsdayPage } from './doomsday/DoomsdayPage';
+import { trackRegistration } from '../meta';
 
 const ORDER: Record<Phase, number> = { open: 0, upcoming: 1, closed: 2 };
 
@@ -189,6 +190,8 @@ function SignupForm({ c, onDone, onCancel }: { c: Competition; onDone: (m: Mine)
     try {
       const r = await authApi<{ signup: Mine }>(`/competitions/${c.slug}/register`, { method: 'POST', body: { mode, groupName, answers, participants: people } });
       onDone(r.signup);
+      // Meta CompleteRegistration, after the success screen.
+      trackRegistration(r.signup.id, c.slug);
     } catch (e2) {
       const list = e2 instanceof ApiError && (e2.details as { problems?: string[] } | undefined)?.problems;
       setErrs(list && list.length ? list : [errorMessage(e2)]);
