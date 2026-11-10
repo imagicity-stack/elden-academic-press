@@ -10,6 +10,7 @@ import { supabaseAuthUser, supabaseAuthUsers, type AuthUser } from './lib/authUs
 import { consoleMailer, resendMailer, smtpMailer, type Mailer } from './lib/mail.js';
 import { metaHttp, type Meta } from './lib/meta.js';
 import { sarvamCalls, type CallProvider } from './lib/callProvider.js';
+import { whatsappHttp, whatsappTemplatesHttp, type WaTemplates, type WhatsApp } from './lib/whatsapp.js';
 import { razorpayHttp, razorpaySimulator, type Razorpay } from './lib/razorpay.js';
 import { localStorage, supabaseStorage, type Storage } from './lib/storage.js';
 
@@ -31,6 +32,10 @@ export interface Deps {
   meta?: Meta | null;
   /** Places the voice-agent calls (Admin → Calls); unset until the provider is connected. */
   calls?: CallProvider | null;
+  /** Sends WhatsApp messages (Admin → WhatsApp); unset until the token and number are set. */
+  whatsapp?: WhatsApp | null;
+  /** The WhatsApp account's message templates; unset without the token and account id. */
+  whatsappTemplates?: WaTemplates | null;
 }
 
 // Kept on globalThis so the dev server's hot reloads reuse one database.
@@ -67,7 +72,9 @@ async function buildDeps(env: Env): Promise<Deps> {
   const authUser = sbAdmin ? supabaseAuthUser(...sbAdmin) : undefined;
   const meta = env.VITE_META_PIXEL_ID && env.META_CAPI_TOKEN ? metaHttp(env.VITE_META_PIXEL_ID, env.META_CAPI_TOKEN, env.META_TEST_EVENT_CODE) : null;
   const calls = sarvamCallsFrom(env);
-  return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, calls, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task.finally(afterConnectionsClose)) : undefined };
+  const whatsapp = env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID ? whatsappHttp({ token: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID }) : null;
+  const whatsappTemplates = env.WHATSAPP_TOKEN && env.WHATSAPP_BUSINESS_ACCOUNT_ID ? whatsappTemplatesHttp({ token: env.WHATSAPP_TOKEN, businessAccountId: env.WHATSAPP_BUSINESS_ACCOUNT_ID }) : null;
+  return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, calls, whatsapp, whatsappTemplates, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task.finally(afterConnectionsClose)) : undefined };
 }
 
 /** Outgoing calls through Sarvam, once its key, workspace and both campaign ids are set; else null. */

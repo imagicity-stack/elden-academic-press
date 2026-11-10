@@ -11,6 +11,7 @@ import type { RzpPayment } from '../lib/razorpay.js';
 import { findCoupon, getSettings, loadPricingProducts, type Settings } from './catalog.js';
 import { paymentMethodLabel } from '../lib/format.js';
 import { sendOrderConfirmation, sendStoreNewOrder } from './emails.js';
+import { orderWhatsApp } from './whatsapp.js';
 import { subscribe } from './newsletter.js';
 import { leadPaid } from './calls.js';
 import { reportPurchase, type Visit } from './tracking.js';
@@ -349,6 +350,8 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
     await reportPurchase(deps, result.order, items);
     // Their saved checkout (if any) is converted, and a waiting cart-recovery call stops.
     await leadPaid(deps, result.order).catch((e) => console.error('[calls] lead paid', (e as Error).message));
+    // The same tick allows a WhatsApp confirmation (if switched on in Admin → WhatsApp).
+    await orderWhatsApp(deps, 'order_confirmed', result.order).catch((e) => console.error('[whatsapp] order confirmed', (e as Error).message));
     // The buyer ticked "Email me about new books and offers" at checkout.
     const o = result.order;
     if (o.newsletterOptIn) {

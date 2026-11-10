@@ -11,6 +11,7 @@ import { sendEbookUnlocked, sendOrderConfirmation, sendRefundNotice, sendShipped
 import { renderPackingSlip } from '../../services/invoice.js';
 import { invoiceFileName, renderInvoicePdf } from '../../services/invoicePdf.js';
 import { cancelUnpaid, logEvent, orderLink, refundOrder } from '../../services/orders.js';
+import { orderWhatsApp } from '../../services/whatsapp.js';
 import { orderStatusLabel } from '../orders.js';
 import { CHANNELS, channelLabel, classify, orderChannel, type Channel, type Touch } from '../../../src/shared/attribution.js';
 import { audit, requireRole } from './auth.js';
@@ -176,12 +177,18 @@ adminOrders.post('/:id/fulfillment', async (c) => {
   const label = { unfulfilled: 'Marked as not packed', packed: 'Packed', shipped: `Shipped${u.courier ? ` with ${u.courier}` : ''}${u.trackingNumber ? ` (${u.trackingNumber})` : ''}`, delivered: 'Delivered' }[input.status];
   await logEvent(deps.db, o.id, input.status === 'unfulfilled' ? 'fulfillment' : input.status, label, c.get('admin').email);
   await audit(c, 'order.fulfillment', 'order', o.number, input);
-  if (input.status === 'shipped' && input.notify && o.fulfillmentStatus !== 'shipped') await sendShipped(deps, u, await getSettings(deps.db));
+  if (input.status === 'shipped' && input.notify && o.fulfillmentStatus !== 'shipped') {
+    await sendShipped(deps, u, await getSettings(deps.db));
+    await orderWhatsApp(deps, 'shipped', u).catch((e) => console.error('[whatsapp] shipped', (e as Error).message));
+  }
   if (input.status === 'delivered' && o.fulfillmentStatus !== 'delivered' && o.paymentMode === 'cod') {
     await logEvent(deps.db, o.id, 'cod_collected', `Cash on delivery: ₹${(o.codAmount / 100).toFixed(2)} collected`, c.get('admin').email);
     // Their free e-book is unlocked now: send the download links.
     const items = await deps.db.select().from(orderItems).where(eq(orderItems.orderId, o.id));
-    if (input.notify && items.some((i) => i.includesEbook)) await sendEbookUnlocked(deps, u, items, await getSettings(deps.db));
+    if (input.notify && items.some((i) => i.includesEbook)) {
+      await sendEbookUnlocked(deps, u, items, await getSettings(deps.db));
+      await orderWhatsApp(deps, 'ebook_ready', u).catch((e) => console.error('[whatsapp] e-book ready', (e as Error).message));
+    }
   }
   return c.json({ order: u });
 });

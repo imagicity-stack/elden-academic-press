@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { OrderSource } from '../../src/shared/attribution.js';
 import type { PopupAudience, PopupContent, PopupDesign, PopupFrequency, PopupTrigger } from '../../src/shared/popups.js';
 import type { CallKind, CallSettings, CallStatus } from '../../src/shared/calls.js';
+import type { WaKind, WaStatus, WhatsAppSettings } from '../../src/shared/whatsapp.js';
 import {
   boolean, check, date, index, integer, jsonb, pgEnum, pgSequence, pgTable, primaryKey, serial, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
@@ -1052,6 +1053,60 @@ export const doNotCall = pgTable('do_not_call', {
 export const callSettings = pgTable('call_settings', {
   id: integer('id').primaryKey().default(1),
   data: jsonb('data').$type<Partial<CallSettings>>().notNull().default({}),
+  updatedBy: text('updated_by').notNull().default(''),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/* ---------------- WhatsApp (Meta Cloud API) ---------------- */
+
+/** Every WhatsApp message, ours and the customers': the log and the inbox. */
+export const whatsappMessages = pgTable('whatsapp_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /** +919876543210 */
+  phone: text('phone').notNull(),
+  /** Their WhatsApp profile name (incoming) or our customer's name. */
+  name: text('name').notNull().default(''),
+  direction: text('direction').$type<'in' | 'out'>().notNull(),
+  kind: text('kind').$type<WaKind>().notNull(),
+  status: text('status').$type<WaStatus>().notNull(),
+  /** Template name (ours) and its variables. */
+  template: text('template').notNull().default(''),
+  params: jsonb('params').$type<string[]>().notNull().default([]),
+  /** The text: what they wrote, our reply, or the template filled in (for the inbox). */
+  body: text('body').notNull().default(''),
+  /** WhatsApp's message id (wamid…), for status updates and to ignore repeats. */
+  waId: text('wa_id').unique(),
+  error: text('error').notNull().default(''),
+  leadId: uuid('lead_id').references(() => checkoutLeads.id, { onDelete: 'set null' }),
+  orderId: uuid('order_id').references(() => orders.id, { onDelete: 'set null' }),
+  /** New-books sends: one id per send, so nobody gets the same one twice. */
+  broadcastId: text('broadcast_id'),
+  dueAt: timestamp('due_at', { withTimezone: true }).notNull().defaultNow(),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  /** Incoming: when someone in the team opened it. */
+  seenAt: timestamp('seen_at', { withTimezone: true }),
+  createdBy: text('created_by').notNull().default('system'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('wa_phone_created_idx').on(t.phone, t.createdAt),
+  index('wa_status_due_idx').on(t.status, t.dueAt),
+  uniqueIndex('wa_order_kind_uq').on(t.orderId, t.kind),
+  uniqueIndex('wa_lead_kind_uq').on(t.leadId, t.kind),
+  uniqueIndex('wa_broadcast_phone_uq').on(t.broadcastId, t.phone),
+]);
+
+/** Numbers that replied STOP: no more WhatsApp messages from us (until they send START). */
+export const whatsappOptOuts = pgTable('whatsapp_opt_outs', {
+  phone: text('phone').primaryKey(),
+  reason: text('reason').notNull().default(''),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Admin → WhatsApp → Settings: one row. */
+export const whatsappSettings = pgTable('whatsapp_settings', {
+  id: integer('id').primaryKey().default(1),
+  data: jsonb('data').$type<Partial<WhatsAppSettings>>().notNull().default({}),
   updatedBy: text('updated_by').notNull().default(''),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

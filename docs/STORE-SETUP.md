@@ -336,6 +336,43 @@ With all five set, Admin → Calls shows **Outgoing calls: Connected (sarvam)**;
 - **Extend:** pause the campaign, change its end date (in the Sarvam dashboard or the *Update campaign* API, `PATCH …/campaigns/<id>` with `end_timestamp`; Sarvam accepts it only while a campaign is *paused* or *scheduled*), then resume it. If Sarvam refuses an end date more than 90 days after the start, replace it instead.
 - **Replace:** create a new outgoing campaign for each agent with the same settings (agent version, connection `9e746ce3-f7-f288c8b7-cd97` and its number, dial rate 1/second, Sarvam retries off, the same hours, the same webhook address and `purpose`), then put the new ids in `SARVAM_CART_CAMPAIGN_ID` / `SARVAM_FEEDBACK_CAMPAIGN_ID` in Vercel and redeploy. Calls already handed to the old campaign finish there.
 
+## 16. WhatsApp
+
+**One-time:** run [`0017_whatsapp.sql`](supabase-updates/0017_whatsapp.sql) in Supabase → SQL Editor before this version goes live.
+
+The site sends WhatsApp messages from the business number **+1 555-747-5125** ("Elden Academic Press", in the WhatsApp account of the **Elden Academic Press** business portfolio, ID `1115840267620875`) through Meta's WhatsApp Cloud API, and shows customers' replies in **Admin → WhatsApp** (managers and the owner). Only to people who agreed: a checkout with *"Elden Academic Press may call or WhatsApp me"* ticked, or a newsletter subscriber with *"Subscribe to calls"* ticked. Anyone who replies **STOP** gets no more messages (and a confirmation); **START** undoes it.
+
+| Message (template) | When | Category |
+|---|---|---|
+| Cart reminder (`elden_cart_reminder`) | A checkout with the tick wasn't paid: once, after the set delay (default 30 minutes), between 9 am and 9 pm | Marketing |
+| Order confirmed (`elden_order_confirmed`) | The payment comes in | Utility |
+| Order shipped (`elden_order_shipped`) | You mark it Shipped with "email the customer" on (with courier and tracking) | Utility |
+| Free e-book ready (`elden_ebook_ready`) | Cash on delivery: delivered, and the free e-book unlocks | Utility |
+| After a call (`elden_call_followup`) | A Sarvam voice call ended: thank-you and the link (finish your order, with the coupon if the agent gave one; or the order, or the new books); not after "don't call me", "not interested" or a wrong number | Utility |
+| Missed our call (`elden_missed_call`) | The last try of a Sarvam call went unanswered: "we tried to call you", with their link | Utility |
+| New books (`elden_new_books`) | You send it from *Admin → WhatsApp → New books* (test to one number first); once per person, between 9 am and 9 pm | Marketing |
+
+Each message is a switch in *Admin → WhatsApp → Settings*, under a master switch; everything starts **off**. Within 24 hours of a customer's own message you can reply freely from the inbox; after that WhatsApp only allows templates. *Sent* lists every message with its status (sent, delivered, read, failed with Meta's reason). The inbox links to that number's calls, and each call links to its WhatsApp chat.
+
+**To connect (everything in the Elden Academic Press portfolio):**
+1. **App:** developers.facebook.com → *Create app* → use case *Connect with customers through WhatsApp*, business portfolio **Elden Academic Press**. In the app's *WhatsApp → API setup*, choose the WhatsApp account with +1 555-747-5125 and copy the **Phone number ID** and the **WhatsApp Business Account ID** (both are long numbers, not the phone number). If it says this is a test number, it can only message the numbers added under *To* there.
+2. **Permanent token:** business.facebook.com → Settings (Elden Academic Press) → *Users → System users* → add one (Admin) → *Assign assets*: the app and the WhatsApp account, full control → *Generate token* for the app, expiry *Never*, permissions `whatsapp_business_messaging` and `whatsapp_business_management`.
+3. **App secret:** the app's *App settings → Basic → App secret*. Make up a **verify token** (any long random string).
+4. **Vercel** (Production), then redeploy:
+
+| Variable | Value |
+|---|---|
+| `WHATSAPP_TOKEN` | the system user's token (secret) |
+| `WHATSAPP_PHONE_NUMBER_ID` | the Phone number ID |
+| `WHATSAPP_BUSINESS_ACCOUNT_ID` | the WhatsApp Business Account ID |
+| `WHATSAPP_APP_SECRET` | the App secret (secret) |
+| `WHATSAPP_VERIFY_TOKEN` | your verify token |
+
+5. **Webhook:** the app's *WhatsApp → Configuration → Webhook*: callback URL `https://eldenap.in/api/whatsapp/webhook`, the same verify token, then *Manage* → subscribe to **messages**. Publish the app (App mode: *Live*) so real messages arrive.
+6. **Templates:** *Admin → WhatsApp → Settings → Templates in WhatsApp → Create the missing templates*. The site creates all seven (language `en`) and shows Meta's review: messages go out only once a template is *approved* (usually minutes, sometimes a day). A rejected one shows Meta's reason; edit it in WhatsApp Manager, or create one with another name and put that name under *Template names*.
+7. **Payment:** WhatsApp Manager → the account → *Payment settings*: add a card. Meta charges per marketing and utility message (replies within 24 hours of the customer's message are free).
+8. Switch on what you want in *Settings*. The number starts at 250 customers a day; Meta raises it as quality stays good.
+
 ## Running costs
 
 | Service | Cost |

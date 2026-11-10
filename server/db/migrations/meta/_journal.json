@@ -120,6 +120,13 @@
       "when": 1794322914293,
       "tag": "0016_subscriber_call_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794326037898,
+      "tag": "0017_whatsapp",
+      "breakpoints": true
     }
   ]
 }

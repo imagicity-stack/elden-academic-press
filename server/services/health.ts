@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { eq, sql } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
-import { accounts, adminUsers, calls, competitionSignups, orders, popups, products, productVariants, settings, subscribers, teamApplications } from '../db/schema.js';
+import { accounts, adminUsers, calls, competitionSignups, orders, popups, products, productVariants, settings, subscribers, teamApplications, whatsappMessages } from '../db/schema.js';
 
 type Check = 'ok' | 'missing' | 'error';
 export interface Health {
@@ -120,6 +120,7 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
       ['0014_popups', () => db.select({ v: popups.id }).from(popups).limit(1)],
       ['0015_calls', () => db.select({ v: calls.id }).from(calls).limit(1)],
       ['0016_subscriber_call_consent', () => db.select({ v: subscribers.callConsent }).from(subscribers).limit(1)],
+      ['0017_whatsapp', () => db.select({ v: whatsappMessages.id }).from(whatsappMessages).limit(1)],
     ];
     checks.database = 'ok';
     for (const [file, probe] of updates) {
