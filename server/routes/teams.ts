@@ -18,6 +18,7 @@ import {
   sendTeamEmail, sendTeamStaffAlert, settingsFor, teamCompetition, type App, type Member, type TeamComp, type TeamFile, type TeamSettings,
 } from '../services/teams.js';
 import { briefFor } from '../services/briefs.js';
+import { reportRegistration } from '../services/tracking.js';
 import { profileOf, requireCustomer } from './account.js';
 
 export const teams = new Hono<AppEnv>();
@@ -207,6 +208,8 @@ teams.post('/:slug/team', async (c) => {
     await tx.insert(teamMembers).values(memberRows(row.id, checked.team, at));
     return row;
   });
+  // Meta CompleteRegistration, in the background: never holds up or undoes the registration.
+  reportRegistration(deps, c, { id: app.id, slug: comp.slug, email: me.email, account: acct });
   const x = (await loadApplication(db, app.id))!;
   const mail = Promise.all([sendTeamEmail(deps, comp, x.app, x.members, 'received'), sendTeamStaffAlert(deps, comp, x.app, x.members, 'new')]);
   if (deps.defer) deps.defer(mail); else await mail;

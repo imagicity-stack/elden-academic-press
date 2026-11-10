@@ -3,6 +3,7 @@
 // so Meta counts it once even when one of the two is blocked.
 import { getConsent, isStaff, isStudentSession, syncConsent, type Consent } from './consent';
 import { forgetUser, knownUser, phoneDigits, type MatchUser } from './visitor';
+import { fireOnce, registrationEventId, registrationParams, SIGNUP_EVENT, signupEventId, signupParams } from './shared/metaEvents';
 
 export { rememberUser } from './visitor';
 
@@ -124,6 +125,32 @@ export function track(name: EventName, custom: Record<string, unknown> = {}, opt
   const eventId = opts.eventId ?? newEventId();
   window.fbq!('track', name, custom, { eventID: eventId });
   if (!opts.eventId && (RELAYED as readonly string[]).includes(name)) relay(name as Relayed, eventId, custom);
+}
+
+/** A custom event (the Pixel's trackCustom), with the id the server's twin uses. */
+export function trackCustom(name: typeof SIGNUP_EVENT, custom: Record<string, unknown>, opts: { eventId: string }) {
+  if (!active()) return;
+  load();
+  window.fbq!('trackCustom', name, custom, { eventID: opts.eventId });
+}
+
+const storage = () => { try { return window.localStorage; } catch { return null; } };
+
+/**
+ * CompleteRegistration for a competition registration, called with the id from the registration
+ * form's success response (never on page load). The server sends the same event with the same
+ * id. Once per registration in this browser, after the success screen has shown, and a blocked
+ * or failing Pixel can't break anything.
+ */
+export function trackRegistration(registrationId: string, slug: string) {
+  setTimeout(() => fireOnce(storage(), `elden-reg-tracked:${registrationId}`,
+    () => track('CompleteRegistration', registrationParams(slug), { eventId: registrationEventId(registrationId) })), 0);
+}
+
+/** AccountSignup, wherever a new account is first seen (whichever page they signed in on). */
+export function trackSignup(userId: string) {
+  setTimeout(() => fireOnce(storage(), `elden-signup-tracked:${userId}`,
+    () => trackCustom(SIGNUP_EVENT, signupParams(), { eventId: signupEventId(userId) })), 0);
 }
 
 // Contact: someone taps your email address, phone number or WhatsApp link.

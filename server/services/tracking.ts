@@ -6,6 +6,7 @@ import type { AppEnv } from '../app.js';
 import type { Deps } from '../deps.js';
 import type { MetaEvent } from '../lib/meta.js';
 import type { Order, OrderItem } from './orders.js';
+import { registrationEventId, registrationParams } from '../../src/shared/metaEvents.js';
 
 export interface Visit { consent: boolean; ip: string | null; userAgent: string | null; fbp: string | null; fbc: string | null }
 
@@ -58,4 +59,49 @@ export function reportPurchase(deps: Deps, o: Order, items: OrderItem[]) {
       format: [...new Set(items.map((i) => (i.variantKind === 'digital' ? 'ebook' : i.variantKind === 'bundle' ? 'ebook+print' : 'print')))].sort().join(','),
     },
   });
+}
+
+/** How long a registration's Meta event may take before we stop waiting for it. */
+export const REGISTRATION_META_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer in ${ms} ms`)), ms); });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * CompleteRegistration for a competition registration (team, individual or group), called once
+ * the registration is saved. Fire-and-forget: it's never awaited by the request, never throws,
+ * and gives up after a few seconds, so Meta being slow or down can't hold up or undo a
+ * registration (errors are only logged). Same event id as the browser's Pixel event.
+ * Only for visitors who accepted ad cookies, and never for an account set to Student.
+ */
+export function reportRegistration(
+  deps: Deps, c: Context<AppEnv>,
+  r: { id: string; slug: string; email: string; account: { phone: string; fullName: string; name: string; accountType: string | null } },
+): void {
+  try {
+    if (!deps.meta) return;
+    const visit = visitOf(c);
+    if (!visit.consent || r.account.accountType === 'student') return;
+    const event: MetaEvent = {
+      name: 'CompleteRegistration',
+      eventId: registrationEventId(r.id),
+      time: deps.now(),
+      url: `${deps.env.SITE_URL}/competitions/${r.slug}`,
+      user: {
+        email: r.email, phone: r.account.phone || null, name: r.account.fullName || r.account.name || null,
+        // The same external_id as the AccountSignup event: their email.
+        externalId: r.email,
+        ip: visit.ip, userAgent: visit.userAgent, fbp: visit.fbp, fbc: visit.fbc,
+      },
+      custom: registrationParams(r.slug),
+    };
+    const run = withTimeout(Promise.resolve().then(() => deps.meta!.send([event])), REGISTRATION_META_TIMEOUT_MS)
+      .catch((e) => console.error('[meta] registration event', (e as Error).message));
+    deps.defer?.(run);
+  } catch (e) {
+    console.error('[meta] registration event', (e as Error).message);
+  }
 }

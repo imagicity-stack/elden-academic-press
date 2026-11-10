@@ -15,6 +15,7 @@ import { getSettings } from '../services/catalog.js';
 import { button, FONT, INK, label, layout, LINE, p, section } from '../services/emails.js';
 import { checkSignup, findCompetition, istDateTime, personName, phaseOf, type Competition } from '../../src/shared/competitions.js';
 import { profileOf, requireCustomer } from './account.js';
+import { reportRegistration } from '../services/tracking.js';
 
 export const competitions = new Hono<AppEnv>();
 competitions.use('*', requireCustomer);
@@ -63,6 +64,8 @@ competitions.post('/:slug/register', async (c) => {
   const checked = checkSignup(comp, await body(c, zSignup));
   if (!checked.ok) throw new HttpError(400, checked.errors[0], 'invalid', { problems: checked.errors });
   const [row] = await db.insert(competitionSignups).values({ competitionSlug: comp.slug, userId: me.userId, email: me.email, ...checked.signup }).returning();
+  // Meta CompleteRegistration, in the background: never holds up or undoes the registration.
+  reportRegistration(deps, c, { id: row.id, slug: comp.slug, email: me.email, account: acct });
   // The email never holds up (or undoes) the registration.
   const mail = sendConfirmation(deps, comp, row, profileOf(acct).fullName || me.name).catch((e) => console.error('[competitions] email', (e as Error).message));
   if (deps.defer) deps.defer(mail); else await mail;

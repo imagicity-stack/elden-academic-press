@@ -9,7 +9,9 @@ import { stateName } from './states.js';
 export const GRAPH_VERSION = 'v24.0';
 
 export type MetaEventName = 'PageView' | 'ViewContent' | 'Search' | 'CustomizeProduct' | 'AddToCart' | 'InitiateCheckout' | 'AddPaymentInfo'
-  | 'Purchase' | 'Lead' | 'Contact' | 'SubmitApplication' | 'CompleteRegistration' | 'Subscribe';
+  | 'Purchase' | 'Lead' | 'Contact' | 'SubmitApplication' | 'CompleteRegistration' | 'Subscribe'
+  /** Custom event: a new account (first Google sign-in). */
+  | 'AccountSignup';
 
 export interface MetaUser {
   email?: string | null;
