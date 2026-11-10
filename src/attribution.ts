@@ -1,6 +1,6 @@
 // Remembers in this browser how the visitor reached the site (see src/shared/attribution.ts),
-// so their order can say where it came from. Only the source, never who they are; sent only
-// with an order, and forgotten after 90 days.
+// so their order, newsletter sign-up or new account can say where it came from. Only the source,
+// never who they are; sent only with those, and forgotten after 90 days.
 import { touchFrom, type OrderSource, type Touch } from './shared/attribution';
 
 const KEY = 'elden-source';

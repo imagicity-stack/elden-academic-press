@@ -71,7 +71,7 @@ store.post('/cart/quote', async (c) => {
   return c.json({ quote: q });
 });
 
-const zTouch = z.object({
+export const zTouch = z.object({
   at: z.number().int().positive(),
   source: z.string().max(100).optional(), medium: z.string().max(100).optional(), campaign: z.string().max(100).optional(),
   content: z.string().max(100).optional(), term: z.string().max(100).optional(),
@@ -79,7 +79,7 @@ const zTouch = z.object({
   ref: z.string().max(100).regex(/^[a-z0-9.-]+$/i).optional(),
   landing: z.string().max(200).regex(/^\//).optional(),
 });
-const zSource = z.object({ first: zTouch.optional(), last: zTouch.optional() }).optional().catch(undefined);
+export const zSource = z.object({ first: zTouch.optional(), last: zTouch.optional() }).optional().catch(undefined);
 
 const zCheckout = z.object({
   items: zItems,

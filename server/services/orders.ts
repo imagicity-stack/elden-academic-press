@@ -355,7 +355,7 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
     // The buyer ticked "Email me about new books and offers" at checkout.
     const o = result.order;
     if (o.newsletterOptIn) {
-      await subscribe(deps, { email: o.email, name: o.name, phone: o.phone, source: 'checkout', ip: o.ip })
+      await subscribe(deps, { email: o.email, name: o.name, phone: o.phone, source: 'checkout', ip: o.ip, visit: o.source })
         .catch((e) => console.error('[newsletter] checkout opt-in failed', (e as Error).message));
     }
   }

@@ -373,6 +373,15 @@ Each message is a switch in *Admin → WhatsApp → Settings*, under a master sw
 7. **Payment:** WhatsApp Manager → the account → *Payment settings*: add a card. Meta charges per marketing and utility message (replies within 24 hours of the customer's message are free).
 8. Switch on what you want in *Settings*. The number starts at 250 customers a day; Meta raises it as quality stays good.
 
+## 17. Audience (profiles and where people came from)
+
+**One-time:** run [`0018_audience_sources.sql`](supabase-updates/0018_audience_sources.sql) in Supabase → SQL Editor before this version goes live.
+
+**Admin → Audience** lists everyone who signed up (Google accounts and newsletter subscribers, one row per email):
+- **Profile completion:** a ring per person (how many of the details their profile asks for are filled in: 5 for most, more for students and teachers), a completion bar for everyone, and the details people most often leave out. Customers see the same progress bar on their account page, with the next thing to add.
+- **Where they came from:** the channel that brought them to the site before they signed up (Meta ads with the campaign, Google Ads, Google search, Instagram/Facebook posts, email, other sites, direct), and **where they signed up** (which popup by name, the footer form, the newsletter page, checkout, Google sign-in). It's the same visit the browser already remembers for orders (90 days). People who signed up before this was recorded show the source of their first order, or *Not recorded*.
+- Click a bar or a completion band to list those people; click a person for what's missing, their first page, campaign, mobile and orders. *Export CSV* downloads the filtered list.
+
 ## Running costs
 
 | Service | Cost |

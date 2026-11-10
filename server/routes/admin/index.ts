@@ -16,6 +16,7 @@ import { adminCompetitions } from './competitions.js';
 import { adminTeams } from './teams.js';
 import { adminCalls } from '../calls.js';
 import { adminWhatsApp } from '../whatsapp.js';
+import { adminAudience } from './audience.js';
 import { adminPopups } from './popups.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
@@ -48,6 +49,7 @@ admin.route('/coupons', adminCoupons);
 admin.route('/enquiries', adminEnquiries);
 admin.route('/resources', adminResources);
 admin.route('/newsletter', adminNewsletter);
+admin.route('/audience', adminAudience);
 // Popups: managers and the owner.
 admin.use('/popups', requireRole('manager'));
 admin.use('/popups/*', requireRole('manager'));

@@ -121,6 +121,10 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
       ['0015_calls', () => db.select({ v: calls.id }).from(calls).limit(1)],
       ['0016_subscriber_call_consent', () => db.select({ v: subscribers.callConsent }).from(subscribers).limit(1)],
       ['0017_whatsapp', () => db.select({ v: whatsappMessages.id }).from(whatsappMessages).limit(1)],
+      ['0018_audience_sources', async () => {
+        await db.select({ v: accounts.channel }).from(accounts).limit(1);
+        await db.select({ v: subscribers.channel }).from(subscribers).limit(1);
+      }],
     ];
     checks.database = 'ok';
     for (const [file, probe] of updates) {

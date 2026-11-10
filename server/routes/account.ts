@@ -4,6 +4,8 @@
 // never reaches the admin.
 import { createHash } from 'node:crypto';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
+import { zSource } from './store.js';
+import { orderChannel } from '../../src/shared/attribution.js';
 import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
@@ -78,6 +80,15 @@ account.use('*', requireCustomer);
 
 const OWNED = ['paid', 'partially_refunded', 'refunded'] as const;
 
+/** The X-Visit-Source header: the browser's remembered visit (JSON), or null if missing or malformed. */
+function visitHeader(raw: string | undefined) {
+  if (!raw || raw.length > 4000) return null;
+  try {
+    const v = zSource.parse(JSON.parse(raw));
+    return v && (v.first || v.last) ? v : null;
+  } catch { return null; }
+}
+
 /** Everything for the account page: profile, orders and the e-book / journal library. */
 account.get('/', async (c) => {
   const deps = c.get('deps');
@@ -85,15 +96,24 @@ account.get('/', async (c) => {
   const me = c.get('customer');
   // Remember everyone who signs in (with the mobile number they add below).
   const [known] = await db.select({ userId: accounts.userId }).from(accounts).where(eq(accounts.userId, me.userId));
-  const [profile] = await db.insert(accounts).values({ userId: me.userId, email: me.email, name: me.name, avatarUrl: me.avatar })
-    .onConflictDoUpdate({ target: accounts.userId, set: { email: me.email, name: me.name, avatarUrl: me.avatar, lastSeenAt: now() } })
+  // How they reached the site (their browser sends what it remembered): kept from the first time it's known.
+  const visit = visitHeader(c.req.header('x-visit-source'));
+  const origin = visit ? { source: visit, channel: orderChannel(visit).channel, channelDetail: orderChannel(visit).detail.slice(0, 120) } : {};
+  const [profile] = await db.insert(accounts).values({ userId: me.userId, email: me.email, name: me.name, avatarUrl: me.avatar, ...origin })
+    .onConflictDoUpdate({
+      target: accounts.userId,
+      set: {
+        email: me.email, name: me.name, avatarUrl: me.avatar, lastSeenAt: now(),
+        ...(visit ? { source: sql`coalesce(${accounts.source}, ${JSON.stringify(visit)}::jsonb)`, channel: sql`case when ${accounts.channel} = '' then ${origin.channel} else ${accounts.channel} end`, channelDetail: sql`case when ${accounts.channel} = '' then ${origin.channelDetail} else ${accounts.channelDetail} end` } : {}),
+      },
+    })
     .returning();
   // First sign-in: a new account also joins the newsletter (the sign-in page says so). Meta's
   // AccountSignup isn't sent here: it waits for the profile (PUT /profile), so a student's age is
   // known first. Competition registrations are the CompleteRegistration events, not sign-ups.
   const newAccount = !known && await justSignedUp(deps, me.userId);
   // Every account is on the newsletter from sign-up (unless they unsubscribed).
-  await subscribeNewAccount(deps, me, c.get('ip'));
+  await subscribeNewAccount(deps, me, c.get('ip'), visit);
   const [sub] = await db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, me.email));
   const s = await getSettings(db);
   const mine = await db.select().from(orders).where(and(eq(orders.email, me.email), inArray(orders.paymentStatus, OWNED)))

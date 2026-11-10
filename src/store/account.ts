@@ -1,6 +1,7 @@
 // Customer sign-in with Google (Supabase Auth), separate from the admin's
 // session. supabase-js is only downloaded when someone uses their account.
 import { useCallback, useEffect, useState } from 'react';
+import { orderSource } from '../attribution';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, api } from './api';
 import { setMetaOff, setStudentSession } from '../consent';
@@ -167,10 +168,10 @@ export async function signOut() {
   if (accountsEnabled) await (await authClient()).auth.signOut();
 }
 
-export async function accountApi<T>(path: string, init: { method?: string; body?: unknown } = {}) {
+export async function accountApi<T>(path: string, init: { method?: string; body?: unknown; headers?: Record<string, string> } = {}) {
   const token = await accountToken();
   if (!token) throw new ApiError(401, 'Please sign in.', 'unauthenticated');
-  return api<T>('/account' + path, { ...init, headers: { Authorization: `Bearer ${token}` } });
+  return api<T>('/account' + path, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } });
 }
 
 type State = { status: 'loading' } | { status: 'signedOut' } | { status: 'ready'; data: AccountData } | { status: 'error'; message: string };
@@ -181,7 +182,8 @@ export function useAccount() {
   const load = useCallback(async () => {
     try {
       if (!(await accountToken())) { setState({ status: 'signedOut' }); return; }
-      const data = await accountApi<AccountData>('');
+      // How they reached the site, so a new account records where it came from (Meta ads, Google…).
+      const data = await accountApi<AccountData>('', { headers: { 'X-Visit-Source': JSON.stringify(orderSource()) } });
       // A student's own account: no Google Analytics on this browser; Meta only from the minimum age.
       setStudentSession(data.profile.type === 'student');
       setMetaOff(!data.meta.allowed);

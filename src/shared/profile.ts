@@ -46,3 +46,23 @@ export function missingFields(p: ProfileValues, today = todayIST()): ProfileFiel
   }
   return out;
 }
+
+/** The fields this person's profile asks for (by "I am a" and, for students, age), in form order. */
+export function requiredFields(p: ProfileValues, today = todayIST()): ProfileField[] {
+  const out: ProfileField[] = ['type', 'fullName', 'phone', 'city', 'state'];
+  if (p.type === 'student') {
+    out.push('dob', 'institutionType', 'institutionName', 'grade');
+    const age = p.dob ? ageOn(p.dob, today) : null;
+    if (age !== null && age < 18) out.push('guardianName', 'guardianPhone');
+  }
+  if (p.type === 'teacher') out.push('institutionType', 'institutionName');
+  return out;
+}
+
+/** How much of the profile is filled in: done / total fields and a whole percentage. */
+export function profileProgress(p: ProfileValues, today = todayIST()) {
+  const total = requiredFields(p, today).length;
+  const missing = missingFields(p, today);
+  const done = total - missing.length;
+  return { done, total, percent: Math.round((done / total) * 100), missing };
+}

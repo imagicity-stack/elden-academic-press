@@ -1,5 +1,6 @@
 // Public newsletter endpoints: subscribe (double opt-in), confirm, unsubscribe.
 import { Hono } from 'hono';
+import { zSource } from './store.js';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { body, HttpError, rateLimit, zEmail, zPhone, zText } from '../lib/http.js';
@@ -27,9 +28,11 @@ newsletter.post('/subscribe', async (c) => {
     callConsent: z.boolean().optional(),
     /** Honeypot: real people never fill this in. */
     website: z.string().max(0).optional(),
+    /** How they reached the site (remembered by their browser): Meta ads, Google… */
+    visit: zSource,
   }));
   await rateLimit(deps.db, `subscribe:${c.get('ip')}`, 10, 3600);
-  const r = await subscribe(deps, { email: input.email, phone: input.phone, name: input.name, source: input.source, ip: c.get('ip'), callConsent: input.callConsent });
+  const r = await subscribe(deps, { email: input.email, phone: input.phone, name: input.name, source: input.source, ip: c.get('ip'), callConsent: input.callConsent, visit: input.visit, popupId: input.source === 'popup' ? input.popupId : null });
   if (!r.already) {
     if (input.source === 'popup' && input.popupId) await countPopup(deps.db, input.popupId, 'conversions', deps.now());
     await welcome(deps, r.row, 'newsletter');
