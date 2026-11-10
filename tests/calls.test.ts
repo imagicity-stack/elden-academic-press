@@ -221,6 +221,69 @@ describe('call results', () => {
   });
 });
 
+describe('incoming calls', () => {
+  // What Sarvam posts when a customer rings one of our numbers (the number's webhook metadata included).
+  const incoming = (o: Record<string, unknown>) => ({
+    app_id: 'Elden-Acade-e49b18a7-09b3', app_version: 2, deployment_id: 'Elden-Acade-013480d9-c620', interaction_id: 'int-in-1',
+    user_phone_number: '+919876543210', agent_phone_number: '+917965860108', duration: 48,
+    metadata: { purpose: 'cart_recovery_call_end' }, interaction_transcript: [{ role: 'agent', en_text: 'Namaste' }], ...o,
+  });
+
+  it('are recorded against the caller\'s checkout; "send me the link" emails it once, even if reported twice', async () => {
+    await lead();
+    const [l] = await t.db.select().from(checkoutLeads);
+    t.mailer.sent.length = 0;
+    const body = incoming({ output_agent_variables: { call_outcome: 'will_order', wants_link: 'true' } });
+    expect((await webhook(body)).json).toEqual({ ok: true, matched: true });
+    expect((await webhook(body)).json).toEqual({ ok: true, matched: true });
+    const rows = await allCalls();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: 'cart', status: 'done', createdBy: 'inbound', phone: '+919876543210', name: 'Asha Kumari', leadId: null,
+      outcome: 'will_order', durationSeconds: 48, providerCallId: 'int-in-1', variables: { lead_id: l.id }, transcript: 'agent: Namaste',
+    });
+    expect(t.mailer.sent.filter((m) => m.to === 'asha@example.com' && m.subject === 'Your books are waiting: finish your order')).toHaveLength(1);
+    // Our own cart call for that checkout can still be made later (it isn't blocked by the incoming one).
+    at('2026-11-10T12:05:00+05:30');
+    await settings({ enabled: true });
+    await runCalls(t.deps);
+    expect((await allCalls()).filter((c) => c.createdBy !== 'inbound')).toHaveLength(1);
+  });
+
+  it('a short or unknown caller is still recorded, never dialled back, and kept out of the answer rate', async () => {
+    await webhook(incoming({ interaction_id: 'int-in-2', user_phone_number: '+919000000001', duration: 4, output_agent_variables: { call_outcome: 'enquiry' } }));
+    const [row] = await allCalls();
+    expect(row).toMatchObject({ status: 'done', outcome: 'enquiry', name: '', variables: {}, createdBy: 'inbound' });
+    const stats = await t.call('GET', '/admin/calls/stats', { headers: await admin() });
+    expect(stats.json.cart).toMatchObject({ incoming: 1, attempted: 0, answered: 0 });
+  });
+
+  it('a problem reported on the feedback line is flagged and emailed; "do not call" is honoured', async () => {
+    t.mailer.sent.length = 0;
+    await webhook(incoming({
+      interaction_id: 'int-in-3', app_id: 'Elden-Acade-b3786fac-c2ee', deployment_id: 'Elden-Acade-f7ca6069-2b02', metadata: { purpose: 'feedback_call_end' },
+      output_agent_variables: { call_outcome: 'do_not_call', issue_reported: 'true', issue_detail: 'Cover torn on Mathematics Today.' },
+    }));
+    const [row] = await allCalls();
+    expect(row).toMatchObject({ kind: 'feedback', issueOpen: true, createdBy: 'inbound' });
+    expect(t.mailer.sent.some((m) => m.subject.startsWith('Customer reported a problem') && m.html.includes('Cover torn'))).toBe(true);
+    const dnc = await t.call('GET', '/admin/calls/do-not-call', { headers: await admin() });
+    expect(dnc.json.items.map((x: { phone: string }) => x.phone)).toContain('+919876543210');
+  });
+
+  it('"call me back" on an incoming call repeats our own call for that checkout', async () => {
+    await settings({ enabled: true, cart: { enabled: true, delayMinutes: 60, discountCode: '', discountOffer: '' } });
+    await lead();
+    at('2026-11-10T12:05:00+05:30');
+    await runCalls(t.deps);
+    const [ours] = await allCalls();
+    await webhook({ metadata: { call_id: ours.id }, status: 'no-answer' });
+    await webhook(incoming({ interaction_id: 'int-in-4', output_agent_variables: { call_outcome: 'callback', callback_time: 'Thursday morning' } }));
+    const [again] = await t.db.select().from(calls).where(eq(calls.id, ours.id));
+    expect(again).toMatchObject({ status: 'queued', note: 'Asked to be called back: Thursday morning' });
+  });
+});
+
 describe('order feedback', () => {
   it('calls buyers who agreed, some days after a delivered order; a reported problem is flagged and emailed', async () => {
     await settings({ enabled: true, cart: { enabled: false, delayMinutes: 60, discountCode: '', discountOffer: '' }, feedback: { enabled: true, daysAfter: 3, newBookIds: [] } });

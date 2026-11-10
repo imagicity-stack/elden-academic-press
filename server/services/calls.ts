@@ -19,7 +19,7 @@ import { esc, inr } from '../lib/format.js';
 import { addressList, sendSafely } from '../lib/mail.js';
 import { callResultFrom, type CallResult } from '../lib/callProvider.js';
 import {
-  callableNumber, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime, OUTCOME_LABEL, type CallKind, type CallSettings,
+  callableNumber, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime, INBOUND, OUTCOME_LABEL, type CallKind, type CallSettings,
 } from '../../src/shared/calls.js';
 import { getSettings } from './catalog.js';
 import { button, layout, p, section } from './emails.js';
@@ -247,7 +247,8 @@ export async function dialDueCalls(deps: Deps, s: CallSettings, limit = 10) {
 /** No answer (or a failed start): try again later while attempts remain, else give up. */
 async function notAnswered(deps: Deps, s: CallSettings, c: Call, note: string, finalStatus: 'no_answer' | 'failed' = 'no_answer') {
   const { db, now } = deps;
-  const retry = c.attempts <= s.maxRetries;
+  // An incoming call is never dialled back on its own.
+  const retry = c.createdBy !== INBOUND && c.attempts <= s.maxRetries;
   await db.update(calls).set(retry
     ? { status: 'queued', dueAt: nextCallingTime(s, new Date(now().getTime() + s.retryAfterMinutes * 60_000)), note, updatedAt: now() }
     : { status: finalStatus, endedAt: now(), note, updatedAt: now() }).where(eq(calls.id, c.id));
@@ -270,8 +271,10 @@ export async function recordCallResult(deps: Deps, raw: unknown): Promise<Call |
   const r: CallResult = callResultFrom(raw);
   const { db, now } = deps;
   const where = r.callId && /^[0-9a-f-]{36}$/i.test(r.callId) ? eq(calls.id, r.callId) : r.providerCallId ? eq(calls.providerCallId, r.providerCallId) : null;
-  if (!where) return null;
-  const [c] = await db.select().from(calls).where(where);
+  let [c] = where ? await db.select().from(calls).where(where) : [];
+  // The same report delivered again: already handled.
+  if (c && c.status === 'done' && c.endedAt) return c;
+  if (!c && r.direction === 'inbound') c = await inboundCall(deps, r);
   if (!c) return null;
   const s = await getCallSettings(db);
   if (r.status !== 'answered') {
@@ -289,6 +292,32 @@ export async function recordCallResult(deps: Deps, raw: unknown): Promise<Call |
   return updated;
 }
 
+/**
+ * A customer rang one of our numbers. There is no call of ours to match, so one is recorded,
+ * linked by their number to their latest saved checkout (and its order, if paid). The agent is
+ * told apart by the metadata.purpose set on each Sarvam number, else by what it recorded.
+ */
+async function inboundCall(deps: Deps, r: CallResult): Promise<Call> {
+  const { db, now } = deps;
+  const phone = callableNumber(r.phone) ?? r.phone;
+  const v = r.variables;
+  const kind: CallKind = /feedback/i.test(r.purpose) ? 'feedback' : /cart/i.test(r.purpose) ? 'cart'
+    : 'books_bought' in v || 'issue_reported' in v || 'feedback_summary' in v ? 'feedback' : 'cart';
+  const [lead] = phone ? await db.select().from(checkoutLeads).where(eq(checkoutLeads.phone, phone)).orderBy(desc(checkoutLeads.updatedAt)).limit(1) : [];
+  const t = now();
+  const [row] = await db.insert(calls).values({
+    kind, status: 'dialling', phone: phone.slice(0, 20), name: lead?.name ?? '',
+    // Not leadId/orderId: those hold our own call for that checkout (one per kind).
+    variables: lead ? { lead_id: lead.id, ...(lead.orderId ? { order_id: lead.orderId } : {}) } : {},
+    dueAt: t, attempts: 1, providerCallId: r.providerCallId, startedAt: r.durationSeconds ? new Date(t.getTime() - r.durationSeconds * 1000) : t,
+    createdBy: INBOUND, note: 'Incoming call',
+  }).returning();
+  return row;
+}
+
+/** The checkout behind a call: ours, or for an incoming call the one matched by number. */
+const leadIdOf = (c: Call) => c.leadId ?? (c.variables.lead_id || null);
+
 /** What the outcome asks for. Each step is independent: one failing doesn't stop the others. */
 async function act(deps: Deps, s: CallSettings, c: Call, v: Record<string, unknown>, issue: boolean) {
   const { db, now } = deps;
@@ -296,17 +325,25 @@ async function act(deps: Deps, s: CallSettings, c: Call, v: Record<string, unkno
   if (c.outcome === 'do_not_call') await tryStep('do not call', () => addDoNotCall(db, c.phone, 'Asked on a call', 'customer'));
   if (c.outcome === 'callback') {
     // Call again on the next working day at the start of the hours (the admin sees the time they asked for).
-    await tryStep('callback', () => db.update(calls).set({
-      status: 'queued', dueAt: nextCallingTime(s, new Date(now().getTime() + 20 * 3600_000)),
-      note: `Asked to be called back${v.callback_time ? `: ${String(v.callback_time).slice(0, 120)}` : ''}`, updatedAt: now(),
-    }).where(eq(calls.id, c.id)));
+    // An incoming call has nothing of ours to dial back with; our own call for that checkout is used.
+    const note = `Asked to be called back${v.callback_time ? `: ${String(v.callback_time).slice(0, 120)}` : ''}`;
+    await tryStep('callback', async () => {
+      let target: Call | undefined = c;
+      if (c.createdBy === INBOUND) {
+        const leadId = leadIdOf(c);
+        [target] = leadId ? await db.select().from(calls).where(and(eq(calls.leadId, leadId), eq(calls.kind, c.kind))) : [];
+        if (!target) { await db.update(calls).set({ note: `${note} (no earlier call to repeat: call them yourself)`, updatedAt: now() }).where(eq(calls.id, c.id)); return; }
+      }
+      await db.update(calls).set({ status: 'queued', dueAt: nextCallingTime(s, new Date(now().getTime() + 20 * 3600_000)), note, updatedAt: now() }).where(eq(calls.id, target.id));
+    });
   }
-  if (c.kind === 'cart' && (truthy(v.wants_link) || c.outcome === 'will_order') && c.leadId) await tryStep('link email', () => sendResumeLink(deps, c));
+  const leadId = leadIdOf(c);
+  if (c.kind === 'cart' && (truthy(v.wants_link) || c.outcome === 'will_order') && leadId) await tryStep('link email', () => sendResumeLink(deps, c, leadId));
   if (issue) await tryStep('issue alert', () => sendIssueAlert(deps, c, v));
 }
 
-async function sendResumeLink(deps: Deps, c: Call) {
-  const [lead] = await deps.db.select().from(checkoutLeads).where(eq(checkoutLeads.id, c.leadId!));
+async function sendResumeLink(deps: Deps, c: Call, leadId: string) {
+  const [lead] = await deps.db.select().from(checkoutLeads).where(eq(checkoutLeads.id, leadId));
   if (!lead?.email || lead.orderId) return;
   const s = await getSettings(deps.db);
   const coupon = truthy(c.result.discount_offered) && c.variables.discount_code ? c.variables.discount_code : '';
@@ -338,14 +375,16 @@ async function sendIssueAlert(deps: Deps, c: Call, v: Record<string, unknown>) {
 
 export async function callStats(db: Q, since: Date) {
   const rows = await db.select({
-    kind: calls.kind, status: calls.status, outcome: calls.outcome, n: sql<number>`count(*)::int`,
-  }).from(calls).where(gte(calls.createdAt, since)).groupBy(calls.kind, calls.status, calls.outcome);
+    kind: calls.kind, status: calls.status, outcome: calls.outcome, inbound: sql<boolean>`${calls.createdBy} = ${INBOUND}`, n: sql<number>`count(*)::int`,
+  }).from(calls).where(gte(calls.createdAt, since)).groupBy(calls.kind, calls.status, calls.outcome, sql`4`);
   const byKind = (k: CallKind) => {
-    const r = rows.filter((x) => x.kind === k);
+    const all = rows.filter((x) => x.kind === k);
+    const r = all.filter((x) => !x.inbound); // our own calls; incoming ones are counted apart
     const sum = (f: (x: (typeof r)[number]) => boolean) => r.filter(f).reduce((n, x) => n + x.n, 0);
     const attempted = sum((x) => ['done', 'no_answer', 'failed'].includes(x.status));
     const answered = sum((x) => x.status === 'done');
     return {
+      incoming: all.filter((x) => x.inbound).reduce((n, x) => n + x.n, 0),
       total: sum(() => true), queued: sum((x) => x.status === 'queued'), dialling: sum((x) => x.status === 'dialling'),
       attempted, answered, answerRate: attempted ? answered / attempted : 0,
       outcomes: Object.fromEntries(r.filter((x) => x.status === 'done' && x.outcome).map((x) => [x.outcome, x.n])),
@@ -362,8 +401,9 @@ export async function callStats(db: Q, since: Date) {
   const [issues] = await db.select({ n: sql<number>`count(*)::int` }).from(calls).where(eq(calls.issueOpen, true));
   const daily = await db.select({
     day: sql<string>`((${calls.createdAt} at time zone 'Asia/Kolkata')::date)::text`,
-    placed: sql<number>`count(*) filter (where ${calls.status} in ('done', 'no_answer', 'failed'))::int`,
-    answered: sql<number>`count(*) filter (where ${calls.status} = 'done')::int`,
+    placed: sql<number>`count(*) filter (where ${calls.status} in ('done', 'no_answer', 'failed') and ${calls.createdBy} <> ${INBOUND})::int`,
+    answered: sql<number>`count(*) filter (where ${calls.status} = 'done' and ${calls.createdBy} <> ${INBOUND})::int`,
+    incoming: sql<number>`count(*) filter (where ${calls.createdBy} = ${INBOUND})::int`,
   }).from(calls).where(gte(calls.createdAt, since)).groupBy(sql`1`).orderBy(sql`1`);
   const [leads] = await db.select({ n: sql<number>`count(*)::int`, paid: sql<number>`count(${checkoutLeads.orderId})::int` })
     .from(checkoutLeads).where(and(eq(checkoutLeads.consent, true), gte(checkoutLeads.createdAt, since)));

@@ -6,11 +6,11 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { adminApi, useAdmin } from '../api';
 import { Badge, Btn, Card, Check, Empty, ErrorBox, Loading, Page, Pagination, SelectField, TextArea, TextField, Toggle, useAction, type Tone } from '../ui';
 import { inr } from '../../store/api';
-import { CALL_KINDS, CALL_STATUS_LABEL, DAYS, OUTCOME_LABEL, type CallKind, type CallSettings, type CallStatus } from '../../shared/calls';
+import { CALL_KINDS, CALL_STATUS_LABEL, DAYS, INBOUND, OUTCOME_LABEL, type CallKind, type CallSettings, type CallStatus } from '../../shared/calls';
 
 const TABS = [['', 'Overview'], ['log', 'Calls'], ['queue', 'Queue'], ['leads', 'Checkouts'], ['do-not-call', 'Do not call'], ['settings', 'Settings']] as const;
 const STATUS_TONE: Record<CallStatus, Tone> = { queued: 'blue', dialling: 'amber', done: 'green', no_answer: 'grey', failed: 'red', skipped: 'grey', cancelled: 'grey' };
-const OUTCOME_TONE: Record<string, Tone> = { will_order: 'green', feedback_given: 'green', callback: 'blue', transferred: 'blue', not_interested: 'grey', declined: 'grey', wrong_person: 'grey', do_not_call: 'red' };
+const OUTCOME_TONE: Record<string, Tone> = { enquiry: 'blue', will_order: 'green', feedback_given: 'green', callback: 'blue', transferred: 'blue', not_interested: 'grey', declined: 'grey', wrong_person: 'grey', do_not_call: 'red' };
 
 interface SettingsData {
   settings: CallSettings;
@@ -19,7 +19,7 @@ interface SettingsData {
 }
 interface Row {
   id: string; kind: CallKind; status: CallStatus; phone: string; name: string; outcome: string; dueAt: string; attempts: number;
-  startedAt: string | null; endedAt: string | null; durationSeconds: number | null; note: string; issueOpen: boolean; createdAt: string; rating: string | null;
+  startedAt: string | null; endedAt: string | null; durationSeconds: number | null; note: string; issueOpen: boolean; createdBy: string | null; createdAt: string; rating: string | null;
 }
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '—');
@@ -92,7 +92,7 @@ function Overview() {
   );
 }
 
-interface KindStats { total: number; queued: number; dialling: number; attempted: number; answered: number; answerRate: number; outcomes: Record<string, number> }
+interface KindStats { incoming: number; total: number; queued: number; dialling: number; attempted: number; answered: number; answerRate: number; outcomes: Record<string, number> }
 interface Stats {
   cart: KindStats; feedback: KindStats; recovered: { orders: number; revenue: number }; couponsGiven: number;
   rating: { average: number | null; count: number }; openIssues: number; leads: { total: number; paid: number };
@@ -114,6 +114,7 @@ function StatsView({ d }: { d: Stats }) {
         <Stat label="Feedback calls answered" value={`${d.feedback.answered} / ${d.feedback.attempted}`} sub={`${pct(d.feedback.answerRate)} answer rate`} />
         <Stat label="Average rating" value={d.rating.average == null ? '—' : `${d.rating.average.toFixed(1)} / 5`} sub={`${d.rating.count} rating${d.rating.count === 1 ? '' : 's'}`} />
         <Stat label="Problems to look at" value={<Link to="/admin/calls/log?issues=1">{d.openIssues}</Link>} sub="reported on feedback calls" />
+        <Stat label="Incoming calls" value={d.cart.incoming + d.feedback.incoming} sub="customers who rang our numbers" />
         <Stat label="Waiting to be called" value={<Link to="/admin/calls/queue">{d.cart.queued + d.feedback.queued}</Link>} />
       </div>
       <div className="ad-grid-2">
@@ -193,7 +194,7 @@ function CallList({ queue = false }: { queue?: boolean }) {
                 <tr key={r.id}>
                   <td>{when(queue ? r.dueAt : r.endedAt ?? r.startedAt ?? r.createdAt)}</td>
                   <td><Link to={`/admin/calls/${r.id}`} className="ad-strong">{r.name || 'Unknown'}</Link><br /><span className="ad-muted">{r.phone}</span></td>
-                  <td>{kindLabel(r.kind)}</td>
+                  <td>{kindLabel(r.kind)}{r.createdBy === INBOUND && <><br /><Badge tone="blue">Incoming</Badge></>}</td>
                   <td><Status s={r.status} />{r.issueOpen && <> <Badge tone="red">Problem</Badge></>}{r.note && <><br /><small className="ad-muted">{r.note}</small></>}</td>
                   <td><Outcome o={r.outcome} />{r.rating && <> <small>{r.rating}★</small></>}</td>
                   <td className="ad-num">{secs(r.durationSeconds)}</td>
@@ -233,7 +234,7 @@ function CallDetail({ id }: { id: string }) {
   const c = data.call;
   const act = (action: string, ok: string) => run(action, () => adminApi(`/calls/${id}/${action}`, { method: 'POST' }), ok).then((r) => r && reload());
   return (
-    <Page title={c.name || c.phone} subtitle={<>{kindLabel(c.kind)} · {c.phone}{data.doNotCall && <> · <Badge tone="red">Do not call</Badge></>}</>} back={{ to: '/admin/calls/log', label: 'Calls' }}
+    <Page title={c.name || c.phone} subtitle={<>{kindLabel(c.kind)}{c.createdBy === INBOUND && ' · Incoming call'} · {c.phone}{data.doNotCall && <> · <Badge tone="red">Do not call</Badge></>}</>} back={{ to: '/admin/calls/log', label: 'Calls' }}
       actions={<>
         {c.issueOpen && <Btn kind="primary" busy={busy === 'resolve'} onClick={() => act('resolve', 'Marked as handled')}>Problem handled</Btn>}
         {['queued', 'no_answer', 'failed', 'skipped'].includes(c.status) && <Btn busy={busy === 'call-now'} onClick={() => act('call-now', 'Queued to call now')}>Call now</Btn>}

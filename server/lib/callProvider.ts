@@ -34,6 +34,12 @@ export interface CallResult {
   recordingUrl: string;
   /** The values the agent recorded after the call (call_outcome, rating, wants_link, ...). */
   variables: Record<string, unknown>;
+  /** inbound: the customer rang one of our numbers (Sarvam names the deployment, not a campaign). */
+  direction: 'outbound' | 'inbound';
+  /** The customer's number, as the provider gives it. */
+  phone: string;
+  /** The webhook's own metadata.purpose (set on each Sarvam number), e.g. cart_recovery_call_end. */
+  purpose: string;
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
@@ -63,10 +69,15 @@ export function callResultFrom(raw: unknown): CallResult {
   if (Array.isArray(transcript)) {
     transcript = transcript.map((t) => { const x = obj(t); return `${str(pick(x, 'role', 'speaker', 'from')) || '?'}: ${str(pick(x, 'text', 'content', 'message', 'en_text', 'indic_text'))}`; }).join('\n');
   }
+  const inbound = Boolean(o.deployment_id) && !o.campaign_id;
   return {
+    direction: inbound ? 'inbound' : 'outbound',
+    phone: str(pick(o, 'user_phone_number', 'customer_number', 'from')).slice(0, 20),
+    purpose: str(meta.purpose).slice(0, 60),
     callId: str(pick(meta, 'call_id', 'callId', 'elden_call_id') ?? pick(o, 'call_id', 'callId', 'user_identifier', 'reference_id', 'referenceId', 'external_id')) || null,
     providerCallId: str(pick(o, 'interaction_id', 'interactionId', 'attempt_id', 'provider_call_id', 'id', 'sid')) || null,
-    status: answered || (!notAnswered && Number.isFinite(duration) && duration > 10) ? 'answered' : notAnswered ? 'not_answered' : 'failed',
+    // An inbound call connected by definition: the customer rang us.
+    status: inbound || answered || (!notAnswered && Number.isFinite(duration) && duration > 10) ? 'answered' : notAnswered ? 'not_answered' : 'failed',
     durationSeconds: Number.isFinite(duration) ? Math.round(duration) : null,
     transcript: str(transcript).slice(0, 50_000),
     recordingUrl: str(pick(o, 'recording_url', 'recordingUrl', 'recording')).slice(0, 1000),

@@ -22,7 +22,11 @@ export const CALL_STATUS_LABEL: Record<CallStatus, string> = {
 export const OUTCOME_LABEL: Record<string, string> = {
   will_order: 'Will order', callback: 'Call back', not_interested: 'Not interested', do_not_call: 'Do not call',
   wrong_person: 'Wrong person', transferred: 'Transferred to team', feedback_given: 'Feedback given', declined: 'Declined',
+  enquiry: 'Question answered',
 };
+
+/** Calls the customer made to our numbers are stored with this createdBy. */
+export const INBOUND = 'inbound';
 
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 export type Day = (typeof DAYS)[number];
