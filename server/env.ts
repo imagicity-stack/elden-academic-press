@@ -40,6 +40,9 @@ const schema = z.object({
   META_CAPI_TOKEN: optional,
   /** From Events Manager → Test events, while testing. Remove it to go live. */
   META_TEST_EVENT_CODE: optional,
+  /** Student accounts are sent to Meta only from this age (by their date of birth); younger, or with no date
+   *  of birth, nothing is sent, browser or server. Other accounts aren't affected. Change it here (Vercel), no code. */
+  META_MIN_AGE: z.coerce.number().int().min(0).max(100).default(13),
 
   /** The first person to sign in with this email becomes the store owner. */
   ADMIN_OWNER_EMAIL: optional,

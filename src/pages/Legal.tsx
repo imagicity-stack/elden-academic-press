@@ -106,6 +106,8 @@ function Terms() {
 }
 
 function Privacy() {
+  // Students are sent to Meta only from this age (META_MIN_AGE on the server).
+  const metaAge = useStoreConfig()?.metaMinAge;
   return (
     <>
       <p className="legal__lead">
@@ -171,7 +173,7 @@ function Privacy() {
 
       <Section title="7. Children and competitions">
         <p>Our books are written for students, but orders and forms should be completed by an adult. If you are under 18, please ask a parent or guardian. If you believe a child has given us personal data without a parent’s consent, write to us and we will delete it.</p>
-        <p>Students, parents and teachers can register for our competitions with their own account. If you are under 18, please register with your parent’s or guardian’s knowledge. In team competitions, every member under 18 needs a parent’s or guardian’s details and consent, which the person registering the team confirms; the organiser checks every registration before the team can take part. We ask only what each competition needs, and never show anyone’s phone number or email in public. While a student is signed in, we do not load Google Analytics, Google Tag Manager or the Meta Pixel, whatever the cookie choice, and send nothing about them to Meta. A parent or the student can ask us to delete a registration at any time.</p>
+        <p>Students, parents and teachers can register for our competitions with their own account. If you are under 18, please register with your parent’s or guardian’s knowledge. In team competitions, every member under 18 needs a parent’s or guardian’s details and consent, which the person registering the team confirms; the organiser checks every registration before the team can take part. We ask only what each competition needs, and never show anyone’s phone number or email in public. While a student is signed in, we do not load Google Analytics or Google Tag Manager, whatever the cookie choice. Meta advertising (see <em>Advertising</em> above) applies to a student {metaAge ? <>aged {metaAge} or over</> : <>who meets our minimum age</>} only if they choose <em>Accept all</em>, as for everyone else. For a student {metaAge ? <>under {metaAge}</> : <>below that age</>}, or one who hasn’t given a date of birth, we load no Meta Pixel and send nothing about them to Meta, whatever the cookie choice. A parent or the student can ask us to delete a registration at any time.</p>
       </Section>
 
       <Section title="8. Changes">

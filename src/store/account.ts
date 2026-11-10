@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError, api } from './api';
-import { setStudentSession } from '../consent';
-import { trackSignup } from '../meta';
+import { setMetaOff, setStudentSession } from '../consent';
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -50,9 +49,11 @@ export interface MyCompetition { id: string; slug: string; title: string; mode: 
 
 export interface AccountData {
   customer: { userId: string; email: string; name: string; avatar: string | null };
-  /** First visit after signing up (the server reports the registration to Meta with the same id). */
+  /** First visit after signing up. */
   newAccount?: boolean;
   profile: Profile;
+  /** May this account be sent to Meta (no for a student under META_MIN_AGE or without a date of birth)? */
+  meta: { allowed: boolean };
   /** Competitions this account registered for, newest first. */
   competitions: MyCompetition[];
   /** Team competitions this person registered for, or is a member of. */
@@ -161,6 +162,7 @@ export function onAuthChange(fn: () => void): () => void {
 
 export async function signOut() {
   setStudentSession(false);
+  setMetaOff(false);
   try { localStorage.removeItem(DEV_KEY); } catch { /* ignore */ }
   if (accountsEnabled) await (await authClient()).auth.signOut();
 }
@@ -180,11 +182,10 @@ export function useAccount() {
     try {
       if (!(await accountToken())) { setState({ status: 'signedOut' }); return; }
       const data = await accountApi<AccountData>('');
-      // A student's own account: no analytics or ad tracking on this browser.
+      // A student's own account: no Google Analytics on this browser; Meta only from the minimum age.
       setStudentSession(data.profile.type === 'student');
+      setMetaOff(!data.meta.allowed);
       setState({ status: 'ready', data });
-      // A brand-new account (first sign-in, on whichever page): Meta AccountSignup, once.
-      if (data.newAccount) trackSignup(data.customer.userId);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) { await signOut(); setState({ status: 'signedOut' }); }
       else setState({ status: 'error', message: (e as Error).message });

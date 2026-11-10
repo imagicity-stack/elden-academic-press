@@ -49,6 +49,8 @@ export interface StoreConfig {
   supportEmail: string;
   /** Cash on delivery for printed books: the advance paid online (paise), or null when off. */
   cod: { advance: number } | null;
+  /** Students are sent to Meta only from this age (META_MIN_AGE on the server). */
+  metaMinAge?: number;
 }
 
 export type LineIssue = { code: 'unavailable' } | { code: 'out_of_stock' } | { code: 'insufficient_stock'; available: number };

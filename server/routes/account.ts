@@ -16,7 +16,7 @@ import { ageOn, applicationCode, STATUS_TEXT } from '../../src/shared/teams.js';
 import { getSettings } from '../services/catalog.js';
 import { subscribe, subscribeNewAccount, unsubscribe } from '../services/newsletter.js';
 import { orderToken } from '../services/orders.js';
-import { report, visitOf } from '../services/tracking.js';
+import { metaAllowed, report, visitOf } from '../services/tracking.js';
 import { verifySupabaseToken } from './admin/auth.js';
 import { orderStatusLabel } from './orders.js';
 import { downloadLimit, ebookAwaitsDelivery, fileLabel, filesForItems } from '../services/ebooks.js';
@@ -88,19 +88,12 @@ account.get('/', async (c) => {
   const [profile] = await db.insert(accounts).values({ userId: me.userId, email: me.email, name: me.name, avatarUrl: me.avatar })
     .onConflictDoUpdate({ target: accounts.userId, set: { email: me.email, name: me.name, avatarUrl: me.avatar, lastSeenAt: now() } })
     .returning();
-  // First sign-in: a new account also joins the newsletter (the sign-in page says so), and is
-  // reported to Meta as the custom event AccountSignup (the page fires the Pixel's twin with this
-  // id). Competition registrations are the CompleteRegistration events, not sign-ups.
+  // First sign-in: a new account also joins the newsletter (the sign-in page says so). Meta's
+  // AccountSignup isn't sent here: it waits for the profile (PUT /profile), so a student's age is
+  // known first. Competition registrations are the CompleteRegistration events, not sign-ups.
   const newAccount = !known && await justSignedUp(deps, me.userId);
   // Every account is on the newsletter from sign-up (unless they unsubscribed).
   await subscribeNewAccount(deps, me, c.get('ip'));
-  if (newAccount) {
-    const visit = visitOf(c);
-    await report(deps, visit.consent, {
-      name: SIGNUP_EVENT, eventId: signupEventId(me.userId), time: now(), url: `${env.SITE_URL}/account`,
-      user: { ...visit, email: me.email, name: me.name, externalId: me.email }, custom: signupParams(),
-    });
-  }
   const [sub] = await db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, me.email));
   const s = await getSettings(db);
   const mine = await db.select().from(orders).where(and(eq(orders.email, me.email), inArray(orders.paymentStatus, OWNED)))
@@ -149,6 +142,8 @@ account.get('/', async (c) => {
     customer: me,
     newAccount,
     profile: profileOf(profile, now()),
+    // Whether this account may be sent to Meta at all (a student under META_MIN_AGE, or with no date of birth: no).
+    meta: { allowed: metaAllowed(deps, profile) },
     competitions: signups.map((x) => ({
       id: x.id, slug: x.competitionSlug, title: findCompetition(x.competitionSlug)?.title ?? x.competitionSlug, mode: x.mode, groupName: x.groupName,
       people: x.participants.map(personName), createdAt: x.createdAt,
@@ -207,7 +202,8 @@ export function profileOf(a: AccountRow, now = new Date()) {
 const optional = (max: number) => z.string().trim().max(max).optional();
 /** Save the profile: just the mobile number (the quick prompt), some fields, or all of them. Empty values aren't saved over details already given. */
 account.put('/profile', async (c) => {
-  const { db, now } = c.get('deps');
+  const deps = c.get('deps');
+  const { db, now } = deps;
   const me = c.get('customer');
   const input = await body(c, z.object({
     phone: zPhone.optional(),
@@ -223,6 +219,7 @@ account.put('/profile', async (c) => {
     guardianPhone: z.union([z.literal(''), zPhone]).optional(),
     instagram: z.union([z.literal(''), z.string().trim().regex(/^@?[A-Za-z0-9._]{1,30}$/, 'Check the Instagram username')]).optional(),
   }));
+  const [before] = await db.select().from(accounts).where(eq(accounts.userId, me.userId));
   const set: Partial<typeof accounts.$inferInsert> = { updatedAt: now() };
   for (const k of ['phone', 'fullName', 'city', 'state', 'dob', 'institutionType', 'institutionName', 'grade', 'guardianName', 'guardianPhone'] as const) {
     if (input[k] !== undefined && input[k] !== '') (set as Record<string, unknown>)[k] = input[k];
@@ -234,8 +231,23 @@ account.put('/profile', async (c) => {
   const p = profileOf(row, now());
   if (p.completed && !row.onboardingCompletedAt) await db.update(accounts).set({ onboardingCompletedAt: now() }).where(eq(accounts.userId, me.userId));
   if (input.phone) await db.update(subscribers).set({ phone: input.phone, updatedAt: sql`now()` }).where(eq(subscribers.email, me.email));
-  return c.json(p);
+  // Meta AccountSignup: once, on the save that first says who this is (the account type, and a
+  // student's date of birth), and only if the account may be sent to Meta (metaAllowed). The
+  // page fires the Pixel's twin with the id returned here.
+  const allowed = metaAllowed(deps, row);
+  const signup = Boolean(before) && !identified(before) && identified(row) && allowed;
+  if (signup) {
+    const visit = visitOf(c);
+    await report(deps, visit.consent, {
+      name: SIGNUP_EVENT, eventId: signupEventId(me.userId), time: now(), url: `${deps.env.SITE_URL}/account`,
+      user: { ...visit, email: me.email, phone: row.phone || null, name: row.fullName || me.name, externalId: me.email }, custom: signupParams(),
+    });
+  }
+  return c.json({ ...p, meta: { allowed, signupEventId: signup ? signupEventId(me.userId) : null } });
 });
+
+/** Has the account said who it is: its type, and for a student their date of birth (needed for the Meta rule)? */
+const identified = (a: AccountRow) => a.accountType !== null && (a.accountType !== 'student' || Boolean(a.dob));
 
 /** Newsletter on / off. A signed-in Google account has a proven email, so no confirmation email is needed. */
 account.put('/newsletter', async (c) => {

@@ -23,7 +23,7 @@ const zCoupon = z.string().trim().max(40).optional().nullable();
 export const store = new Hono<AppEnv>();
 
 store.get('/config', async (c) => {
-  const { db, razorpay } = c.get('deps');
+  const { db, razorpay, env } = c.get('deps');
   const s = await getSettings(db);
   await tagCatalog();
   c.header('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
@@ -34,6 +34,8 @@ store.get('/config', async (c) => {
     states: STATES,
     supportEmail: s.supportEmail,
     cod: s.codEnabled ? { advance: s.codAdvance } : null,
+    // The privacy policy states it (students are sent to Meta only from this age).
+    metaMinAge: env.META_MIN_AGE,
   });
 });
 
