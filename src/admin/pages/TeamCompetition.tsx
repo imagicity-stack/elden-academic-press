@@ -2,6 +2,7 @@
 // applications (review with secure ID viewing), submissions, notices and emails to groups
 // of teams, shortlist and results, and settings (dates, pictures, official documents).
 import { useEffect, useState } from 'react';
+import { CompetitionAnalytics } from './CompetitionAnalytics';
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { adminApi, downloadFile, fmtDate, uploadFile, useAdmin } from '../api';
 import { Badge, Btn, Card, Check, Empty, ErrorBox, Loading, Page, SelectField, TextArea, TextField, Toggle, type Tone, useAction, useToast } from '../ui';
@@ -10,7 +11,7 @@ import { RESULT_TEXT, STATUS_TEXT, type TeamConfig } from '../../shared/teams';
 
 const TONE: Record<string, Tone> = { pending: 'amber', changes_requested: 'blue', approved: 'green', rejected: 'red', withdrawn: 'grey' };
 export const StatusBadge = ({ s }: { s: string }) => <Badge tone={TONE[s] ?? 'grey'}>{STATUS_TEXT[s] ?? s}</Badge>;
-const TABS = [['overview', 'Overview'], ['applications', 'Applications'], ['submissions', 'Submissions'], ['notices', 'Notices & email'], ['results', 'Shortlist & results'], ['settings', 'Settings']] as const;
+const TABS = [['overview', 'Overview'], ['analytics', 'Analytics'], ['applications', 'Applications'], ['submissions', 'Submissions'], ['notices', 'Notices & email'], ['results', 'Shortlist & results'], ['settings', 'Settings']] as const;
 type TabKey = (typeof TABS)[number][0];
 
 export function TeamCompetition({ slug }: { slug: string }) {
@@ -24,6 +25,7 @@ export function TeamCompetition({ slug }: { slug: string }) {
         {TABS.map(([k, label]) => <NavLink key={k} to={`/admin/competitions/${slug}/${k}`} className={() => 'ad-tab' + (tab === k ? ' is-on' : '')}>{label}</NavLink>)}
       </nav>
       {tab === 'overview' && <Overview slug={slug} />}
+      {tab === 'analytics' && <CompetitionAnalytics slug={slug} />}
       {tab === 'applications' && <Applications slug={slug} cfg={cfg} />}
       {tab === 'submissions' && <Applications slug={slug} cfg={cfg} submissions />}
       {tab === 'notices' && <Notices slug={slug} cfg={cfg} />}

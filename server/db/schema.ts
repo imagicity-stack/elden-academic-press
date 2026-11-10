@@ -1120,3 +1120,17 @@ export const whatsappSettings = pgTable('whatsapp_settings', {
   updatedBy: text('updated_by').notNull().default(''),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/* ---------------- Competition analytics ---------------- */
+
+/** How many browsers reached each step of a competition's registration, per day and channel (no personal data). */
+export const competitionStats = pgTable('competition_stats', {
+  competitionSlug: text('competition_slug').notNull(),
+  /** India date. */
+  day: date('day', { mode: 'string' }).notNull(),
+  /** view | signin | start | members | review (src/shared/competitionFunnel.ts) */
+  step: text('step').notNull(),
+  /** The visit's channel (meta_ads, search, direct…). */
+  channel: text('channel').notNull(),
+  n: integer('n').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.competitionSlug, t.day, t.step, t.channel] })]);

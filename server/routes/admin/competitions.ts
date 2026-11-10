@@ -4,7 +4,8 @@ import { Hono } from 'hono';
 import { desc, eq, inArray, sql } from 'drizzle-orm';
 import type { AppEnv } from '../../app.js';
 import type { Deps } from '../../deps.js';
-import { accounts, competitionSignups, teamApplications } from '../../db/schema.js';
+import { accounts, competitionSignups, competitionStats, teamApplications } from '../../db/schema.js';
+import { competitionAnalytics } from '../../services/competitionAnalytics.js';
 import { toCsv } from '../../lib/csv.js';
 import { notFound } from '../../lib/http.js';
 import { stateName } from '../../lib/states.js';
@@ -29,11 +30,17 @@ adminCompetitions.get('/', async (c) => {
     pending: sql<number>`count(*) filter (where ${teamApplications.status} in ('pending'))::int`,
     approved: sql<number>`count(*) filter (where ${teamApplications.status} = 'approved')::int`,
   }).from(teamApplications).groupBy(teamApplications.competitionSlug);
+  // Page visits and form starts counted by the website (all time).
+  const steps = await db.select({ slug: competitionStats.competitionSlug, step: competitionStats.step, n: sql<number>`sum(${competitionStats.n})::int` })
+    .from(competitionStats).where(inArray(competitionStats.step, ['view', 'start'])).groupBy(competitionStats.competitionSlug, competitionStats.step);
   return c.json({
     items: COMPETITIONS.map((x) => {
       const t = totals.find((r) => r.slug === x.slug);
       const tm = teams.find((r) => r.slug === x.slug);
+      const visits = steps.find((s) => s.slug === x.slug && s.step === 'view')?.n ?? 0;
+      const started = steps.find((s) => s.slug === x.slug && s.step === 'start')?.n ?? 0;
       return {
+        visits, started,
         team: Boolean(x.team), applications: tm?.total ?? 0, pending: tm?.pending ?? 0, approved: tm?.approved ?? 0,
         slug: x.slug, title: x.title, tagline: x.tagline, opensAt: x.opensAt, closesAt: x.closesAt, phase: phaseOf(x, now().getTime()), unlisted: Boolean(x.unlisted),
         modes: [x.individual && 'individual', x.group && 'group'].filter(Boolean),
@@ -58,6 +65,15 @@ function columns(comp: Competition) {
     person: uniq([...(comp.individual?.participant ?? []), ...(comp.group?.member ?? [])]),
   };
 }
+
+/** Analytics for one competition: funnel, per day, channels and who registers (last `days` days). */
+adminCompetitions.get('/:slug/analytics', async (c) => {
+  const comp = findCompetition(c.req.param('slug'));
+  if (!comp) throw notFound('Competition not found');
+  const { db, now } = c.get('deps');
+  const days = Math.min(3650, Math.max(1, Number(c.req.query('days')) || 30));
+  return c.json(await competitionAnalytics(db, comp, days, now()));
+});
 
 adminCompetitions.get('/:slug', async (c) => {
   const comp = findCompetition(c.req.param('slug'));

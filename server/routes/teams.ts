@@ -19,6 +19,10 @@ import {
 } from '../services/teams.js';
 import { briefFor } from '../services/briefs.js';
 import { reportRegistration } from '../services/tracking.js';
+import { countStep } from '../services/competitionAnalytics.js';
+import { FUNNEL_STEPS, isFunnelStep } from '../../src/shared/competitionFunnel.js';
+import { findCompetition } from '../../src/shared/competitions.js';
+import { zSource } from './store.js';
 import { profileOf, requireCustomer } from './account.js';
 
 export const teams = new Hono<AppEnv>();
@@ -395,4 +399,19 @@ competitionInfo.get('/:slug', async (c) => {
     notices: notices.filter((n) => n.audience.public).map((n) => ({ id: n.id, title: n.title, body: n.body, createdAt: n.createdAt })),
     resultsPublished: s.resultsPublished, results,
   });
+});
+
+/**
+ * The website counts how far visitors get with a competition's registration (anonymously: the
+ * step and the visit's channel only). Each browser sends each step once.
+ */
+competitionInfo.post('/:slug/track', async (c) => {
+  const deps = c.get('deps');
+  const comp = findCompetition(c.req.param('slug'));
+  if (!comp) throw notFound();
+  await rateLimit(deps.db, `comptrack:${c.get('ip')}`, 300, 3600);
+  const input = await body(c, z.object({ step: z.string().max(20), visit: zSource }));
+  if (!isFunnelStep(input.step) || (FUNNEL_STEPS.find((s) => s.key === input.step)!.team && !comp.team)) throw new HttpError(400, 'Unknown step');
+  await countStep(deps.db, comp.slug, input.step, input.visit, deps.now());
+  return c.json({ ok: true });
 });

@@ -382,6 +382,18 @@ Each message is a switch in *Admin → WhatsApp → Settings*, under a master sw
 - **Where they came from:** the channel that brought them to the site before they signed up (Meta ads with the campaign, Google Ads, Google search, Instagram/Facebook posts, email, other sites, direct), and **where they signed up** (which popup by name, the footer form, the newsletter page, checkout, Google sign-in). It's the same visit the browser already remembers for orders (90 days). People who signed up before this was recorded show the source of their first order, or *Not recorded*.
 - Click a bar or a completion band to list those people; click a person for what's missing, their first page, campaign, mobile and orders. *Export CSV* downloads the filtered list.
 
+## 18. Competition analytics
+
+**One-time:** run [`0019_competition_stats.sql`](supabase-updates/0019_competition_stats.sql) in Supabase → SQL Editor before this version goes live.
+
+Every competition (DoomsDay Diaries included) has an **Analytics** tab in Admin → Competitions, and the list of competitions shows each one's page visits and how many visitors registered.
+- **Registration funnel:** visited the page → signed in → started the form → (team competitions) added the team → reached review → sent the application → approved → uploaded the comic, with each step's share of visitors and the drop-off from the step before.
+- **Per day:** page visits and registrations, as two charts over the same days.
+- **Where they came from:** visits and registrations per channel (Meta ads, Google, WhatsApp, direct…) with each channel's conversion.
+- **Who registers:** students, parents, teachers; age groups (team) or individuals and groups; states.
+
+Visits and form steps are counted by the website anonymously (each browser once per step; staff browsers aren't counted) from the day this version goes live; registrations, approvals and uploads come from the saved forms, so they include everything before too.
+
 ## Running costs
 
 | Service | Cost |

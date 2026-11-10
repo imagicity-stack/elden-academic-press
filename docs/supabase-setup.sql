@@ -1248,6 +1248,17 @@ ALTER TABLE "subscribers" ADD COLUMN "channel" text DEFAULT '' NOT NULL;--> stat
 ALTER TABLE "subscribers" ADD COLUMN "channel_detail" text DEFAULT '' NOT NULL;--> statement-breakpoint
 ALTER TABLE "subscribers" ADD COLUMN "popup_id" uuid;
 
+-- ===== 0019_competition_stats =====
+
+CREATE TABLE "competition_stats" (
+	"competition_slug" text NOT NULL,
+	"day" date NOT NULL,
+	"step" text NOT NULL,
+	"channel" text NOT NULL,
+	"n" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "competition_stats_competition_slug_day_step_channel_pk" PRIMARY KEY("competition_slug","day","step","channel")
+);
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -1271,7 +1282,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('2da95727ebe54578ee765746eae40b632665e677c534ce7d0d6b760e78f8554f', 1794318591431),
   ('de313d410cc8760b7d8c8e81ec8a6a04bb1d8f7b93c2be7d9a2df2550262a73d', 1794322914293),
   ('44f53a68827b686d98b0eb0418dce2942b9b6b3732aa849d7cf46a6d5bc6950f', 1794326037898),
-  ('4b29e4d37076384f804620c9a867f9a29044b0b3a7b8ea4f9d66b0f60bbec2e5', 1794335003607);
+  ('4b29e4d37076384f804620c9a867f9a29044b0b3a7b8ea4f9d66b0f60bbec2e5', 1794335003607),
+  ('f7171c94bb2cab04f493ae425ad30b664e454756c8a19c4b8ecae89989ad5b86', 1794337425917);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 
