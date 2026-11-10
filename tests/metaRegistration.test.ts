@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { competitionSignups, teamApplications } from '../server/db/schema.js';
 import { memoryMeta, toPayload } from '../server/lib/meta.js';
-import { REGISTRATION_META_TIMEOUT_MS } from '../server/services/tracking.js';
+import { metaAllowed, REGISTRATION_META_TIMEOUT_MS } from '../server/services/tracking.js';
 import { COMPETITIONS, type Competition } from '../src/shared/competitions.js';
 import { fireOnce, registrationEventId, registrationParams, SIGNUP_EVENT, signupEventId } from '../src/shared/metaEvents.js';
 import { emptyMember, type MemberInput, type TeamInput } from '../src/shared/teams.js';
@@ -158,17 +158,13 @@ describe('CompleteRegistration (server)', () => {
     expect(meta.sent.filter((e) => e.name !== 'CompleteRegistration' && e.name !== SIGNUP_EVENT)).toEqual([]);
   });
 
-  it('c) is not sent with "Essential only", without a cookie choice, or for a Student account', async () => {
+  it('c) is not sent with "Essential only" or without a cookie choice', async () => {
     const h = await signedIn(TEACHER);
     expect((await registerTeam(h, await team(h), essential)).status).toBe(201);
     expect((await registerQuiz(h, essential)).status).toBe(201);
     expect((await registerQuiz(h, { 'User-Agent': UA })).status).toBe(201);
-    const s = await signedIn(STUDENT, 'student');
-    expect((await registerTeam(s, await team(s, KABIR_TEAM, 'Student Team'))).status).toBe(201);
-    expect((await registerQuiz(s, accepted)).status).toBe(201);
     await settle();
     expect(registrations()).toEqual([]);
-    expect(meta.sent.some((e) => JSON.stringify(toPayload(e)).includes(sha(STUDENT.email)))).toBe(false);
   });
 
   it('d) the registration still succeeds when Meta throws', async () => {
@@ -235,18 +231,117 @@ describe('browser guard (the Pixel twin)', () => {
 
 describe('AccountSignup', () => {
   const NEW = { sub: '77777777-7777-4777-8777-777777777777', email: 'new@example.com', name: 'New Reader' };
+  const profile = { phone: '98765 43210', fullName: 'New Reader', city: 'Ranchi', state: '20', type: 'parent' };
 
-  it('f) is sent once per new account, as the custom event AccountSignup with signup-<userId>, never as CompleteRegistration', async () => {
+  it('f) is sent once, as AccountSignup with signup-<userId>, when the profile first says who the person is (not at sign-in)', async () => {
     const h = { ...(await as(NEW)), ...accepted };
-    expect((await t.call('GET', '/account', { headers: h })).json.newAccount).toBe(true);
-    expect((await t.call('GET', '/account', { headers: h })).json.newAccount).toBe(false);
+    expect((await t.call('GET', '/account', { headers: h })).json).toMatchObject({ newAccount: true, meta: { allowed: true } });
     await t.call('GET', '/account', { headers: h });
+    expect(meta.sent).toEqual([]); // signing in alone sends nothing
+    const first = await t.call('PUT', '/account/profile', { headers: h, body: profile });
+    expect(first.json.meta).toEqual({ allowed: true, signupEventId: signupEventId(NEW.sub) });
+    const again = await t.call('PUT', '/account/profile', { headers: h, body: { city: 'Hazaribagh' } });
+    expect(again.json.meta).toEqual({ allowed: true, signupEventId: null });
     expect(meta.sent.map((e) => `${e.name}:${e.eventId}`)).toEqual([`AccountSignup:${signupEventId(NEW.sub)}`]);
-    expect(toPayload(meta.sent[0])).toMatchObject({ event_name: 'AccountSignup', custom_data: { content_name: 'Google sign-in', status: 'complete' }, user_data: { em: [sha(NEW.email)], external_id: [sha(NEW.email)] } });
+    expect(toPayload(meta.sent[0])).toMatchObject({
+      event_name: 'AccountSignup', custom_data: { content_name: 'Google sign-in', status: 'complete' },
+      user_data: { em: [sha(NEW.email)], ph: [sha('919876543210')], fn: [sha('new')], ln: [sha('reader')], external_id: [sha(NEW.email)], client_ip_address: '10.0.0.1', client_user_agent: UA, fbp: FBP, fbc: FBC },
+    });
   });
 
   it('f) is not sent without "Accept all"', async () => {
-    await t.call('GET', '/account', { headers: { ...(await as(NEW)), ...essential } });
+    const h = { ...(await as(NEW)), ...essential };
+    await t.call('GET', '/account', { headers: h });
+    await t.call('PUT', '/account/profile', { headers: h, body: profile });
     expect(meta.sent).toEqual([]);
+  });
+});
+
+describe('students: Meta only from META_MIN_AGE (13), by date of birth', () => {
+  // Today is 10 November 2026 (India time).
+  const student = (dob?: string) => ({ phone: '98765 43210', fullName: 'Riya Sharma', city: 'Ranchi', state: '20', type: 'student',
+    institutionType: 'school', institutionName: 'DAV Public School', grade: 'Class 8', guardianName: 'Meera Sharma', guardianPhone: '9123456780', ...(dob ? { dob } : {}) });
+  const aboutStudent = () => meta.sent.filter((e) => JSON.stringify(toPayload(e)).includes(sha(STUDENT.email)));
+
+  it.each([
+    ['12 (turns 13 tomorrow)', '2013-11-11', false],
+    ['exactly 13 (birthday today)', '2013-11-10', true],
+    ['17', '2009-06-15', true],
+    ['18 and over (26)', '2000-01-01', true],
+  ])('a student aged %s (date of birth %s): sent to Meta = %s', async (_label, dob, allowed) => {
+    const h = { ...(await as(STUDENT)), ...accepted };
+    await t.call('GET', '/account', { headers: h });
+    const saved = await t.call('PUT', '/account/profile', { headers: h, body: student(dob as string) });
+    expect(saved.json.completed).toBe(true);
+    expect(saved.json.meta).toEqual({ allowed, signupEventId: allowed ? signupEventId(STUDENT.sub) : null });
+    expect((await t.call('GET', '/account', { headers: h })).json.meta).toEqual({ allowed });
+    const app = (await registerTeam(h, await team(h, KABIR_TEAM, 'Student Team'))).json.application;
+    expect((await registerQuiz(h, accepted)).status).toBe(201);
+    await settle();
+    if (!allowed) {
+      expect(meta.sent).toEqual([]);
+      return;
+    }
+    // Exactly as for any other account: the same events, ids and match details.
+    expect(meta.sent.map((e) => e.name)).toEqual(['AccountSignup', 'CompleteRegistration', 'CompleteRegistration']);
+    expect(meta.sent[1].eventId).toBe(`reg_${app.id}`);
+    for (const e of meta.sent) {
+      expect(toPayload(e).user_data).toMatchObject({ em: [sha(STUDENT.email)], ph: [sha('919876543210')], fn: [sha('riya')], ln: [sha('sharma')], external_id: [sha(STUDENT.email)], client_ip_address: '10.0.0.1', client_user_agent: UA, fbp: FBP, fbc: FBC });
+    }
+  });
+
+  it('a student with no date of birth: nothing, until they add one (then AccountSignup, if old enough)', async () => {
+    const h = { ...(await as(STUDENT)), ...accepted };
+    await t.call('GET', '/account', { headers: h });
+    const saved = await t.call('PUT', '/account/profile', { headers: h, body: student() });
+    expect(saved.json).toMatchObject({ completed: false, missing: ['dob'], meta: { allowed: false, signupEventId: null } });
+    expect((await t.call('GET', '/account', { headers: h })).json.meta).toEqual({ allowed: false });
+    // Without a date of birth the profile isn't complete, so they can't register either.
+    expect((await registerTeam(h, await team(h, KABIR_TEAM, 'Student Team'))).json.code).toBe('profile_incomplete');
+    await settle();
+    expect(meta.sent).toEqual([]);
+    const later = await t.call('PUT', '/account/profile', { headers: h, body: { dob: '2010-01-01' } }); // 16
+    expect(later.json.meta).toEqual({ allowed: true, signupEventId: signupEventId(STUDENT.sub) });
+    expect(meta.sent.map((e) => e.name)).toEqual(['AccountSignup']);
+  });
+
+  it('a teacher, parent or "Other" (no date of birth asked) is sent as before', async () => {
+    const h = { ...(await as(TEACHER)), ...accepted };
+    await t.call('GET', '/account', { headers: h });
+    const saved = await t.call('PUT', '/account/profile', { headers: h, body: { phone: '98765 43210', fullName: TEACHER.name, city: 'Ranchi', state: '20', ...PROFILES.teacher } });
+    expect(saved.json.meta).toEqual({ allowed: true, signupEventId: signupEventId(TEACHER.sub) });
+    const app = (await registerTeam(h, await team(h))).json.application;
+    await settle();
+    expect(meta.sent.map((e) => `${e.name}:${e.eventId}`)).toEqual([`AccountSignup:${signupEventId(TEACHER.sub)}`, `CompleteRegistration:reg_${app.id}`]);
+  });
+
+  it('the minimum age is one setting: META_MIN_AGE=18 stops a 17-year-old, lets an 18-year-old through', async () => {
+    t = await setup({ env: { SITE_URL: 'https://eldenap.in', META_MIN_AGE: '18' } });
+    t.setClock(new Date('2026-11-10T10:00:00+05:30'));
+    t.deps.meta = meta = memoryMeta();
+    expect((await t.call('GET', '/config')).json.metaMinAge).toBe(18);
+    const h = { ...(await as(STUDENT)), ...accepted };
+    await t.call('GET', '/account', { headers: h });
+    expect((await t.call('PUT', '/account/profile', { headers: h, body: student('2009-06-15') })).json.meta.allowed).toBe(false); // 17
+    await registerTeam(h, await team(h, KABIR_TEAM, 'Student Team'));
+    await settle();
+    expect(aboutStudent()).toEqual([]);
+    expect((await t.call('PUT', '/account/profile', { headers: h, body: { dob: '2008-11-10' } })).json.meta.allowed).toBe(true); // 18 today
+    expect((await registerQuiz(h, accepted)).status).toBe(201);
+    await settle();
+    expect(meta.sent.map((e) => e.name)).toEqual(['CompleteRegistration']); // AccountSignup was due when they first identified (at 17): not sent, not repeated
+  });
+
+  it('the rule itself', () => {
+    const d = { env: { META_MIN_AGE: 13 }, now: () => new Date('2026-11-10T10:00:00+05:30') } as Parameters<typeof metaAllowed>[0];
+    expect(metaAllowed(d, { accountType: 'student', dob: '2013-11-11' })).toBe(false); // 12
+    expect(metaAllowed(d, { accountType: 'student', dob: '2013-11-10' })).toBe(true); // 13 today
+    expect(metaAllowed(d, { accountType: 'student', dob: null })).toBe(false);
+    expect(metaAllowed(d, { accountType: 'teacher', dob: null })).toBe(true);
+    expect(metaAllowed(d, { accountType: 'parent', dob: null })).toBe(true);
+    expect(metaAllowed(d, { accountType: null, dob: null })).toBe(true); // hasn't said yet
+    // Just after midnight in India it's already the birthday (the server clock is UTC).
+    expect(metaAllowed({ ...d, now: () => new Date('2026-11-09T18:31:00Z') }, { accountType: 'student', dob: '2013-11-10' })).toBe(true);
+    expect(metaAllowed({ ...d, now: () => new Date('2026-11-09T18:29:00Z') }, { accountType: 'student', dob: '2013-11-10' })).toBe(false);
   });
 });

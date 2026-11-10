@@ -38,8 +38,8 @@ export function isStaff() {
 }
 
 function writeCookie(c: Consent | null) {
-  // A signed-in student is never reported to Meta from the server either.
-  const v = c && (isStaff() ? 'staff' : isStudentSession() ? 'essential' : c);
+  // A signed-in student under Meta's minimum age (see isMetaOff) is never reported to Meta from the server either.
+  const v = c && (isStaff() ? 'staff' : isMetaOff() ? 'essential' : c);
   const secure = location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = v ? `elden_consent=${v}; Path=/; Max-Age=31536000; SameSite=Lax${secure}` : 'elden_consent=; Path=/; Max-Age=0';
 }
@@ -58,10 +58,10 @@ export function syncConsent() { writeCookie(getConsent()); }
 /** Show the cookie choice again (footer link). */
 export const openConsent = () => window.dispatchEvent(new Event('elden:consent-open'));
 
-/* ---------------- No tracking for students ---------------- */
-// While a student account is signed in on this browser, no analytics or ad scripts
-// load (index.html checks the same flag before loading Google Tag Manager), the
-// Meta Pixel stays off and no events are sent. Signing out clears it.
+/* ---------------- No Google tracking for students ---------------- */
+// While a student account is signed in on this browser, Google Analytics and Google Tag
+// Manager don't load (index.html checks the same flag) and no Google events are sent.
+// Meta has its own rule, by age (isMetaOff below). Signing out clears both.
 
 const STUDENT = 'elden-student';
 
@@ -77,6 +77,29 @@ export function setStudentSession(on: boolean) {
   if (on) {
     // Anything already loaded on this page stops collecting.
     window.gtag?.('consent', 'update', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'denied' });
-    (window as { fbq?: (...a: unknown[]) => void }).fbq?.('consent', 'revoke');
   }
+}
+
+/* ---------------- Meta: not for younger students ---------------- */
+// A signed-in student under the minimum age (META_MIN_AGE on the server, 13 to start with), or
+// one who hasn't given a date of birth: the Meta Pixel stays off and the cookie tells the server
+// "essential", so nothing about them reaches Meta, whatever the cookie choice. Older students,
+// and everyone else, follow the cookie choice as usual. The server decides (meta.allowed in the
+// account and profile answers); signing out clears it.
+
+const META_OFF = 'elden-meta-off';
+
+export function isMetaOff() {
+  try { return localStorage.getItem(META_OFF) === '1'; } catch { return false; }
+}
+
+export function setMetaOff(on: boolean) {
+  try {
+    if (on) localStorage.setItem(META_OFF, '1'); else localStorage.removeItem(META_OFF);
+  } catch { /* ignore */ }
+  syncConsent();
+  // A Pixel already loaded on this page stops (or, for someone now allowed who accepted all, resumes).
+  const fbq = (window as { fbq?: (...a: unknown[]) => void }).fbq;
+  if (on) fbq?.('consent', 'revoke');
+  else if (getConsent() === 'all') fbq?.('consent', 'grant');
 }

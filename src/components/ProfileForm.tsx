@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { accountApi, type Profile } from '../store/account';
 import { errorMessage } from '../store/api';
 import { useStoreConfig } from '../store/catalog';
+import { setMetaOff } from '../consent';
+import { trackSignup } from '../meta';
 import { FIELD_LABEL, INSTITUTION_TYPES, PROFILE_TYPES, todayIST, type ProfileField, type ProfileValues } from '../shared/profile';
 import { ageOn } from '../shared/teams';
 
@@ -53,7 +55,12 @@ export function ProfileForm({ profile, name, onSaved, submitLabel = 'Save profil
     setBusy(true); setErr(null);
     try {
       const payload = Object.fromEntries(Object.entries(f).filter(([k, v]) => v !== '' && (BASE.includes(k as keyof Values) || roleFields.includes(k as keyof Values))));
-      const p = await accountApi<Profile>('/profile', { method: 'PUT', body: payload });
+      const { meta, ...p } = await accountApi<Profile & { meta?: { allowed: boolean; signupEventId: string | null } }>('/profile', { method: 'PUT', body: payload });
+      // Meta: the server applies the age rule for students; AccountSignup when the profile first says who this is.
+      if (meta) {
+        setMetaOff(!meta.allowed);
+        if (meta.signupEventId) trackSignup(meta.signupEventId);
+      }
       setSaved(true);
       onSaved(p);
     } catch (e2) {

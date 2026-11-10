@@ -1,9 +1,9 @@
 // Meta Pixel. Loads only after the visitor accepts cookies, never on the admin or for staff.
 // Each event has an id; the server sends the same event with the same id (Conversions API),
 // so Meta counts it once even when one of the two is blocked.
-import { getConsent, isStaff, isStudentSession, syncConsent, type Consent } from './consent';
+import { getConsent, isMetaOff, isStaff, syncConsent, type Consent } from './consent';
 import { forgetUser, knownUser, phoneDigits, type MatchUser } from './visitor';
-import { fireOnce, registrationEventId, registrationParams, SIGNUP_EVENT, signupEventId, signupParams } from './shared/metaEvents';
+import { fireOnce, registrationEventId, registrationParams, SIGNUP_EVENT, signupParams } from './shared/metaEvents';
 
 export { rememberUser } from './visitor';
 
@@ -31,8 +31,8 @@ export const formatName = (kind: string) => (kind === 'digital' ? 'ebook' : kind
 export const formatList = (kinds: string[]) => [...new Set(kinds.map(formatName))].sort().join(',');
 
 const onAdmin = () => /^\/admin(\/|$)/.test(location.pathname);
-// Never for staff, the admin, or a signed-in student.
-const active = () => Boolean(PIXEL) && getConsent() === 'all' && !isStaff() && !onAdmin() && !isStudentSession();
+// Never for staff, the admin, or a signed-in student under Meta's minimum age (consent.ts → isMetaOff).
+const active = () => Boolean(PIXEL) && getConsent() === 'all' && !isStaff() && !onAdmin() && !isMetaOff();
 
 export const newEventId = () =>
   (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -85,7 +85,7 @@ function pixelMatch(u: MatchUser | null): Record<string, string> {
 
 let loaded = false;
 function load() {
-  if (loaded || !PIXEL || isStudentSession()) return;
+  if (loaded || !PIXEL || isMetaOff()) return;
   loaded = true;
   setMetaCookies();
   // Meta's standard loader, written out so no inline script is needed.
@@ -147,10 +147,13 @@ export function trackRegistration(registrationId: string, slug: string) {
     () => track('CompleteRegistration', registrationParams(slug), { eventId: registrationEventId(registrationId) })), 0);
 }
 
-/** AccountSignup, wherever a new account is first seen (whichever page they signed in on). */
-export function trackSignup(userId: string) {
-  setTimeout(() => fireOnce(storage(), `elden-signup-tracked:${userId}`,
-    () => trackCustom(SIGNUP_EVENT, signupParams(), { eventId: signupEventId(userId) })), 0);
+/**
+ * AccountSignup, with the id the server gives when the profile first says who this is (PUT
+ * /profile → meta.signupEventId; none for a student under Meta's minimum age). Once per browser.
+ */
+export function trackSignup(eventId: string) {
+  setTimeout(() => fireOnce(storage(), `elden-signup-tracked:${eventId}`,
+    () => trackCustom(SIGNUP_EVENT, signupParams(), { eventId })), 0);
 }
 
 // Contact: someone taps your email address, phone number or WhatsApp link.
