@@ -318,7 +318,23 @@ Nothing is saved before payment without the tick, and nobody is ever called with
 
 **Admin → Calls** (managers and the owner): *Overview* (the master switch, a switch per agent, answered rate, recovered orders and revenue, coupons given, average rating, open issues, a day-by-day chart), *Call log* (each call's result, transcript, recording and the customer's earlier calls), *Queue* (Call now or Skip), *Checkouts* (who said yes to calls), *Do not call* and *Settings* (hours, days, delay, coupon code and what it gives, feedback day, new titles, retries). Create the coupon in **Discounts** first, then put its code here. Everything starts **off**.
 
-**To connect:** set `CALLS_WEBHOOK_SECRET` in Vercel (a long random string) and set each number's call-end webhook in Sarvam to `https://eldenap.in/api/calls/webhook/<that string>`, with metadata `purpose` = `cart_recovery_call_end` (…0108) or `feedback_call_end` (…0105). Both are set already: copy the string at the end of that address into Vercel. The Sarvam connection for placing calls (`SARVAM_API_KEY`) is added once Sarvam's calling API is confirmed; until then Admin → Calls shows *Not connected* and nothing is dialled, while checkouts, the queue, settings and do-not-call already work. A Vercel cron runs every 10 minutes to queue and place calls.
+**To connect:** set `CALLS_WEBHOOK_SECRET` in Vercel (a long random string) and set each number's call-end webhook in Sarvam to `https://eldenap.in/api/calls/webhook/<that string>`, with metadata `purpose` = `cart_recovery_call_end` (…0108) or `feedback_call_end` (…0105). Both are set already: copy the string at the end of that address into Vercel. A Vercel cron runs every 10 minutes to queue and place calls.
+
+**Placing calls (Sarvam outgoing campaigns):** the site places a call by adding that one customer to a running Sarvam campaign (Sarvam's *Stream cohort* API, `POST https://apps.sarvam.ai/api/scheduling/v1/orgs/<org>/workspaces/<workspace>/campaigns/<campaign>/cohorts/stream`, header `X-API-Key`). Our call id goes in as `user_identifier` and comes back in the call-end webhook; the agent's variables go in as `app_variables`. Each campaign already has its agent, number, dialling hours (10:00–19:00 Mon–Sat, India time) and call-end webhook; Sarvam's own retries are off because the website retries. Set these in Vercel (Production), then redeploy:
+
+| Variable | Value |
+|---|---|
+| `SARVAM_API_KEY` | The **Voice Agents** workspace key: apps.sarvam.ai → Settings → API Key (secret). A key for Sarvam's speech APIs (dashboard.sarvam.ai) is a different key and is refused here. |
+| `SARVAM_ORG_ID` | From the Sarvam dashboard address: `…/orgs/<this>/workspaces/…` |
+| `SARVAM_WORKSPACE_ID` | From the same address: `…/workspaces/<this>/…` |
+| `SARVAM_CART_CAMPAIGN_ID` | `Elden---Car-4ab29de8-5933` (Cart Recovery, +91 79658 60108) |
+| `SARVAM_FEEDBACK_CAMPAIGN_ID` | `Elden---Ord-7b9b8ed1-4ddd` (Order Feedback, +91 79658 60105) |
+
+With all five set, Admin → Calls shows **Outgoing calls: Connected (sarvam)**; with any missing it shows *Not connected* and nothing is dialled, while checkouts, the queue, settings and do-not-call still work. If Sarvam refuses a call (wrong key, campaign not active, a bad number), its message is shown on the call in the Call log and the call is retried like an unanswered one.
+
+**The campaigns end on 7 February 2027 at 19:00** (Sarvam allows at most 90 days per campaign; they started 10 November 2026). After that every call fails with Sarvam's message until they are extended or replaced. Before then, either:
+- **Extend:** pause the campaign, change its end date (in the Sarvam dashboard or the *Update campaign* API, `PATCH …/campaigns/<id>` with `end_timestamp`; Sarvam accepts it only while a campaign is *paused* or *scheduled*), then resume it. If Sarvam refuses an end date more than 90 days after the start, replace it instead.
+- **Replace:** create a new outgoing campaign for each agent with the same settings (agent version, connection `9e746ce3-f7-f288c8b7-cd97` and its number, dial rate 1/second, Sarvam retries off, the same hours, the same webhook address and `purpose`), then put the new ids in `SARVAM_CART_CAMPAIGN_ID` / `SARVAM_FEEDBACK_CAMPAIGN_ID` in Vercel and redeploy. Calls already handed to the old campaign finish there.
 
 ## Running costs
 

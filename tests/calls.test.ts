@@ -3,7 +3,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { calls, checkoutLeads, orders, products } from '../server/db/schema.js';
-import { callResultFrom, memoryCalls } from '../server/lib/callProvider.js';
+import { callResultFrom, memoryCalls, sarvamCalls } from '../server/lib/callProvider.js';
+import { sarvamCallsFrom } from '../server/deps.js';
+import { loadEnv } from '../server/env.js';
 import { runCalls } from '../server/services/calls.js';
 import { callableNumber, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime } from '../src/shared/calls.js';
 import { address, contact, setup, supabaseToken } from './helpers.js';
@@ -374,3 +376,61 @@ describe('Admin → Calls', () => {
 });
 
 vi.setConfig({ testTimeout: 60_000 });
+
+describe('Sarvam (outgoing campaigns)', () => {
+  const CALL_ID = '6f1c1f2e-1111-4111-8111-111111111111';
+  const cfg = { apiKey: 'sk-test', orgId: 'org-1', workspaceId: 'ws-1', cartCampaignId: 'Elden---Car-4ab29de8-5933', feedbackCampaignId: 'Elden---Ord-7b9b8ed1-4ddd' };
+  const reply = (status: number, body: unknown) => vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+  const ok = { name: `cart-${CALL_ID}`, cohort_id: 'cart-6f1c-xyz', status: 'processing', result: null };
+
+  it('adds the customer to the cart campaign as a one-person cohort, with our call id', async () => {
+    const f = reply(200, ok);
+    const r = await sarvamCalls({ ...cfg, fetch: f }).start({ callId: CALL_ID, kind: 'cart', phone: '+919876543210', variables: { customer_name: 'Asha', cart_total: 499 as unknown as string, cod_available: 'yes' } });
+    expect(r).toEqual({ providerCallId: 'cart-6f1c-xyz' });
+    expect(f).toHaveBeenCalledTimes(1);
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe('https://apps.sarvam.ai/api/scheduling/v1/orgs/org-1/workspaces/ws-1/campaigns/Elden---Car-4ab29de8-5933/cohorts/stream');
+    expect(init?.method).toBe('POST');
+    expect(init?.headers).toMatchObject({ 'X-API-Key': 'sk-test', 'Content-Type': 'application/json' });
+    const body = JSON.parse(String(init?.body));
+    expect(body.name).toBe(`cart-${CALL_ID}`);
+    expect(body.name.length).toBeLessThanOrEqual(50);
+    expect(body.users).toEqual([{ user_phone_number: '+919876543210', user_identifier: CALL_ID, app_variables: { customer_name: 'Asha', cart_total: '499', cod_available: 'yes' } }]);
+  });
+
+  it('sends feedback calls to the feedback campaign, and falls back to our id without a cohort id', async () => {
+    const f = reply(200, {});
+    const r = await sarvamCalls({ ...cfg, fetch: f }).start({ callId: CALL_ID, kind: 'feedback', phone: '+919876543210', variables: { customer_name: 'Asha', books_bought: 'Mathematics Today' } });
+    expect(String(f.mock.calls[0][0])).toContain('/campaigns/Elden---Ord-7b9b8ed1-4ddd/cohorts/stream');
+    expect(r).toEqual({ providerCallId: CALL_ID });
+  });
+
+  it("throws with Sarvam's own message on an error", async () => {
+    const start = (f: typeof fetch) => sarvamCalls({ ...cfg, fetch: f }).start({ callId: CALL_ID, kind: 'cart', phone: '+919876543210', variables: {} });
+    await expect(start(reply(422, { error: { code: 'invalid_app_variables', message: 'Unknown app_variables: foo' } }))).rejects.toThrow('Sarvam 422: Unknown app_variables: foo');
+    await expect(start(reply(422, { detail: [{ msg: 'field required' }] }))).rejects.toThrow('Sarvam 422: field required');
+    await expect(start(reply(401, 'Invalid API key'))).rejects.toThrow('Sarvam 401: Invalid API key');
+    await expect(start(reply(200, { cohort_id: 'c1', status: 'failed' }))).rejects.toThrow(/rejected/);
+  });
+
+  it('a failed start is recorded on the call and retried later', async () => {
+    t.deps.calls = sarvamCalls({ ...cfg, fetch: reply(400, { error: { code: 'bad', message: 'Campaign is not active' } }) });
+    await settings({ enabled: true, cart: { enabled: true, delayMinutes: 60 } });
+    await lead();
+    at('2026-11-10T12:05:00+05:30');
+    expect(await runCalls(t.deps)).toMatchObject({ queued: 1, dialled: 0 });
+    const [c] = await allCalls();
+    expect(c).toMatchObject({ status: 'queued', attempts: 1 });
+    expect(c.note).toContain('Campaign is not active');
+  });
+
+  it('is connected only when the key, workspace and both campaigns are set', async () => {
+    const full = { ORDER_LINK_SECRET: 'x', SARVAM_API_KEY: 'k', SARVAM_ORG_ID: 'o', SARVAM_WORKSPACE_ID: 'w', SARVAM_CART_CAMPAIGN_ID: 'c', SARVAM_FEEDBACK_CAMPAIGN_ID: 'f' };
+    expect(sarvamCallsFrom(loadEnv(full))?.name).toBe('sarvam');
+    expect(sarvamCallsFrom(loadEnv({ ...full, SARVAM_FEEDBACK_CAMPAIGN_ID: '' }))).toBeNull();
+    expect(sarvamCallsFrom(loadEnv({ ...full, SARVAM_API_KEY: undefined as unknown as string }))).toBeNull();
+    t.deps.calls = sarvamCallsFrom(loadEnv(full));
+    const r = await t.call('GET', '/admin/calls/settings', { headers: await admin() });
+    expect(r.json.status).toMatchObject({ connected: true, provider: 'sarvam' });
+  });
+});

@@ -46,6 +46,14 @@ const schema = z.object({
 
   /** Voice-agent calls (Admin → Calls): the secret in the call-end webhook's address, so only the provider can post results. */
   CALLS_WEBHOOK_SECRET: optional,
+  /** Sarvam Voice Agents workspace API key (apps.sarvam.ai → Settings → API Key; sent as X-API-Key). */
+  SARVAM_API_KEY: optional,
+  /** From the Sarvam dashboard address (…/orgs/<org id>/workspaces/<workspace id>/…). */
+  SARVAM_ORG_ID: optional,
+  SARVAM_WORKSPACE_ID: optional,
+  /** The outgoing campaigns the site adds customers to, one per kind of call. All five set = calls are placed. */
+  SARVAM_CART_CAMPAIGN_ID: optional,
+  SARVAM_FEEDBACK_CAMPAIGN_ID: optional,
 
   /** The first person to sign in with this email becomes the store owner. */
   ADMIN_OWNER_EMAIL: optional,
