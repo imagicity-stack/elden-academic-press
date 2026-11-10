@@ -41,7 +41,8 @@ export function createApp(getDeps: () => Promise<Deps>) {
     const slug = c.req.param('slug');
     try {
       const html = await competitionPage(await getDeps(), slug, new URL(c.req.url).origin);
-      if (html) return c.html(html, 200, { 'Cache-Control': 'public, max-age=0, s-maxage=300' });
+      // Ad visitors land here: the edge keeps answering at once while it refreshes in the background.
+      if (html) return c.html(html, 200, { 'Cache-Control': 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400' });
     } catch (e) {
       console.warn('[og] competition page', (e as Error).message);
     }

@@ -61,5 +61,7 @@ export async function competitionPage(deps: Deps, slug: string, requestOrigin: s
   html = setMeta(html, 'name', 'twitter:card', image ? 'summary_large_image' : 'summary');
   if (comp.unlisted) html = html.replace('</head>', '    <meta name="robots" content="noindex" />\n  </head>');
   html = html.replace('</head>', `    <link rel="canonical" href="${esc(url)}" />\n  </head>`);
+  // A team competition's page asks for its live details first thing: start that now, alongside the scripts.
+  if (comp.team) html = html.replace('</head>', `    <link rel="preload" href="/api/competition-info/${comp.slug}" as="fetch" crossorigin />\n  </head>`);
   return html;
 }

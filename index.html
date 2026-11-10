@@ -44,7 +44,7 @@
     <meta property="og:description" content="Textbooks, reference books, practice papers and journals for classrooms across India." />
     <meta property="og:url" content="https://eldenap.in/" />
     <meta property="og:image" content="https://eldenap.in/assets/elden-mark.png" />
-    <link rel="icon" type="image/png" href="/assets/elden-mark.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/assets/elden-icon-64.png" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -64,9 +64,9 @@
         }
       }
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Montserrat:wght@400;500;600;700&family=JetBrains+Mono:wght@400&family=Caveat:wght@500;600&display=swap" rel="stylesheet" />
+    <!-- The catalogue and store settings (every store page needs them) start downloading now, alongside the scripts. -->
+    <link rel="preload" href="/api/catalog" as="fetch" crossorigin />
+    <link rel="preload" href="/api/config" as="fetch" crossorigin />
   </head>
   <body>
     <div id="root"></div>

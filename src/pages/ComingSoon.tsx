@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { config } from '../config';
 import { LEGAL } from '../legal';
 import './coming-soon.css';
+import { loadGoogleFonts } from '../googleFonts';
 
 // The pre-launch page is styled as a printer's proof of the website's own
 // front matter: title page, dedication, contents and colophon — complete with
@@ -19,6 +20,8 @@ const CONTENTS: { t: string; pg: number; d: ReactNode }[] = [
 const SWATCHES = ['#0E1F33', '#1E3A57', '#45607C', '#8A9BB0', '#6B3A0A', '#9C6A2F', '#CC955F', '#E2B68A', '#E8DAC3', 'oklch(0.80 0.12 185)', '#171A1F', '#5A5650', '#A8A296', '#D6CCBB'];
 
 export function ComingSoon() {
+  // Its fonts come from Google (this module is part of every page's first script, so not at import time).
+  useEffect(() => loadGoogleFonts(), []);
   useEffect(() => { document.title = 'Elden Academic Press — Now in press'; }, []);
   const mail = 'mailto:' + config.contactEmail;
 

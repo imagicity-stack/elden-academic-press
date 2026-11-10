@@ -26,7 +26,7 @@ store.get('/config', async (c) => {
   const { db, razorpay } = c.get('deps');
   const s = await getSettings(db);
   await tagCatalog();
-  c.header('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
+  c.header('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
   return c.json({
     storeName: s.storeName,
     payments: razorpay ? { keyId: razorpay.keyId, simulated: razorpay.simulated } : null,
@@ -40,9 +40,11 @@ store.get('/config', async (c) => {
 store.get('/catalog', async (c) => {
   const { db, storage } = c.get('deps');
   const data = await loadCatalog(db, storage);
-  // Cached at Vercel's edge for a minute (cleared when the admin saves a product); browsers always ask the edge.
+  // Fresh at Vercel's edge for a minute; after that the edge answers at once with its copy and
+  // refreshes it in the background (for up to a day), so a visitor never waits on the server in
+  // Paris. Saving in the admin clears it (lib/cdn.ts); browsers always ask the edge.
   await tagCatalog();
-  c.header('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600');
+  c.header('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=86400');
   return c.json(data);
 });
 
@@ -50,7 +52,7 @@ store.get('/resources', async (c) => {
   const { db, storage } = c.get('deps');
   const rows = await db.select().from(resources).where(eq(resources.published, true)).orderBy(asc(resources.sort), asc(resources.title));
   await tagCatalog();
-  c.header('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
+  c.header('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400');
   return c.json({
     items: rows.map((r) => ({
       id: r.id, title: r.title, kind: r.kind, level: r.level, subject: r.subject, size: r.fileSize,

@@ -368,7 +368,8 @@ competitionInfo.get('/:slug', async (c) => {
     // Credit as first name and city only (as the terms say).
     results = won.map((w) => ({ team: w.teamName, category: w.category, result: w.result, credit: `${(mem.get(w.id) ?? []).map((m) => m.fullName.split(/\s+/)[0]).join(', ')} · ${w.city}` }));
   }
-  c.header('Cache-Control', 'public, max-age=0, s-maxage=60');
+  // A minute fresh, then answered at once from the edge while it refreshes (registration itself is always checked live).
+  c.header('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600');
   return c.json({
     registration: registrationState(comp, s, now()),
     dates: datesOf(comp, s),
