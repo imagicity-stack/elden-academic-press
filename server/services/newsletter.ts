@@ -5,6 +5,7 @@ import { and, asc, count, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
 import { PAL } from '../../src/data.js';
 import type { Deps } from '../deps.js';
 import { campaigns, campaignSends, subscribers } from '../db/schema.js';
+import { orderChannel, type OrderSource } from '../../src/shared/attribution.js';
 import { hmacHex, safeEqual } from '../lib/crypto.js';
 import { esc, inr } from '../lib/format.js';
 import { sendSafely } from '../lib/mail.js';
@@ -32,7 +33,7 @@ const oneClickUrl = (deps: Deps, email: string) => `${site(deps)}/api/newsletter
  * (The footer form's tick box, a new account, a paid order with the newsletter box
  * ticked, staff with consent, an import.)
  */
-export async function subscribe(deps: Deps, input: { email: string; name?: string; phone?: string; source: string; ip?: string | null; callConsent?: boolean }) {
+export async function subscribe(deps: Deps, input: { email: string; name?: string; phone?: string; source: string; ip?: string | null; callConsent?: boolean; visit?: OrderSource | null; popupId?: string | null }) {
   const { db, now } = deps;
   const email = input.email.trim().toLowerCase();
   const [existing] = await db.select().from(subscribers).where(eq(subscribers.email, email));
@@ -43,12 +44,19 @@ export async function subscribe(deps: Deps, input: { email: string; name?: strin
     ...(input.callConsent === true ? { callConsent: true, callConsentAt: now() } : input.callConsent === false ? { callConsent: false } : {}),
     updatedAt: sql`now()`,
   };
+  // Where they came from: kept from their first sign-up; filled in if it wasn't known yet.
+  const origin = !existing?.channel && (input.visit?.first || input.visit?.last)
+    ? { visit: input.visit, channel: orderChannel(input.visit).channel, channelDetail: orderChannel(input.visit).detail.slice(0, 120) }
+    : {};
+  const form = !existing?.popupId && input.popupId ? { popupId: input.popupId } : {};
   if (existing?.status === 'subscribed') {
-    await db.update(subscribers).set(details).where(eq(subscribers.id, existing.id));
+    await db.update(subscribers).set({ ...details, ...origin, ...form }).where(eq(subscribers.id, existing.id));
     return { status: 'subscribed' as const, row: existing, already: true };
   }
   const values = {
     ...details,
+    ...origin,
+    ...form,
     status: 'subscribed' as const,
     source: input.source,
     consentAt: now(),
@@ -81,12 +89,12 @@ export async function unsubscribe(deps: Deps, email: string) {
  * and gets a welcome email with an unsubscribe link when it joins. Anyone who
  * unsubscribed stays unsubscribed. Never throws: the account page must always load.
  */
-export async function subscribeNewAccount(deps: Deps, who: { email: string; name: string }, ip: string | null) {
+export async function subscribeNewAccount(deps: Deps, who: { email: string; name: string }, ip: string | null, visit?: OrderSource | null) {
   try {
     const email = who.email.toLowerCase();
     const [existing] = await deps.db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, email));
     if (existing?.status === 'subscribed' || existing?.status === 'unsubscribed') return;
-    const { row } = await subscribe(deps, { email, name: who.name, source: 'signup', ip });
+    const { row } = await subscribe(deps, { email, name: who.name, source: 'signup', ip, visit });
     await welcome(deps, row, 'account');
   } catch (e) {
     console.error('[newsletter] sign-up subscription failed', (e as Error).message);

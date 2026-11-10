@@ -113,3 +113,12 @@
 .acct-comps__title { font: 650 18px/1.2 var(--f-display); letter-spacing: -.01em; color: var(--ink); }
 .acct-comps__who { font: 400 15px/1.4 var(--f-text); color: var(--ink); }
 .acct-comps__date { font: 400 13.5px var(--f-text); color: var(--muted); }
+
+/* Profile completion on the account page */
+.pp { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.pp__top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.pp__top span { font-size: 13px; color: #5D5850; font-variant-numeric: tabular-nums; }
+.pp__track { height: 8px; border-radius: 999px; background: rgba(14, 31, 51, 0.1); overflow: hidden; }
+.pp__fill { display: block; height: 100%; border-radius: 999px; background: var(--navy); transition: width .5s ease; }
+.pp__next { margin: 0; font-size: 13.5px; color: #4A463F; }
+@media (prefers-reduced-motion: reduce) { .pp__fill { transition: none; } }

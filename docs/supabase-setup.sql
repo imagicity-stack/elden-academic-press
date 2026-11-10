@@ -1238,6 +1238,16 @@ CREATE UNIQUE INDEX "wa_order_kind_uq" ON "whatsapp_messages" USING btree ("orde
 CREATE UNIQUE INDEX "wa_lead_kind_uq" ON "whatsapp_messages" USING btree ("lead_id","kind");--> statement-breakpoint
 CREATE UNIQUE INDEX "wa_broadcast_phone_uq" ON "whatsapp_messages" USING btree ("broadcast_id","phone");
 
+-- ===== 0018_audience_sources =====
+
+ALTER TABLE "accounts" ADD COLUMN "source" jsonb;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "channel" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "channel_detail" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "subscribers" ADD COLUMN "visit" jsonb;--> statement-breakpoint
+ALTER TABLE "subscribers" ADD COLUMN "channel" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "subscribers" ADD COLUMN "channel_detail" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "subscribers" ADD COLUMN "popup_id" uuid;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -1260,7 +1270,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('7489535686d0e412f9126ae7ae8eef71e2658b9c8cc8a2c0f7441b09e41c36ec', 1794075566599),
   ('2da95727ebe54578ee765746eae40b632665e677c534ce7d0d6b760e78f8554f', 1794318591431),
   ('de313d410cc8760b7d8c8e81ec8a6a04bb1d8f7b93c2be7d9a2df2550262a73d', 1794322914293),
-  ('44f53a68827b686d98b0eb0418dce2942b9b6b3732aa849d7cf46a6d5bc6950f', 1794326037898);
+  ('44f53a68827b686d98b0eb0418dce2942b9b6b3732aa849d7cf46a6d5bc6950f', 1794326037898),
+  ('4b29e4d37076384f804620c9a867f9a29044b0b3a7b8ea4f9d66b0f60bbec2e5', 1794335003607);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

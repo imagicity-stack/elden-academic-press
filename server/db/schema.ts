@@ -427,6 +427,10 @@ export const accounts = pgTable('accounts', {
   guardianName: text('guardian_name').notNull().default(''),
   guardianPhone: text('guardian_phone').notNull().default(''),
   instagram: text('instagram').notNull().default(''),
+  /** How they reached the site before signing up (the visit their browser remembered), and its channel. */
+  source: jsonb('source').$type<OrderSource>(),
+  channel: text('channel').notNull().default(''),
+  channelDetail: text('channel_detail').notNull().default(''),
   ...timestamps,
 }, (t) => [index('accounts_email_idx').on(t.email)]);
 
@@ -444,6 +448,12 @@ export const subscribers = pgTable('subscribers', {
   /** Ticked "Subscribe to calls" when signing up (we may call or WhatsApp them about new books). */
   callConsent: boolean('call_consent').notNull().default(false),
   callConsentAt: timestamp('call_consent_at', { withTimezone: true }),
+  /** How they reached the site before signing up (Meta ads, Google…), and its channel. */
+  visit: jsonb('visit').$type<OrderSource>(),
+  channel: text('channel').notNull().default(''),
+  channelDetail: text('channel_detail').notNull().default(''),
+  /** Signed up through this popup. */
+  popupId: uuid('popup_id'),
   ...timestamps,
 }, (t) => [index('subscribers_status_idx').on(t.status)]);
 

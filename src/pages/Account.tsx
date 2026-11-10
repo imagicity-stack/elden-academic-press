@@ -11,6 +11,7 @@ import { Arrow, EASE, Reveal, SplitWords, Stagger, StaggerItem } from '../compon
 import { rememberUser } from '../meta';
 import { ga } from '../ga';
 import { ProfileForm, ProfileOnboarding, shouldOnboard } from '../components/ProfileForm';
+import { ProfileProgress } from '../components/ProfileProgress';
 import { accountTypeLabel } from '../shared/competitions';
 
 const day = (s: string | null) => (s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -145,9 +146,8 @@ function Dashboard({ data, onSignOut }: { data: AccountData; onSignOut: () => vo
       <div className="wrap">
         {!profile.completed && tab !== 'details' && (
           <section className="acct-nudge acct-profile">
-            <div>
-              <b>Complete your profile.</b> It takes a minute, and you only do it once.
-            </div>
+            <ProfileProgress profile={profile} />
+            <div>It takes a minute, and you only do it once.</div>
             <ProfileForm profile={profile} name={data.customer.name} onSaved={setProfile} />
           </section>
         )}
@@ -334,6 +334,7 @@ function Details({ data, profile, onProfile, news, onNews }: { data: AccountData
     <div className="acct-details">
       <section className="acct-card">
         <h2 className="acct-card__title">Your profile</h2>
+        <ProfileProgress profile={profile} />
         <dl className="acct-dl">
           <div><dt>Email</dt><dd>{data.customer.email}</dd></div>
           {profile.completed && <div><dt>I am a</dt><dd>{accountTypeLabel(profile.type)}</dd></div>}

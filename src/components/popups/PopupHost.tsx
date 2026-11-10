@@ -174,7 +174,7 @@ export function PopupHost() {
     if (!active) return;
     const eventId = newEventId();
     await api('/newsletter/subscribe', {
-      body: { ...f, source: 'popup', popupId: active.preview ? undefined : active.popup.id, consent: true },
+      body: { ...f, source: 'popup', popupId: active.preview ? undefined : active.popup.id, consent: true, visit: orderSource() },
       headers: { 'X-Meta-Event-Id': eventId },
     });
     rememberUser({ email: f.email, phone: f.phone, name: f.name });

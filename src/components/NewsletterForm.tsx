@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { orderSource } from '../attribution';
 import { Link } from 'react-router-dom';
 import { ga } from '../ga';
 import { newEventId, rememberUser, track } from '../meta';
@@ -22,7 +23,7 @@ export function NewsletterForm({ source, dark = false }: { source: Source; dark?
     const f = Object.fromEntries(new FormData(form)) as Record<string, string>;
     const eventId = newEventId();
     const r = await api<{ status: 'already' | 'subscribed' }>('/newsletter/subscribe', {
-      body: { name: f.name || undefined, email: f.email, phone: f.phone, source, consent: agree, callConsent: callOk, website: f.website || undefined },
+      body: { name: f.name || undefined, email: f.email, phone: f.phone, source, consent: agree, callConsent: callOk, website: f.website || undefined, visit: orderSource() },
       headers: { 'X-Meta-Event-Id': eventId },
     });
     rememberUser({ email: f.email, phone: f.phone, name: f.name });
