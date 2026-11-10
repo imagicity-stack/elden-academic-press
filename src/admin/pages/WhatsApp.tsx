@@ -265,7 +265,11 @@ function SettingsTab() {
 const TPL_TONE: Record<string, Tone> = { APPROVED: 'green', PENDING: 'amber', IN_APPEAL: 'amber', REJECTED: 'red', PAUSED: 'red', DISABLED: 'red', MISSING: 'grey' };
 
 function Templates({ enabled }: { enabled: boolean }) {
-  const { data, error, reload } = useAdmin<{ items: { key: string; name: string; status: string; language: string; rejectedReason: string }[] }>(enabled ? '/whatsapp/templates' : null);
+  const { data, error, reload } = useAdmin<{
+    language: string;
+    account: { id: string; phoneNumberId: string; numberInAccount: boolean | null; numbers: { id: string; number: string }[] };
+    items: { key: string; name: string; status: string; language: string; otherLanguages: { language: string; status: string }[]; rejectedReason: string }[];
+  }>(enabled ? '/whatsapp/templates' : null);
   const { busy, run } = useAction();
   const [results, setResults] = useState<{ name: string; result: string }[] | null>(null);
   const create = () => run('create', () => adminApi<{ results: { name: string; result: string }[] }>('/whatsapp/templates/create', { method: 'POST' })).then((r) => { if (r) { setResults(r.results); reload(); } });
@@ -274,12 +278,26 @@ function Templates({ enabled }: { enabled: boolean }) {
       {!enabled ? <p className="ad-muted">Add WHATSAPP_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID in Vercel to create the templates from here and see whether Meta approved them.</p>
         : error ? <ErrorBox error={error} retry={reload} /> : !data ? <Loading /> : (
           <>
+            {data.account.numberInAccount === false && (
+              <div className="ad-warn ad-mb">
+                <b>The sending number isn't in this WhatsApp account.</b> WHATSAPP_PHONE_NUMBER_ID ({data.account.phoneNumberId}) is not one of the numbers in account {data.account.id}
+                {data.account.numbers.length ? <> ({data.account.numbers.map((n) => `${n.number}: ${n.id}`).join(', ')})</> : ''}, so it can't use these templates.
+                Put the number's own “Messaging account ID” (WhatsApp → API Setup, under the number) in WHATSAPP_BUSINESS_ACCOUNT_ID, redeploy and create the templates again.
+              </div>
+            )}
+            {(() => {
+              const langs = [...new Set(data.items.flatMap((t) => (t.status === 'MISSING' ? t.otherLanguages.filter((o) => o.status === 'APPROVED').map((o) => o.language) : [])))];
+              return langs.length ? (
+                <div className="ad-warn ad-mb"><b>Approved in {langs.join(', ')}, but the site sends “{data.language}”.</b> Meta treats each language as a separate template. Set <b>Language code</b> below to {langs[0]} and save, or create them in {data.language}.</div>
+              ) : null;
+            })()}
             <table className="ad-table">
-              <thead><tr><th>Template</th><th>Meta</th></tr></thead>
+              <thead><tr><th>Template</th><th>Meta ({data.language})</th></tr></thead>
               <tbody>{data.items.map((t) => (
                 <tr key={t.key}>
                   <td><strong>{KIND_LABEL[t.key as WaKind] ?? t.key}</strong><br /><span className="ad-code">{t.name}</span></td>
-                  <td><Badge tone={TPL_TONE[t.status] ?? 'grey'}>{t.status === 'MISSING' ? 'Not created' : t.status.toLowerCase()}</Badge>{t.rejectedReason && <><br /><small className="ad-neg">{t.rejectedReason}</small></>}</td>
+                  <td><Badge tone={TPL_TONE[t.status] ?? 'grey'}>{t.status === 'MISSING' ? `Not in ${t.language}` : t.status.toLowerCase()}</Badge>{t.rejectedReason && <><br /><small className="ad-neg">{t.rejectedReason}</small></>}
+                    {t.otherLanguages.length > 0 && <><br /><small className="ad-muted">Also: {t.otherLanguages.map((o) => `${o.language} ${o.status.toLowerCase()}`).join(', ')}</small></>}</td>
                 </tr>
               ))}</tbody>
             </table>

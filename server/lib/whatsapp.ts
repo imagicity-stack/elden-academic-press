@@ -20,6 +20,8 @@ export interface WaTemplateSpec { name: string; language: string; category: 'UTI
 export interface WaTemplates {
   list(): Promise<WaTemplateInfo[]>;
   create(t: WaTemplateSpec): Promise<{ id: string; status: string }>;
+  /** The phone numbers in the same account: the sending number must be one of them to use its templates. */
+  phoneNumbers(): Promise<{ id: string; number: string }[]>;
 }
 
 /** "+919876543210" → "919876543210" (WhatsApp wants digits only). */
@@ -101,6 +103,10 @@ export function whatsappTemplatesHttp(cfg: { token: string; businessAccountId: s
         }),
       });
       return { id: String(j.id ?? ''), status: String(j.status ?? 'PENDING') };
+    },
+    async phoneNumbers() {
+      const j = await call(`${url.replace(/\/message_templates$/, '/phone_numbers')}?fields=id,display_phone_number`);
+      return (j.data ?? []).map((p: any) => ({ id: String(p.id), number: String(p.display_phone_number ?? '') }));
     },
   };
 }

@@ -80,12 +80,20 @@ adminWhatsApp.get('/templates', async (c) => {
   if (!deps.whatsappTemplates) throw new HttpError(409, 'Set WHATSAPP_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID in Vercel first.');
   const s = await getWhatsAppSettings(deps.db);
   let found;
+  let numbers: { id: string; number: string }[] | null = null;
   try { found = await deps.whatsappTemplates.list(); } catch (e) { throw new HttpError(502, (e as Error).message); }
+  try { numbers = await deps.whatsappTemplates.phoneNumbers(); } catch { /* not fatal: shown as unknown */ }
+  const phoneNumberId = deps.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
   return c.json({
+    language: s.language,
+    // The sending number must be in the same WhatsApp account as the templates, or every send fails with 132001.
+    account: { id: deps.env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? '', phoneNumberId, numberInAccount: numbers ? numbers.some((n) => n.id === phoneNumberId) : null, numbers: numbers ?? [] },
     items: WA_TEMPLATES.map((t) => {
       const name = s.templates[t.key];
-      const m = found.find((x) => x.name === name && x.language === s.language) ?? found.find((x) => x.name === name);
-      return { key: t.key, name, status: m?.status ?? 'MISSING', language: m?.language ?? s.language, category: m?.category ?? t.category, rejectedReason: m?.rejectedReason ?? '' };
+      // Only the language the site sends counts: en and en_US are different templates to Meta.
+      const m = found.find((x) => x.name === name && x.language === s.language);
+      const others = found.filter((x) => x.name === name && x.language !== s.language).map((x) => ({ language: x.language, status: x.status }));
+      return { key: t.key, name, status: m?.status ?? 'MISSING', language: s.language, otherLanguages: others, category: m?.category ?? t.category, rejectedReason: m?.rejectedReason ?? '' };
     }),
   });
 });

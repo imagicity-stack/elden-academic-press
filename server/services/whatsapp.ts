@@ -242,7 +242,10 @@ export async function processWhatsApp(deps: Deps, limit = 60) {
       await db.update(whatsappMessages).set({ waId: r.id, updatedAt: now() }).where(eq(whatsappMessages.id, m.id));
       sent++;
     } catch (e) {
-      await db.update(whatsappMessages).set({ status: 'failed', error: (e as Error).message.slice(0, 300), updatedAt: now() }).where(eq(whatsappMessages.id, m.id));
+      const msg = (e as Error).message;
+      // 132001: no approved template with this name in this language, in the sending number's account.
+      const hint = /132001/.test(msg) ? ` (Meta has no approved "${m.template}" in "${s.language}" for this number's account: see Admin → WhatsApp → Settings → Templates)` : '';
+      await db.update(whatsappMessages).set({ status: 'failed', error: (msg + hint).slice(0, 500), updatedAt: now() }).where(eq(whatsappMessages.id, m.id));
     }
   }
   return sent;
