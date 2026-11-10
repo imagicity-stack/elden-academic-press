@@ -14,7 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
 import type { Q } from '../db/client.js';
-import { callSettings, calls, checkoutLeads, doNotCall, orderItems, orders, products, productVariants } from '../db/schema.js';
+import { callSettings, calls, checkoutLeads, doNotCall, orderItems, orders, products, productVariants, subscribers } from '../db/schema.js';
 import { esc, inr } from '../lib/format.js';
 import { addressList, sendSafely } from '../lib/mail.js';
 import { callResultFrom, type CallResult } from '../lib/callProvider.js';
@@ -173,24 +173,33 @@ export async function planCalls(deps: Deps, s: CallSettings) {
   }
 
   if (s.feedback.enabled) {
-    // Paid `daysAfter` days ago (looking back a week), whose checkout had the consent.
+    // Paid `daysAfter` days ago (looking back a week), whose checkout had the consent. With
+    // allBuyers, also orders with no saved checkout (before the call box, or never typed in), looking
+    // further back; someone who unticked the box is never called.
     const to = new Date(t.getTime() - s.feedback.daysAfter * 86_400_000);
-    const from = new Date(to.getTime() - 7 * 86_400_000);
+    const from = new Date(to.getTime() - (s.feedback.allBuyers ? Math.max(7, s.feedback.lookbackDays) : 7) * 86_400_000);
     const due = await db.select({ order: orders, lead: checkoutLeads }).from(orders)
-      .innerJoin(checkoutLeads, and(eq(checkoutLeads.orderId, orders.id), eq(checkoutLeads.consent, true)))
+      .leftJoin(checkoutLeads, eq(checkoutLeads.orderId, orders.id))
       .where(and(inArray(orders.paymentStatus, ['paid', 'partially_refunded']), isNull(orders.cancelledAt), gte(orders.paidAt, from), lte(orders.paidAt, to),
-        sql`not exists (select 1 from ${calls} where ${calls.orderId} = ${orders.id} and ${calls.kind} = 'feedback')`)).limit(200);
+        s.feedback.allBuyers ? or(isNull(checkoutLeads.id), eq(checkoutLeads.consent, true)) : eq(checkoutLeads.consent, true),
+        sql`not exists (select 1 from ${calls} where ${calls.orderId} = ${orders.id} and ${calls.kind} = 'feedback')`))
+      .orderBy(asc(orders.paidAt)).limit(200);
     const newBooks = s.feedback.newBookIds.length
       ? await db.select({ title: products.title, blurb: products.blurb }).from(products).where(and(inArray(products.id, s.feedback.newBookIds), eq(products.status, 'active')))
       : [];
     for (const { order, lead } of due) {
-      if (await isDoNotCall(db, lead.phone)) continue;
+      const phone = lead?.phone ?? callableNumber(order.phone);
+      if (!phone || await isDoNotCall(db, phone)) continue;
+      // Several orders: one feedback call a month is enough.
+      const [recent] = await db.select({ id: calls.id }).from(calls)
+        .where(and(eq(calls.phone, phone), eq(calls.kind, 'feedback'), gte(calls.createdAt, new Date(t.getTime() - 30 * 86_400_000)))).limit(1);
+      if (recent) continue;
       // A printed order that hasn't arrived yet waits for delivery.
       if (order.requiresShipping && order.fulfillmentStatus !== 'delivered' && !order.deliveredAt && order.fulfillmentStatus !== 'shipped') continue;
       const items = await db.select({ title: orderItems.title, kind: orderItems.variantKind }).from(orderItems).where(eq(orderItems.orderId, order.id));
       const kinds = new Set(items.map((i) => (i.kind === 'digital' ? 'ebook' : 'print')));
       const res = await db.insert(calls).values({
-        kind: 'feedback', phone: lead.phone, name: order.name, leadId: lead.id, orderId: order.id, dueAt: nextCallingTime(s, t),
+        kind: 'feedback', phone, name: order.name, leadId: lead?.id ?? null, orderId: order.id, dueAt: nextCallingTime(s, t),
         variables: {
           customer_name: firstName(order.name),
           books_bought: joinSpoken([...new Set(items.map((i) => i.title))]),
@@ -407,7 +416,10 @@ export async function callStats(db: Q, since: Date) {
   }).from(calls).where(gte(calls.createdAt, since)).groupBy(sql`1`).orderBy(sql`1`);
   const [leads] = await db.select({ n: sql<number>`count(*)::int`, paid: sql<number>`count(${checkoutLeads.orderId})::int` })
     .from(checkoutLeads).where(and(eq(checkoutLeads.consent, true), gte(checkoutLeads.createdAt, since)));
+  const [callable] = await db.select({ n: sql<number>`count(*)::int` }).from(subscribers)
+    .where(and(eq(subscribers.status, 'subscribed'), eq(subscribers.callConsent, true)));
   return {
+    subscribersCallable: callable?.n ?? 0,
     cart: byKind('cart'), feedback: byKind('feedback'),
     recovered: { orders: recovered?.n ?? 0, revenue: recovered?.revenue ?? 0 },
     couponsGiven: coupon?.n ?? 0,

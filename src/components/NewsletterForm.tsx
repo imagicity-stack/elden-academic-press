@@ -16,11 +16,13 @@ export function NewsletterForm({ source, dark = false }: { source: Source; dark?
   const [result, setResult] = useState<'already' | 'subscribed' | null>(null);
   // Ticked by default; unticking it stops the sign-up.
   const [agree, setAgree] = useState(true);
+  // Permission to call or WhatsApp about new books: also ticked by default.
+  const [callOk, setCallOk] = useState(true);
   const { busy, error, sent, setSent, submit } = useSubmit(async (form) => {
     const f = Object.fromEntries(new FormData(form)) as Record<string, string>;
     const eventId = newEventId();
     const r = await api<{ status: 'already' | 'subscribed' }>('/newsletter/subscribe', {
-      body: { name: f.name || undefined, email: f.email, phone: f.phone, source, consent: agree, website: f.website || undefined },
+      body: { name: f.name || undefined, email: f.email, phone: f.phone, source, consent: agree, callConsent: callOk, website: f.website || undefined },
       headers: { 'X-Meta-Event-Id': eventId },
     });
     rememberUser({ email: f.email, phone: f.phone, name: f.name });
@@ -38,7 +40,7 @@ export function NewsletterForm({ source, dark = false }: { source: Source; dark?
         <p>{result === 'already'
           ? 'We’ll keep sending news about new books and offers to that address.'
           : 'Thanks! News about new books, sample papers and offers is on its way to your inbox.'}</p>
-        <button type="button" className="text-link" onClick={() => { setSent(false); setResult(null); setAgree(true); }}>Use another address</button>
+        <button type="button" className="text-link" onClick={() => { setSent(false); setResult(null); setAgree(true); setCallOk(true); }}>Use another address</button>
       </div>
     );
   }
@@ -55,6 +57,11 @@ export function NewsletterForm({ source, dark = false }: { source: Source; dark?
         <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} required />
         <span className="tick__box" aria-hidden="true" />
         <span>Yes, email me about new books, sample papers and offers. I can unsubscribe any time.</span>
+      </label>
+      <label className="tick nl-form__agree">
+        <input type="checkbox" checked={callOk} onChange={(e) => setCallOk(e.target.checked)} />
+        <span className="tick__box" aria-hidden="true" />
+        <span>Elden Academic Press may call or WhatsApp me about new books</span>
       </label>
       <input type="text" name="website" tabIndex={-1} autoComplete="off" className="hp" aria-hidden="true" />
       {error && <div className="form-error" role="alert">{error}</div>}

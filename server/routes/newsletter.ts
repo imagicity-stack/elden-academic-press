@@ -23,11 +23,13 @@ newsletter.post('/subscribe', async (c) => {
     /** Signed up through this popup: counted as its sign-up. */
     popupId: z.uuid().optional(),
     consent: z.literal(true, { error: 'Tick the box to confirm you’d like our emails' }),
+    /** "Elden Academic Press may call or WhatsApp me about new books" (forms that show it). */
+    callConsent: z.boolean().optional(),
     /** Honeypot: real people never fill this in. */
     website: z.string().max(0).optional(),
   }));
   await rateLimit(deps.db, `subscribe:${c.get('ip')}`, 10, 3600);
-  const r = await subscribe(deps, { email: input.email, phone: input.phone, name: input.name, source: input.source, ip: c.get('ip') });
+  const r = await subscribe(deps, { email: input.email, phone: input.phone, name: input.name, source: input.source, ip: c.get('ip'), callConsent: input.callConsent });
   if (!r.already) {
     if (input.source === 'popup' && input.popupId) await countPopup(deps.db, input.popupId, 'conversions', deps.now());
     await welcome(deps, r.row, 'newsletter');

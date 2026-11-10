@@ -304,12 +304,15 @@ The site notes how each visitor arrived: the link's UTM tags, an ad-click marker
 
 ## 15. Calls (voice agent)
 
-**One-time:** run [`0015_calls.sql`](supabase-updates/0015_calls.sql) in Supabase → SQL Editor before this version goes live.
+**One-time:** run [`0015_calls.sql`](supabase-updates/0015_calls.sql) and then [`0016_subscriber_call_consent.sql`](supabase-updates/0016_subscriber_call_consent.sql) in Supabase → SQL Editor before this version goes live.
 
 Two voice agents on Sarvam (persona “Priya”, Hindi and English), each with its own number: **Cart Recovery on +91 79658 60108** and **Order Feedback on +91 79658 60105**. The website decides who to call and when.
 - **Incoming calls:** a customer who rings either number reaches that agent. It greets them, helps (a missed call from us, a question, a problem with an order) and transfers to 7370002080 when a person is needed. The website records the call in Admin → Calls marked *Incoming*, linked by the caller's number to their saved checkout: “send me the link” emails it, “don't call me” adds them to Do not call, a reported problem emails your order alert addresses, and “call me back” repeats our own call for that checkout. Incoming calls are counted apart and don't change the answer rates.
 - **Cart recovery:** someone leaves *“Elden Academic Press may call or WhatsApp me about this order”* ticked at checkout (it starts ticked; unticking is remembered), gives a mobile number and doesn't pay. After the set delay (default 60 minutes) the agent calls, helps them finish, and only if they hesitate twice offers the coupon you set. If they want the link, they get a “Finish your order” email that restores their cart (and the coupon).
 - **Order feedback:** the set number of days after a paid order from a checkout with that tick (default 3; printed books only once shipped), the agent asks how it went and mentions the new titles you choose. A reported problem emails your order alert addresses and shows as an open issue.
+
+- **Earlier buyers:** *Settings → Order feedback → Also call earlier buyers* adds feedback calls for paid orders from the last 7 to 90 days whose buyer never saw the call box (orders from before it existed). Anyone who unticked it is never called, and a number gets at most one feedback call a month however many orders it has. Off by default.
+- **Newsletter subscribers:** the sign-up form has a second box, ticked by default, *“Elden Academic Press may call or WhatsApp me about new books”*. It's recorded with the date; unsubscribing withdraws it. Admin → Calls shows how many subscribers allow calls. Nobody is called from this list yet: a “new books” call needs its own agent (and ideally a registered telemarketing number, since it's a sales call).
 
 Nothing is saved before payment without the tick, and nobody is ever called without it. Calls go out only in the calling hours (default 10:00–19:00, Monday to Saturday, India time), with retries (default 2, two hours apart). Anyone who says “don't call” on a call, or whom you add in **Do not call**, is never called again. Unticking the box cancels their pending call.
 

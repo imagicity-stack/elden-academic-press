@@ -49,6 +49,11 @@ export interface CallSettings {
     daysAfter: number;
     /** Product ids of new titles the agent may mention. */
     newBookIds: string[];
+    /** Also call buyers who never saw the call box (orders before it existed, or other checkouts),
+     *  unless they unticked it. A call about their own order, so a service call. */
+    allBuyers: boolean;
+    /** With allBuyers: how far back to look for paid orders (days). */
+    lookbackDays: number;
   };
   /** Calling hours, India time. */
   hours: { start: string; end: string; days: Day[] };
@@ -60,7 +65,7 @@ export interface CallSettings {
 export const DEFAULT_CALL_SETTINGS: CallSettings = {
   enabled: false,
   cart: { enabled: true, delayMinutes: 60, discountCode: '', discountOffer: '' },
-  feedback: { enabled: true, daysAfter: 3, newBookIds: [] },
+  feedback: { enabled: true, daysAfter: 3, newBookIds: [], allBuyers: false, lookbackDays: 30 },
   hours: { start: '10:00', end: '19:00', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
   maxRetries: 2,
   retryAfterMinutes: 120,
