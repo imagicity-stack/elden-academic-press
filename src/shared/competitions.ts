@@ -31,8 +31,10 @@ export interface Competition {
   about: string;
   /** A picture for the card and the page (a full https:// URL, or a /assets/… path in public/). */
   image?: string;
-  /** A smaller copy of image for cards (optional). */
+  /** A smaller copy of image for cards (optional): 800 px wide. */
   imageSmall?: string;
+  /** A copy of image sized for phones (optional): 1080 px wide. */
+  imageMedium?: string;
   /** The picture for link previews on WhatsApp, Facebook and X: ideally a 1200 × 630 JPG (falls back to image). */
   shareImage?: string;
   /** India time, e.g. '2026-12-01T00:00:00+05:30'. Registration is open from opensAt until closesAt. */
@@ -67,6 +69,7 @@ export const COMPETITIONS: Competition[] = [
     about: 'Form a team, create an original hero and make a comic of at least 40 pages by 5 December 2026, 11:59 PM IST. The story brief is revealed once your team is approved.',
     image: '/assets/competitions/doomsday-diaries.webp',
     imageSmall: '/assets/competitions/doomsday-diaries-800.webp',
+    imageMedium: '/assets/competitions/doomsday-diaries-1080.webp',
     shareImage: '/assets/competitions/doomsday-diaries-share.jpg',
     opensAt: '2026-11-06T00:00:00+05:30',
     closesAt: '2026-12-05T23:59:59+05:30',
@@ -117,6 +120,12 @@ export const COMPETITIONS: Competition[] = [
 ];
 
 export const findCompetition = (slug: string) => COMPETITIONS.find((c) => c.slug === slug) ?? null;
+
+/** The picture's sizes for an <img srcset>, so a phone downloads the copy that fits its screen (undefined: only one size). */
+export function imageSrcSet(c: Pick<Competition, 'image' | 'imageSmall' | 'imageMedium'>): string | undefined {
+  const sizes = [[c.imageSmall, 800], [c.imageMedium, 1080], [c.image, 1400]].filter((x): x is [string, number] => Boolean(x[0]));
+  return sizes.length > 1 ? sizes.map(([url, w]) => `${url} ${w}w`).join(', ') : undefined;
+}
 export const listedCompetitions = () => COMPETITIONS.filter((c) => !c.unlisted);
 
 export type Phase = 'upcoming' | 'open' | 'closed';

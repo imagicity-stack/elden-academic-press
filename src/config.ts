@@ -12,8 +12,12 @@ export const config = {
   showElmasterInNav: true,
   contactEmail: 'hello@eldenap.in',
   headOffice: 'Hazaribagh, Jharkhand',
-  /** Play the opening book animation (once per browser session). */
-  showIntro: true,
+  /**
+   * Play the opening book animation (once per browser session). Off: it held every new visitor,
+   * including everyone arriving from an ad (each opens a new session), for about 5 seconds
+   * before they could see the page.
+   */
+  showIntro: false,
 
   /** The company behind the store, shown in the footer, contact page and policies. */
   company: {

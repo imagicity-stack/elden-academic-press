@@ -6,6 +6,9 @@ import { accessToken, devMode, devSignIn, LINK_TYPE, mfaEnroll, mfaState, mfaVer
 import { Btn, Loading, ToastProvider } from './ui';
 import { COMPETITIONS } from '../shared/competitions';
 import './admin.css';
+import { loadGoogleFonts } from '../googleFonts';
+
+loadGoogleFonts();
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Orders = lazy(() => import('./pages/Orders'));

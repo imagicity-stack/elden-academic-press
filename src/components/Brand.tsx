@@ -2,7 +2,8 @@
 export function Logo({ light = false }: { light?: boolean }) {
   return (
     <span className={'logo' + (light ? ' logo--light' : '')}>
-      <img src={light ? '/assets/elden-mark-light.png' : '/assets/elden-mark.png'} alt="" className="logo__mark" />
+      {/* Small copies (shown 38 px tall); the full-size marks stay for link previews and the admin. */}
+      <img src={light ? '/assets/elden-mark-light-sm.png' : '/assets/elden-mark-sm.png'} width={86} height={114} alt="" className="logo__mark" />
       <span className="logo__words">
         <span className="logo__name">ELDEN</span>
         <span className="logo__sub">ACADEMIC PRESS</span>

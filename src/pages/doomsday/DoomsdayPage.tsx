@@ -7,7 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../store/api';
 import { authApi, useAccount } from '../../store/account';
-import { findCompetition, istDateTime, type Competition } from '../../shared/competitions';
+import { findCompetition, imageSrcSet, istDateTime, type Competition } from '../../shared/competitions';
 import { dayLabel, type TeamConfig } from '../../shared/teams';
 import { RichText } from '../../components/RichText';
 import { Countdown } from '../../components/Countdown';
@@ -47,7 +47,7 @@ function Banner({ c, info, className }: { c: TeamComp; info: Info | null; classN
   if (info?.bannerUrl) return <img src={info.bannerUrl} alt={alt} className={className} />;
   if (!c.image) return null;
   return (
-    <img src={c.image} srcSet={c.imageSmall ? `${c.imageSmall} 800w, ${c.image} 1400w` : undefined} sizes="(min-width: 960px) 46vw, 100vw"
+    <img src={c.image} srcSet={imageSrcSet(c)} sizes="(min-width: 960px) 46vw, calc(100vw - 2rem)"
       width={1400} height={1050} alt={alt} className={className} fetchPriority="high" />
   );
 }

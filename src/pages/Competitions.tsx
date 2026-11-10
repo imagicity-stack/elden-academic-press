@@ -5,7 +5,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { authApi, useAccount, type Profile } from '../store/account';
 import { errorMessage, ApiError } from '../store/api';
-import { CLASS_OPTIONS, findCompetition, istDateTime, listedCompetitions, phaseOf, PHASE_LABEL, type Competition, type Field, type Phase } from '../shared/competitions';
+import { CLASS_OPTIONS, findCompetition, imageSrcSet, istDateTime, listedCompetitions, phaseOf, PHASE_LABEL, type Competition, type Field, type Phase } from '../shared/competitions';
 import { Countdown } from '../components/Countdown';
 import { GoogleSignIn } from '../components/GoogleSignIn';
 import { ProfileForm } from '../components/ProfileForm';
@@ -45,8 +45,8 @@ export function CompetitionsPage() {
                   <Link to={`/competitions/${c.slug}`} className={'comp-card' + (wide ? ' comp-card--wide' : '') + (c.theme ? ` comp-card--${c.theme}` : '')}>
                     {c.image && (
                       <div className="comp-card__media">
-                        <img className="comp-card__img" src={c.imageSmall || c.image} srcSet={c.imageSmall ? `${c.imageSmall} 800w, ${c.image} 1400w` : undefined}
-                          sizes={wide ? '(min-width: 720px) 55vw, 100vw' : '(min-width: 1100px) 33vw, (min-width: 720px) 50vw, 100vw'} alt="" loading={i === 0 ? 'eager' : 'lazy'} />
+                        <img className="comp-card__img" src={c.imageSmall || c.image} srcSet={imageSrcSet(c)}
+                          sizes={wide ? '(min-width: 720px) 55vw, calc(100vw - 2rem)' : '(min-width: 1100px) 33vw, (min-width: 720px) 50vw, calc(100vw - 2rem)'} alt="" loading={i === 0 ? 'eager' : 'lazy'} />
                       </div>
                     )}
                     <div className="comp-card__body">
