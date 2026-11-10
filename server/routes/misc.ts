@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import { getSettings } from '../services/catalog.js';
 import { sendEnquiryNotice } from '../services/emails.js';
 import { processNewsletter } from '../services/newsletter.js';
+import { runCalls } from '../services/calls.js';
 import { expireOrders } from '../services/orders.js';
 import { eventIdHeader, report, visitOf } from '../services/tracking.js';
 
@@ -67,6 +68,7 @@ cron.use('*', async (c, next) => {
 
 cron.get('/expire-orders', async (c) => c.json({ expired: await expireOrders(c.get('deps')) }));
 cron.get('/newsletter', async (c) => c.json(await processNewsletter(c.get('deps'))));
+cron.get('/calls', async (c) => c.json(await runCalls(c.get('deps'))));
 
 /* ---------------- Local development only ---------------- */
 

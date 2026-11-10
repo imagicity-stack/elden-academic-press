@@ -1,0 +1,262 @@
+// Calls by the voice agents: saving checkouts (with consent only), queueing cart-recovery and
+// feedback calls, calling hours, the do-not-call list, dialling, and acting on each call's result.
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { calls, checkoutLeads, orders, products } from '../server/db/schema.js';
+import { callResultFrom, memoryCalls } from '../server/lib/callProvider.js';
+import { runCalls } from '../server/services/calls.js';
+import { callableNumber, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime } from '../src/shared/calls.js';
+import { address, contact, setup, supabaseToken } from './helpers.js';
+
+let t: Awaited<ReturnType<typeof setup>>;
+let provider: ReturnType<typeof memoryCalls>;
+// Tuesday 10 November 2026, 11:00 in India: inside the default hours (10 to 7, Monday to Saturday).
+const TUE_11 = new Date('2026-11-10T11:00:00+05:30');
+const at = (iso: string) => t.setClock(new Date(iso));
+beforeEach(async () => {
+  t = await setup({ env: { SITE_URL: 'https://eldenap.in', CALLS_WEBHOOK_SECRET: 'hook-secret-123' } });
+  provider = memoryCalls();
+  t.deps.calls = provider;
+  t.setClock(TUE_11);
+});
+
+const OWNER = { sub: '11111111-1111-4111-8111-111111111111', email: 'owner@eldenap.in' };
+const admin = async () => ({ Authorization: `Bearer ${await supabaseToken({ ...OWNER, provider: 'email', aal: 'aal2' })}` });
+async function book() {
+  const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
+  return p;
+}
+const lead = async (o: Partial<{ clientKey: string; phone: string; consent: boolean; email: string }> = {}) => {
+  const p = await book();
+  return t.call('POST', '/checkout/lead', { body: { clientKey: 'browser-key-0000000001', name: 'Asha Kumari', email: 'asha@example.com', phone: '98765 43210', consent: true, items: [{ productId: p.id, kind: 'print', quantity: 2 }], ...o } });
+};
+const settings = async (s: Record<string, unknown>) => {
+  const r = await t.call('PUT', '/admin/calls/settings', { headers: await admin(), body: s });
+  expect(r.status).toBe(200);
+};
+const webhook = (body: unknown, secret = 'hook-secret-123') => t.call('POST', `/calls/webhook/${secret}`, { body });
+const allCalls = () => t.db.select().from(calls);
+
+describe('the rules', () => {
+  it('calling hours and numbers', () => {
+    const s = DEFAULT_CALL_SETTINGS;
+    expect(inCallingHours(s, TUE_11)).toBe(true);
+    expect(inCallingHours(s, new Date('2026-11-10T09:59:00+05:30'))).toBe(false);
+    expect(inCallingHours(s, new Date('2026-11-10T19:00:00+05:30'))).toBe(false);
+    expect(inCallingHours(s, new Date('2026-11-15T12:00:00+05:30'))).toBe(false); // Sunday
+    expect(nextCallingTime(s, new Date('2026-11-10T20:00:00+05:30')).toISOString()).toBe(new Date('2026-11-11T10:00:00+05:30').toISOString());
+    expect(nextCallingTime(s, new Date('2026-11-14T19:30:00+05:30')).toISOString()).toBe(new Date('2026-11-16T10:00:00+05:30').toISOString()); // Sat evening → Mon
+    expect(callableNumber('098765 43210')).toBe('+919876543210');
+    expect(callableNumber('+91 98765 43210')).toBe('+919876543210');
+    expect(callableNumber('12345')).toBeNull();
+    expect(callableNumber('0612 345678')).toBeNull(); // landline
+  });
+
+  it('reads a call-end report whatever the wrapper', () => {
+    const r = callResultFrom({ data: { interaction_id: 'abc', status: 'completed', duration: 64, metadata: { call_id: '6f1c1f2e-1111-4111-8111-111111111111' }, agent_variables: { call_outcome: 'will_order', wants_link: 'true' }, transcript: [{ role: 'agent', text: 'Namaste' }] } });
+    expect(r).toMatchObject({ callId: '6f1c1f2e-1111-4111-8111-111111111111', providerCallId: 'abc', status: 'answered', durationSeconds: 64, variables: { call_outcome: 'will_order' } });
+    expect(r.transcript).toBe('agent: Namaste');
+    expect(callResultFrom({ status: 'no-answer' }).status).toBe('not_answered');
+    expect(callResultFrom({ status: 'busy' }).status).toBe('not_answered');
+  });
+});
+
+describe('checkout leads', () => {
+  it('are saved only with consent and a mobile number; withdrawing consent stops the call', async () => {
+    expect((await lead({ consent: false })).json).toEqual({ saved: false });
+    expect((await lead({ phone: '12345' })).json).toEqual({ saved: false });
+    expect(await t.db.select().from(checkoutLeads)).toHaveLength(0);
+    expect((await lead()).json).toEqual({ saved: true });
+    const [l] = await t.db.select().from(checkoutLeads);
+    expect(l).toMatchObject({ phone: '+919876543210', consent: true, items: [{ kind: 'print', quantity: 2, title: 'Mathematics Today' }] });
+    expect(l.total).toBeGreaterThan(0);
+    expect((await lead({ phone: '91234 56789' })).json.saved).toBe(true); // same checkout: updated, not duplicated
+    expect(await t.db.select().from(checkoutLeads)).toHaveLength(1);
+    // A queued call for it is cancelled when they untick.
+    at('2026-11-10T12:30:00+05:30');
+    await runCalls(t.deps);
+    expect((await allCalls())[0]?.status).toBe('queued');
+    await lead({ consent: false });
+    expect((await allCalls())[0]).toMatchObject({ status: 'cancelled' });
+  });
+
+  it('the finish-your-order link gives the cart back, until it is paid', async () => {
+    await lead();
+    const [l] = await t.db.select().from(checkoutLeads);
+    const r = await t.call('GET', `/checkout/resume/${l.resumeToken}`);
+    expect(r.json).toMatchObject({ name: 'Asha Kumari', phone: '9876543210', items: [{ kind: 'print', quantity: 2 }] });
+    expect((await t.call('GET', '/checkout/resume/not-a-real-token-123')).status).toBe(404);
+  });
+});
+
+describe('cart recovery', () => {
+  it('queues a call after the delay, dials it in hours with the cart details, and skips it once paid', async () => {
+    await settings({ enabled: true, cart: { enabled: true, delayMinutes: 60, discountCode: 'COMEBACK10', discountOffer: '10 percent off the whole order' } });
+    await lead();
+    expect((await runCalls(t.deps)).queued).toBe(0); // too soon
+    at('2026-11-10T12:05:00+05:30');
+    const run = await runCalls(t.deps);
+    expect(run).toMatchObject({ queued: 1, dialled: 1, connected: true, inHours: true });
+    expect(provider.started[0]).toMatchObject({ kind: 'cart', phone: '+919876543210', variables: { customer_name: 'Asha', cart_items: 'Mathematics Today (printed, 2 copies)', discount_code: 'COMEBACK10', discount_offer: '10 percent off the whole order' } });
+    expect(provider.started[0].variables.cart_total).toMatch(/^[\d,]+ rupees$/);
+    expect((await allCalls())[0]).toMatchObject({ status: 'dialling', attempts: 1, providerCallId: 'test-1' });
+    // Running again doesn't queue or dial it twice.
+    expect(await runCalls(t.deps)).toMatchObject({ queued: 0, dialled: 0 });
+  });
+
+  it('does nothing while switched off or outside the hours, and never calls the do-not-call list', async () => {
+    await lead();
+    at('2026-11-10T12:05:00+05:30');
+    expect(await runCalls(t.deps)).toMatchObject({ queued: 1, dialled: 0, enabled: false }); // master switch off by default
+    await settings({ enabled: true });
+    at('2026-11-10T20:00:00+05:30');
+    expect((await runCalls(t.deps)).dialled).toBe(0);
+    const h = await admin();
+    expect((await t.call('POST', '/admin/calls/do-not-call', { headers: h, body: { phone: '98765 43210', reason: 'asked by email' } })).status).toBe(200);
+    expect((await allCalls())[0]).toMatchObject({ status: 'skipped', note: 'On the do-not-call list' });
+    at('2026-11-11T10:30:00+05:30');
+    expect((await runCalls(t.deps)).dialled).toBe(0);
+    expect(provider.started).toHaveLength(0);
+  });
+
+  it('a lead who pays before the call is never called', async () => {
+    await settings({ enabled: true });
+    await lead();
+    at('2026-11-10T11:30:00+05:30');
+    const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
+    const o = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }], contact, shipping: address } });
+    await t.call('POST', '/checkout/verify', { body: t.razorpay.simulatePayment(o.json.razorpay.orderId) });
+    const [l] = await t.db.select().from(checkoutLeads);
+    expect(l.orderId).toBeTruthy();
+    at('2026-11-10T13:00:00+05:30');
+    expect(await runCalls(t.deps)).toMatchObject({ queued: 0, dialled: 0 });
+  });
+});
+
+describe('call results', () => {
+  async function dialled() {
+    await settings({ enabled: true, cart: { enabled: true, delayMinutes: 60, discountCode: 'COMEBACK10', discountOffer: '10 percent off' } });
+    await lead();
+    at('2026-11-10T12:05:00+05:30');
+    await runCalls(t.deps);
+    return (await allCalls())[0];
+  }
+
+  it('"send me the link" emails the finish-your-order link (with the coupon if given)', async () => {
+    const c = await dialled();
+    t.mailer.sent.length = 0;
+    expect((await webhook({ metadata: { call_id: c.id }, status: 'completed', duration: 92, variables: { call_outcome: 'will_order', wants_link: true, discount_offered: true, objection: 'Price' }, transcript: 'agent: Namaste' })).json).toEqual({ ok: true, matched: true });
+    const [done] = await allCalls();
+    expect(done).toMatchObject({ status: 'done', outcome: 'will_order', durationSeconds: 92, transcript: 'agent: Namaste' });
+    const mail = t.mailer.sent.find((m) => m.to === 'asha@example.com')!;
+    expect(mail.subject).toBe('Your books are waiting: finish your order');
+    expect(mail.html).toContain('https://eldenap.in/checkout?resume=');
+    expect(mail.html).toContain('COMEBACK10');
+  });
+
+  it('"do not call" joins the list; "call me later" queues it again; no answer retries, then gives up', async () => {
+    const c = await dialled();
+    await webhook({ metadata: { call_id: c.id }, status: 'completed', variables: { call_outcome: 'callback', callback_time: 'tomorrow evening' } });
+    let [row] = await allCalls();
+    expect(row).toMatchObject({ status: 'queued', outcome: 'callback' });
+    expect(row.note).toContain('tomorrow evening');
+    expect(row.dueAt.getTime()).toBeGreaterThan(new Date('2026-11-11T07:00:00+05:30').getTime());
+    // Next day: called again, nobody answers twice more, then no more tries.
+    at('2026-11-11T10:30:00+05:30');
+    await runCalls(t.deps);
+    await webhook({ metadata: { call_id: c.id }, status: 'no-answer' });
+    [row] = await allCalls();
+    expect(row).toMatchObject({ status: 'queued', note: 'No answer' });
+    at('2026-11-11T13:00:00+05:30');
+    await runCalls(t.deps);
+    await webhook({ metadata: { call_id: c.id }, status: 'busy' });
+    [row] = await allCalls();
+    expect(row.status).toBe('no_answer'); // 3 attempts: the first, and 2 retries
+    // Asked not to be called: on the list, never queued again.
+    const r = await webhook({ metadata: { call_id: c.id }, status: 'completed', variables: { call_outcome: 'do_not_call' } });
+    expect(r.json.matched).toBe(true);
+    const list = await t.call('GET', '/admin/calls/do-not-call', { headers: await admin() });
+    expect(list.json.items).toMatchObject([{ phone: '+919876543210', source: 'customer' }]);
+  });
+
+  it('refuses a webhook without the secret, and ignores unknown calls', async () => {
+    expect((await webhook({ status: 'completed' }, 'wrong')).status).toBe(401);
+    expect((await webhook({ metadata: { call_id: '00000000-0000-4000-8000-000000000000' }, status: 'completed' })).json).toEqual({ ok: true, matched: false });
+  });
+
+  it('a call that never reports back counts as not answered after an hour', async () => {
+    await dialled();
+    at('2026-11-10T13:10:00+05:30');
+    await runCalls(t.deps);
+    const [row] = await allCalls();
+    expect(row).toMatchObject({ status: 'queued', attempts: 1, note: 'No result from the provider' }); // tried again after retryAfterMinutes
+  });
+
+  it('a failing provider is recorded and retried', async () => {
+    await settings({ enabled: true });
+    provider.fail = true;
+    await lead();
+    at('2026-11-10T12:05:00+05:30');
+    await runCalls(t.deps);
+    const [row] = await allCalls();
+    expect(row).toMatchObject({ status: 'queued', attempts: 1 });
+    expect(row.note).toContain('provider down');
+  });
+});
+
+describe('order feedback', () => {
+  it('calls buyers who agreed, some days after a delivered order; a reported problem is flagged and emailed', async () => {
+    await settings({ enabled: true, cart: { enabled: false, delayMinutes: 60, discountCode: '', discountOffer: '' }, feedback: { enabled: true, daysAfter: 3, newBookIds: [] } });
+    await lead();
+    const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
+    const o = await t.call('POST', '/checkout', { body: { items: [{ productId: p.id, kind: 'print', quantity: 1 }], contact, shipping: address } });
+    await t.call('POST', '/checkout/verify', { body: t.razorpay.simulatePayment(o.json.razorpay.orderId) });
+    await t.db.update(orders).set({ fulfillmentStatus: 'delivered', deliveredAt: new Date('2026-11-12T10:00:00+05:30') });
+    at('2026-11-12T11:00:00+05:30');
+    expect((await runCalls(t.deps)).queued).toBe(0); // too soon
+    at('2026-11-13T11:30:00+05:30');
+    expect(await runCalls(t.deps)).toMatchObject({ queued: 1, dialled: 1 });
+    expect(provider.started[0]).toMatchObject({ kind: 'feedback', variables: { customer_name: 'Asha', books_bought: 'Mathematics Today', order_type: 'print', new_books: '' } });
+    const [c] = await allCalls();
+    t.mailer.sent.length = 0;
+    await webhook({ metadata: { call_id: c.id }, status: 'completed', variables: { call_outcome: 'feedback_given', rating: 2, issue_reported: 'true', issue_detail: 'Two pages were torn.' } });
+    const [done] = await allCalls();
+    expect(done).toMatchObject({ status: 'done', issueOpen: true, outcome: 'feedback_given' });
+    expect(t.mailer.sent.some((m) => m.subject.startsWith('Customer reported a problem') && m.html.includes('Two pages were torn.'))).toBe(true);
+    // The admin marks it handled.
+    const h = await admin();
+    expect((await t.call('GET', '/admin/calls?issues=1', { headers: h })).json.total).toBe(1);
+    await t.call('POST', `/admin/calls/${c.id}/resolve`, { headers: h });
+    expect((await t.call('GET', '/admin/calls?issues=1', { headers: h })).json.total).toBe(0);
+    // Not called twice for the same order.
+    at('2026-11-14T11:30:00+05:30');
+    expect((await runCalls(t.deps)).queued).toBe(0);
+  });
+});
+
+describe('Admin → Calls', () => {
+  it('settings, stats, call detail; staff only', async () => {
+    expect((await t.call('GET', '/admin/calls/settings')).status).toBe(401);
+    const h = await admin();
+    const s = await t.call('GET', '/admin/calls/settings', { headers: h });
+    expect(s.json.settings).toMatchObject({ enabled: false, hours: { start: '10:00', end: '19:00' } });
+    expect(s.json.status).toMatchObject({ connected: true, webhook: true, inHours: true });
+    expect((await t.call('PUT', '/admin/calls/settings', { headers: h, body: { hours: { start: '19:00', end: '10:00', days: ['Mon'] } } })).status).toBe(400);
+    expect((await t.call('PUT', '/admin/calls/settings', { headers: h, body: { cart: { enabled: true, delayMinutes: 60, discountCode: 'X10', discountOffer: '' } } })).status).toBe(400);
+    await settings({ enabled: true });
+    await lead();
+    at('2026-11-10T12:05:00+05:30');
+    await runCalls(t.deps);
+    const [c] = await allCalls();
+    await webhook({ metadata: { call_id: c.id }, status: 'completed', duration: 70, variables: { call_outcome: 'will_order', discount_offered: 'true' } });
+    const stats = (await t.call('GET', '/admin/calls/stats?days=30', { headers: h })).json;
+    expect(stats.cart).toMatchObject({ total: 1, answered: 1, attempted: 1, answerRate: 1, outcomes: { will_order: 1 } });
+    expect(stats.couponsGiven).toBe(1);
+    const detail = (await t.call('GET', `/admin/calls/${c.id}`, { headers: h })).json;
+    expect(detail.call).toMatchObject({ outcome: 'will_order', durationSeconds: 70 });
+    expect(detail.lead).toMatchObject({ email: 'asha@example.com' });
+    expect((await t.call('GET', '/admin/calls?kind=cart', { headers: h })).json.items).toHaveLength(1);
+  });
+});
+
+vi.setConfig({ testTimeout: 60_000 });

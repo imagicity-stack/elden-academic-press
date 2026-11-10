@@ -44,6 +44,9 @@ const schema = z.object({
    *  of birth, nothing is sent, browser or server. Other accounts aren't affected. Change it here (Vercel), no code. */
   META_MIN_AGE: z.coerce.number().int().min(0).max(100).default(13),
 
+  /** Voice-agent calls (Admin → Calls): the secret in the call-end webhook's address, so only the provider can post results. */
+  CALLS_WEBHOOK_SECRET: optional,
+
   /** The first person to sign in with this email becomes the store owner. */
   ADMIN_OWNER_EMAIL: optional,
   /** Vercel Cron sends this as a bearer token. */

@@ -9,6 +9,7 @@ import { waitUntil } from '@vercel/functions';
 import { supabaseAuthUser, supabaseAuthUsers, type AuthUser } from './lib/authUsers.js';
 import { consoleMailer, resendMailer, smtpMailer, type Mailer } from './lib/mail.js';
 import { metaHttp, type Meta } from './lib/meta.js';
+import type { CallProvider } from './lib/callProvider.js';
 import { razorpayHttp, razorpaySimulator, type Razorpay } from './lib/razorpay.js';
 import { localStorage, supabaseStorage, type Storage } from './lib/storage.js';
 
@@ -28,6 +29,8 @@ export interface Deps {
   authUser?(id: string): Promise<AuthUser | null>;
   /** Meta Conversions API; unset when not configured. */
   meta?: Meta | null;
+  /** Places the voice-agent calls (Admin → Calls); unset until the provider is connected. */
+  calls?: CallProvider | null;
 }
 
 // Kept on globalThis so the dev server's hot reloads reuse one database.

@@ -8,6 +8,7 @@ import { RazorpayError } from './lib/razorpay.js';
 import { account, type Customer } from './routes/account.js';
 import { competitions } from './routes/competitions.js';
 import { competitionInfo, teams } from './routes/teams.js';
+import { publicCalls } from './routes/calls.js';
 import { bookPage, competitionPage } from './routes/og.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
@@ -129,6 +130,7 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/newsletter', newsletter);
   app.route('/popups', publicPopups);
   app.route('/meta', meta);
+  app.route('/', publicCalls);
   app.route('/cron', cron);
   app.route('/dev', dev);
   return app;
