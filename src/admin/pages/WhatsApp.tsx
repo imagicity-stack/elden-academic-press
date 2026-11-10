@@ -254,6 +254,7 @@ function SettingsTab() {
         </dl>
         <TextArea label="Webhook callback URL (Meta app → WhatsApp → Configuration)" readOnly rows={2} value={st.webhookUrl}
           hint="Verify token: the WHATSAPP_VERIFY_TOKEN value. Subscribe to the “messages” field." />
+        <Diagnose />
         <p className="ad-muted">Everything lives in the Elden Academic Press business portfolio. Customers can reply STOP to stop all messages and START to allow them again.</p>
       </Card>
     </div>
@@ -307,5 +308,29 @@ function Templates({ enabled }: { enabled: boolean }) {
           </>
         )}
     </Card>
+  );
+}
+
+/* ---------------- Diagnose ---------------- */
+
+function Diagnose() {
+  const { busy, run } = useAction();
+  const [steps, setSteps] = useState<{ label: string; ok: boolean | null; detail: string }[] | null>(null);
+  const go = () => run('diag', () => adminApi<{ steps: { label: string; ok: boolean | null; detail: string }[] }>('/whatsapp/diagnose')).then((r) => r && setSteps(r.steps));
+  return (
+    <div className="ad-mt">
+      <Btn busy={busy === 'diag'} onClick={go}>Diagnose</Btn>
+      <span className="ad-muted"> Asks Meta, with the site's keys, which number it sends from and where the templates are.</span>
+      {steps && (
+        <ul className="ad-stack-sm ad-mt" style={{ listStyle: 'none', padding: 0 }}>
+          {steps.map((x) => (
+            <li key={x.label}>
+              <Badge tone={x.ok === true ? 'green' : x.ok === false ? 'red' : 'grey'}>{x.ok === true ? 'OK' : x.ok === false ? 'Problem' : '—'}</Badge> <strong>{x.label}</strong>
+              <div className="ad-muted" style={{ overflowWrap: 'anywhere' }}>{x.detail}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

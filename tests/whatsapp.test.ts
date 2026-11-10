@@ -284,6 +284,7 @@ describe('templates', () => {
       async list() { return [{ name: 'elden_order_confirmed', language: 'en', status: 'APPROVED', category: 'UTILITY', rejectedReason: '' }]; },
       async create(x) { created.push(x.name); expect(x.text).not.toMatch(/^\{\{|\}\}$/); return { id: '1', status: 'PENDING' }; },
       async phoneNumbers() { return [{ id: 'other-number', number: '+1 555-000-0000' }]; },
+      async numberInfo() { return {}; },
     };
     const h = await admin();
     const list = await t.call('GET', '/admin/whatsapp/templates', { headers: h });
@@ -302,6 +303,7 @@ describe('template language', () => {
       async list() { return [{ name: 'elden_new_books', language: 'en_US', status: 'APPROVED', category: 'MARKETING', rejectedReason: '' }]; },
       async create() { return { id: '1', status: 'PENDING' }; },
       async phoneNumbers() { return []; },
+      async numberInfo() { return {}; },
     };
     const r = await t.call('GET', '/admin/whatsapp/templates', { headers: await admin() });
     expect(r.json.items.find((x: any) => x.key === 'new_books')).toMatchObject({ status: 'MISSING', otherLanguages: [{ language: 'en_US', status: 'APPROVED' }] });
@@ -313,5 +315,22 @@ describe('template language', () => {
     await lead();
     await pay();
     expect((await msgs())[0].error).toContain('Admin → WhatsApp → Settings → Templates');
+  });
+});
+
+describe('diagnose', () => {
+  it('reports the number the site sends from and whether it is in the templates\' account', async () => {
+    t.deps.env.WHATSAPP_TOKEN = 'tok';
+    t.deps.env.WHATSAPP_PHONE_NUMBER_ID = '111';
+    t.deps.env.WHATSAPP_BUSINESS_ACCOUNT_ID = '999';
+    t.deps.whatsappTemplates = {
+      async list() { return [{ name: 'elden_new_books', language: 'en', status: 'APPROVED', category: 'MARKETING', rejectedReason: '' }]; },
+      async create() { return { id: '1', status: 'PENDING' }; },
+      async phoneNumbers() { return [{ id: '222', number: '+1 555-747-5125' }]; },
+      async numberInfo(id) { if (id !== '111') throw new Error('bad'); return { display_phone_number: '+91 70000 00000' }; },
+    };
+    const r = await t.call('GET', '/admin/whatsapp/diagnose', { headers: await admin() });
+    expect(r.json.steps.map((x: any) => x.ok)).toEqual([true, true, false, false]);
+    expect(r.json.steps[2].detail).toContain('111 is NOT one of them');
   });
 });
