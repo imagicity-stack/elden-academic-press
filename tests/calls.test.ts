@@ -59,6 +59,23 @@ describe('the rules', () => {
     expect(callResultFrom({ status: 'no-answer' }).status).toBe('not_answered');
     expect(callResultFrom({ status: 'busy' }).status).toBe('not_answered');
   });
+
+  it("reads Sarvam's outbound call-end webhook", () => {
+    const base = { app_id: 'Elden-Acade-e49b18a7-09b3', app_version: 2, attempt_id: 'att-1', campaign_id: 'camp-1', cohort_id: 'co-1', user_identifier: '6f1c1f2e-1111-4111-8111-111111111111', user_phone_number: '+919876543210' };
+    const r = callResultFrom({
+      ...base, completion_status: 'completed', connectivity_status: 'connected', duration: 92.4, interaction_id: 'int-9', recording_url: 'https://rec/x.mp3',
+      final_agent_variables: { customer_name: 'Asha', call_outcome: 'callback' }, output_agent_variables: { call_outcome: 'will_order', wants_link: 'yes' },
+      interaction_transcript: [{ role: 'agent', en_text: 'Hello', indic_text: 'नमस्ते' }, { role: 'user', en_text: 'Yes' }],
+    });
+    expect(r).toMatchObject({
+      callId: base.user_identifier, providerCallId: 'int-9', status: 'answered', durationSeconds: 92, recordingUrl: 'https://rec/x.mp3',
+      variables: { customer_name: 'Asha', call_outcome: 'will_order', wants_link: 'yes' },
+    });
+    expect(r.transcript).toBe('agent: Hello\nuser: Yes');
+    expect(callResultFrom({ ...base, completion_status: 'failed', connectivity_status: 'no_answer' })).toMatchObject({ status: 'not_answered', providerCallId: 'att-1' });
+    expect(callResultFrom({ ...base, completion_status: 'failed', connectivity_status: 'busy' }).status).toBe('not_answered');
+    expect(callResultFrom({ ...base, completion_status: 'failed', connectivity_status: 'failed' }).status).toBe('failed');
+  });
 });
 
 describe('checkout leads', () => {

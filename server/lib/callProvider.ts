@@ -49,18 +49,23 @@ export function callResultFrom(raw: unknown): CallResult {
   const top = obj(raw);
   const o = { ...top, ...obj(top.data), ...obj(top.payload) };
   const meta = obj(pick(o, 'metadata', 'meta'));
-  const vars = { ...obj(pick(o, 'variables', 'agent_variables', 'agentVariables', 'extracted_variables', 'extractedVariables', 'post_interaction_variables')) };
-  const statusText = str(pick(o, 'status', 'call_status', 'callStatus', 'outcome', 'disposition')).toLowerCase();
+  // Sarvam: final_agent_variables is everything the agent held, output_agent_variables the part it reports.
+  const vars = {
+    ...obj(o.final_agent_variables),
+    ...obj(pick(o, 'variables', 'agent_variables', 'agentVariables', 'extracted_variables', 'extractedVariables', 'post_interaction_variables', 'output_agent_variables')),
+  };
+  // Sarvam reports connected / busy / no_answer / failed as connectivity_status.
+  const statusText = str(pick(o, 'connectivity_status', 'status', 'call_status', 'callStatus', 'outcome', 'disposition')).toLowerCase();
   const duration = Number(pick(o, 'duration_seconds', 'durationSeconds', 'duration', 'call_duration', 'billsec'));
   const answered = /complet|answer|connect|success|ended|done/.test(statusText) && !/no[\s_-]?answer|not[\s_-]?answer|unanswer/.test(statusText);
   const notAnswered = /no[\s_-]?answer|not[\s_-]?answer|unanswer|busy|voicemail|missed|declin|reject|timeout/.test(statusText);
-  let transcript = pick(o, 'transcript', 'transcription', 'conversation');
+  let transcript = pick(o, 'interaction_transcript', 'transcript', 'transcription', 'conversation');
   if (Array.isArray(transcript)) {
-    transcript = transcript.map((t) => { const x = obj(t); return `${str(pick(x, 'role', 'speaker', 'from')) || '?'}: ${str(pick(x, 'text', 'content', 'message'))}`; }).join('\n');
+    transcript = transcript.map((t) => { const x = obj(t); return `${str(pick(x, 'role', 'speaker', 'from')) || '?'}: ${str(pick(x, 'text', 'content', 'message', 'en_text', 'indic_text'))}`; }).join('\n');
   }
   return {
-    callId: str(pick(meta, 'call_id', 'callId', 'elden_call_id') ?? pick(o, 'call_id', 'callId', 'reference_id', 'referenceId', 'external_id')) || null,
-    providerCallId: str(pick(o, 'interaction_id', 'interactionId', 'provider_call_id', 'id', 'sid')) || null,
+    callId: str(pick(meta, 'call_id', 'callId', 'elden_call_id') ?? pick(o, 'call_id', 'callId', 'user_identifier', 'reference_id', 'referenceId', 'external_id')) || null,
+    providerCallId: str(pick(o, 'interaction_id', 'interactionId', 'attempt_id', 'provider_call_id', 'id', 'sid')) || null,
     status: answered || (!notAnswered && Number.isFinite(duration) && duration > 10) ? 'answered' : notAnswered ? 'not_answered' : 'failed',
     durationSeconds: Number.isFinite(duration) ? Math.round(duration) : null,
     transcript: str(transcript).slice(0, 50_000),
