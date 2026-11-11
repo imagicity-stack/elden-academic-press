@@ -50,7 +50,7 @@ describe('the Cloud API client', () => {
     const sent = JSON.parse(String(init?.body));
     expect(sent).toMatchObject({ name: 'elden_ebook_ready', language: 'en', category: 'UTILITY' });
     expect(sent.components.map((c: any) => c.type)).toEqual(['HEADER', 'BODY', 'FOOTER', 'BUTTONS']);
-    expect(sent.components[3].buttons[0]).toEqual({ type: 'URL', text: 'Download my e-book', url: 'https://eldenap.in/{{1}}', example: ['https://eldenap.in/order/1042?t=abc123'] });
+    expect(sent.components[3].buttons[0]).toEqual({ type: 'URL', text: 'Get my e-book', url: 'https://eldenap.in/{{1}}', example: ['https://eldenap.in/account?tab=library'] });
     await api.edit('1234', components);
     expect(f.mock.calls[1][0]).toBe('https://graph.facebook.com/v24.0/1234');
     expect(JSON.parse(String(f.mock.calls[1][1]?.body))).toEqual({ components });
@@ -97,7 +97,7 @@ const hook = (body: unknown, secret = 'app-secret') => {
 };
 const incoming = (text: string, id = `wamid.in-${Math.random()}`) => hook({ entry: [{ changes: [{ value: {
   contacts: [{ wa_id: '919876543210', profile: { name: 'Asha K' } }],
-  messages: [{ id, from: '919876543210', timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: text } }],
+  messages: [{ id, from: '919876543210', timestamp: String(Math.floor(t.deps.now().getTime() / 1000)), type: 'text', text: { body: text } }],
 } }] }] });
 async function lead(consent = true) {
   const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));

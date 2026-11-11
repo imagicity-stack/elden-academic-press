@@ -18,6 +18,7 @@ import {
   DEFAULT_WA_SETTINGS, WA_DAY, WA_REPLY_WINDOW_MS, WA_START, WA_STOP, WA_TEMPLATES, type WaKind, type WaStatus, type WaTemplateDef, type WaTemplateKey, type WhatsAppSettings,
 } from '../../src/shared/whatsapp.js';
 import { orderLink, type Order } from './orders.js';
+import { libraryPath } from './ebooks.js';
 
 export type WaMessage = typeof whatsappMessages.$inferSelect;
 
@@ -111,8 +112,9 @@ export async function orderWhatsApp(deps: Deps, kind: 'order_confirmed' | 'shipp
     : 'We will share the tracking details soon.';
   const params = kind === 'order_confirmed' ? [name, String(o.number), inr(o.total)]
     : kind === 'shipped' ? [name, String(o.number), tracking]
-      : [name, String(o.number)];
-  const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: o.name, params, link, orderId: o.id, leadId: lead.id });
+      // E-books open only in the account of the order's email: say which one, and link to the Library.
+      : [name, String(o.number), o.email];
+  const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: o.name, params, link: kind === 'ebook_ready' ? `${deps.env.SITE_URL}${libraryPath}` : link, orderId: o.id, leadId: lead.id });
   if (queued) await kickWhatsApp(deps);
   return queued;
 }
@@ -143,7 +145,7 @@ export async function planCartMessages(deps: Deps, s: WhatsAppSettings) {
 
 /* ---------------- After an AI voice call (Sarvam) ---------------- */
 
-interface CallInfo { id: string; kind: 'cart' | 'feedback'; phone: string; name: string; leadId: string | null; orderId: string | null; outcome: string; result: Record<string, unknown>; variables: Record<string, string> }
+interface CallInfo { id: string; kind: 'cart' | 'cod_confirm' | 'feedback'; phone: string; name: string; leadId: string | null; orderId: string | null; outcome: string; result: Record<string, unknown>; variables: Record<string, string> }
 
 /**
  * A WhatsApp after a call by the voice agents: "thank you, here's your link" when they talked,
@@ -154,6 +156,7 @@ export async function callWhatsApp(deps: Deps, c: CallInfo, answered: boolean) {
   const s = await getWhatsAppSettings(deps.db);
   if (!s.enabled || !s.callFollowup) return false;
   if (['do_not_call', 'wrong_person'].includes(c.outcome)) return false;
+  if (c.kind === 'cod_confirm') return codCallWhatsApp(deps, s, c, answered);
   const leadId = c.leadId ?? c.variables.lead_id ?? null;
   const [lead] = leadId ? await deps.db.select().from(checkoutLeads).where(eq(checkoutLeads.id, leadId)) : [];
   if (!lead?.consent) return false;
@@ -195,6 +198,28 @@ export async function callWhatsApp(deps: Deps, c: CallInfo, answered: boolean) {
   }
   // One per call: broadcast_id + phone is unique.
   const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: c.name || lead.name, params, link, broadcastId: `call-${c.id}` });
+  if (queued) await kickWhatsApp(deps);
+  return queued;
+}
+
+/**
+ * After a cash-on-delivery confirmation call: "your order is confirmed" when they said yes, "we
+ * tried to call you" after the last unanswered try. Nothing when they said no (the team emails
+ * them once it's cancelled) or the call was unclear. Only with the order's call/WhatsApp tick.
+ */
+async function codCallWhatsApp(deps: Deps, s: WhatsAppSettings, c: CallInfo, answered: boolean) {
+  if (!c.orderId) return false;
+  const [order] = await deps.db.select().from(orders).where(eq(orders.id, c.orderId));
+  if (!order || order.cancelledAt) return false;
+  if (answered && c.outcome !== 'order_confirmed') return false;
+  const lead = await consentedLead(deps.db, order.id);
+  if (!lead) return false;
+  const name = firstName(order.name) || 'there';
+  const kind = answered ? 'call_followup' as const : 'missed_call' as const;
+  const params = answered
+    ? [name, `Your order *#${order.number}* is confirmed and will be dispatched within 1 to 3 working days. Please keep *${inr(order.codAmount)}* ready to pay when it arrives.`]
+    : [name, `confirming your cash on delivery order #${order.number}`];
+  const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: order.name, params, link: orderLink(deps, order), orderId: order.id, broadcastId: `call-${c.id}` });
   if (queued) await kickWhatsApp(deps);
   return queued;
 }

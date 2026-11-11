@@ -358,6 +358,11 @@ export function Checkout() {
                 </>}
               </dl>
             )}
+            {cod && quote && (
+              <p className="co-cod-note" role="note">
+                <strong>The {inr(codAdvance)} advance is non-refundable.</strong> We’ll call you to confirm your order before it’s dispatched. If you cancel it or refuse the parcel, the advance isn’t returned. <a href="/refunds" target="_blank" rel="noopener">Refund policy</a>
+              </p>
+            )}
             {quote && quote.freeShippingRemaining > 0 && <div className="drawer__hint">Add {inr(quote.freeShippingRemaining)} more for free delivery.</div>}
             {generalError && <div className="form-error" role="alert">{generalError}</div>}
             {notice && <div className="form-notice" role="status">{notice}</div>}

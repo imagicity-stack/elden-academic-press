@@ -1,6 +1,8 @@
 // Transactional emails. Table-based HTML with inline styles so they render the
 // same in Gmail, Outlook and Apple Mail; a plain-text part is added on send.
 import type { Deps } from '../deps.js';
+import { inArray, sql } from 'drizzle-orm';
+import { accounts } from '../db/schema.js';
 import type { EbookFile, enquiries, orderItems, orders } from '../db/schema.js';
 import { esc, inr, istDate } from '../lib/format.js';
 import { addressList, sendSafely, type Attachment } from '../lib/mail.js';
@@ -176,7 +178,7 @@ export async function sendStoreNewOrder(deps: Deps, o: Order, items: Item[], s: 
  * buyer's account (signed in with Google using this order's email), so there are no download
  * links here that would work for anyone the email is forwarded to.
  */
-function ebookBlock(deps: Deps, o: Order, digital: Item[], files: Map<string, EbookFile[]>, s: Settings, awaiting: boolean) {
+function ebookBlock(deps: Deps, o: Order, digital: Item[], files: Map<string, EbookFile[]>, s: Settings, awaiting: boolean, signUp = false) {
   const site = deps.env.SITE_URL.replace(/\/$/, '');
   const rows = digital.flatMap((i) => {
     const fs = files.get(i.id) ?? [];
@@ -192,22 +194,42 @@ function ebookBlock(deps: Deps, o: Order, digital: Item[], files: Map<string, Eb
   return section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:${INK};padding:22px 22px 8px">
 ${label('Your e-books', YELLOW)}<div style="margin:10px 0 4px;font:700 20px/1.25 ${FONT};color:#FFFFFF">${awaiting ? 'Coming with your delivery.' : 'Waiting in your Library.'}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>
-${awaiting ? '' : `<div style="padding:14px 0 6px">${button(`${site}${libraryPath}`, 'Sign in to read & download', YELLOW, INK)}</div>`}
+${awaiting ? '' : `<div style="padding:14px 0 6px">${button(`${site}${libraryPath}`, signUp ? 'Get my free e-book' : 'Sign in to read & download', YELLOW, INK)}</div>`}
 </td></tr><tr><td style="background:${INK};padding:0 22px 18px;font:400 12.5px/1.5 ${FONT};color:#A9B0BC">${foot}</td></tr></table>`);
 }
 
-/** Cash on delivery: the books were delivered, so the free e-book is unlocked. */
+/** Has this buyer created an account with the order's email (or the extra one staff added)? */
+async function hasAccount(deps: Deps, o: Order) {
+  const emails = [o.email, o.ebookEmail].filter((e): e is string => Boolean(e)).map((e) => e.toLowerCase());
+  const [row] = await deps.db.select({ id: accounts.userId }).from(accounts).where(inArray(sql`lower(${accounts.email})`, emails)).limit(1);
+  return Boolean(row);
+}
+
+/**
+ * Cash on delivery: the books were delivered, so the free e-book is unlocked. It opens only in
+ * the buyer's account, so someone without one yet is shown how to create it (with Google, using
+ * the email they ordered with); someone who has one is told it's in their Library.
+ */
 export async function sendEbookUnlocked(deps: Deps, o: Order, items: Item[], s: Settings) {
   const files = await filesForItems(deps.db, items);
   const digital = items.filter((i) => (files.get(i.id)?.length ?? 0) > 0);
   if (!digital.length) return;
-  const body = ebookBlock(deps, o, digital, files, s, false) + section(button(orderLink(deps, o), 'View your order', INK), '4px 32px 32px');
+  const signUp = !(await hasAccount(deps, o));
+  const steps = signUp ? section(`${h2('Get your e-book in a minute')}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+${[['1', 'Tap “Get my free e-book” below', 'It opens your account page on our website.'], ['2', 'Continue with Google', `Use the Google account for <strong style="color:${INK}">${esc(o.email)}</strong>, the email you ordered with. It's free, with no password to remember.`], ['3', 'Open your Library', 'Your e-book is waiting there: read it online or download it.']]
+  .map(([n, t, d]) => `<tr><td style="width:34px;padding:0 0 12px;vertical-align:top"><div style="width:24px;height:24px;background:${INK};color:#FFFFFF;font:700 12px/24px ${FONT};text-align:center">${n}</div></td><td style="padding:0 0 12px;font:600 14.5px/1.4 ${FONT};color:${INK}">${t}<div style="font:400 13.5px/1.4 ${FONT};color:${MUTED}">${d}</div></td></tr>`).join('')}
+</table>`) : '';
+  const body = steps + ebookBlock(deps, o, digital, files, s, false, signUp) + section(button(orderLink(deps, o), 'View your order', INK), '4px 32px 32px');
   await sendSafely(deps.mailer, {
-    to: o.email, subject: `Your free e-book is ready · order #${o.number}`, replyTo: s.supportEmail, bcc: copies(deps),
+    to: o.email, subject: signUp ? `Your free e-book is ready: create your account to get it · order #${o.number}` : `Your free e-book is ready · order #${o.number}`,
+    replyTo: s.supportEmail, bcc: copies(deps),
     html: layout(deps, s, {
-      preheader: 'Your books were delivered, and your free e-book is ready to download.',
+      preheader: signUp ? 'Your books were delivered. Create your free account with Google to get your e-book.' : 'Your books were delivered, and your free e-book is in your Library.',
       kicker: 'Delivered', title: 'Your free e-book is ready.',
-      intro: `Your books for order <strong style="color:${INK}">#${o.number}</strong> have been delivered. Thank you! Your free e-book is now waiting in your Library.`,
+      intro: signUp
+        ? `Your books for order <strong style="color:${INK}">#${o.number}</strong> have been delivered. Thank you! Your free e-book is unlocked. For your security it opens only in your own account on our website, so create one with Google using <strong style="color:${INK}">${esc(o.email)}</strong>.`
+        : `Your books for order <strong style="color:${INK}">#${o.number}</strong> have been delivered. Thank you! Your free e-book is now waiting in your Library.`,
       body,
     }),
   });
@@ -267,5 +289,99 @@ export async function sendEnquiryNotice(deps: Deps, e: Enquiry, s: Settings) {
   await sendSafely(deps.mailer, {
     to, subject: `${ENQUIRY_LABEL[e.kind]}: ${e.name}${e.institution ? `, ${e.institution}` : ''}`, replyTo: e.email || undefined,
     html: layout(deps, s, { preheader: e.message.slice(0, 120), kicker: ENQUIRY_LABEL[e.kind], title: e.name, intro: e.email ? 'Reply to this email to answer them directly.' : 'They left a phone number only.', body }),
+  });
+}
+
+/* ---------------- Cash on delivery: the confirmation call ---------------- */
+
+/**
+ * What happened when we tried to confirm a cash-on-delivery order:
+ * said_no: the customer doesn't want it (cancel it by hand, the advance is kept);
+ * unreachable: nobody answered after every try; unclear: they talked but didn't say yes or no;
+ * change: they confirmed but asked for a change; not_callable: we can't call the number.
+ */
+export type CodAlert = 'said_no' | 'unreachable' | 'unclear' | 'change' | 'not_callable';
+
+export interface CodAlertDetails {
+  kind: CodAlert;
+  reason?: string;
+  changeRequest?: string;
+  /** Did the agent tell them the advance isn't refunded? null when not recorded. */
+  refundTold?: boolean | null;
+  note?: string;
+  transcript?: string;
+  recordingUrl?: string;
+  callId?: string | null;
+}
+
+const COD_ALERT: Record<CodAlert, { subject: (n: number) => string; title: string; next: string }> = {
+  said_no: {
+    subject: (n) => `Customer said no: COD order #${n} (cancel it)`,
+    title: 'The customer doesn’t want this order',
+    next: 'Open the order and use <strong>Cancel order (keep advance)</strong> with the reason. The customer gets an email saying it’s cancelled and that the advance isn’t refunded. Don’t ship it.',
+  },
+  unreachable: {
+    subject: (n) => `COD order #${n} not confirmed: no answer`,
+    title: 'We couldn’t reach the customer',
+    next: 'Nobody answered after every try. Call them yourself, then confirm the order (or cancel it) from the order page. You can also have the agent call again from there.',
+  },
+  unclear: {
+    subject: (n) => `COD order #${n} not confirmed on the call`,
+    title: 'The call didn’t confirm the order',
+    next: 'They talked to the agent but didn’t clearly say yes or no. Read the transcript, then confirm or cancel the order from the order page, or have the agent call again.',
+  },
+  change: {
+    subject: (n) => `COD order #${n} confirmed, with a change requested`,
+    title: 'Confirmed, but they asked for a change',
+    next: 'The customer confirmed the order on the call and asked for the change below. Make it (or contact them) before shipping.',
+  },
+  not_callable: {
+    subject: (n) => `COD order #${n} can’t be confirmed by a call`,
+    title: 'This order needs confirming by hand',
+    next: 'The agent can’t call this customer (see why below). Contact them yourself, then confirm or cancel the order from the order page.',
+  },
+};
+
+/** To the owner (MAIL_TO in the environment, else Settings → order alerts, else the support address). */
+export async function sendCodConfirmationAlert(deps: Deps, o: Order, a: CodAlertDetails, s: Settings) {
+  const mailTo = addressList(deps.env.MAIL_TO);
+  const to = mailTo.length ? mailTo : s.notifyEmails.length ? s.notifyEmails : [s.supportEmail];
+  const t = COD_ALERT[a.kind];
+  const advance = onlineAmount(o);
+  const rows: [string, string][] = [
+    ['Customer', `${o.name} · +91 ${o.phone} · ${o.email}`],
+    ...(a.reason ? [['Reason they gave', a.reason] as [string, string]] : []),
+    ...(a.changeRequest ? [['Change requested', a.changeRequest] as [string, string]] : []),
+    ...(a.kind === 'said_no' ? [['Told the advance isn’t refunded', a.refundTold == null ? 'Not recorded' : a.refundTold ? 'Yes' : 'No'] as [string, string]] : []),
+    ...(a.note ? [['Note', a.note] as [string, string]] : []),
+  ];
+  const facts = rows.map(([k, v]) => `<tr><td style="padding:6px 12px 6px 0;vertical-align:top;white-space:nowrap">${label(k)}</td><td style="padding:6px 0;font:400 14px/1.5 ${FONT};color:${INK}">${esc(v)}</td></tr>`).join('');
+  const transcript = a.transcript?.trim()
+    ? section(h2('Transcript') + `<div style="padding:14px 16px;border:1px solid ${LINE};border-radius:8px;background:${PAPER};font:400 13px/1.6 ${FONT};color:${INK};white-space:pre-wrap;word-break:break-word">${esc(a.transcript.trim().slice(0, 20_000))}</div>`)
+    : '';
+  const site = deps.env.SITE_URL;
+  const body = metaStrip([['Order', `#${o.number}`], ['Total', inr(o.total)], ['Advance paid', inr(advance)], ['Cash due', inr(o.codAmount)]])
+    + section(`<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:6px">${facts}</table>`)
+    + section(p(t.next))
+    + transcript
+    + section(button(`${site}/admin/orders/${o.id}`, 'Open the order')
+      + (a.callId ? `&nbsp; ${button(`${site}/admin/calls/${a.callId}`, 'Open the call', INK)}` : '')
+      + (a.recordingUrl ? p(`<a href="${esc(a.recordingUrl)}" style="color:${INK}">Listen to the recording</a>`, 'margin-top:14px') : ''), '4px 32px 32px');
+  await sendSafely(deps.mailer, {
+    to, subject: t.subject(o.number), replyTo: o.email,
+    html: layout(deps, s, { preheader: t.title, kicker: 'Cash on delivery', title: t.title, intro: `Order <strong style="color:${INK}">#${o.number}</strong>, placed ${istDate(o.createdAt)}.`, body }),
+  });
+}
+
+/** To the customer: their cash-on-delivery order is cancelled, and the advance is kept. */
+export async function sendCodCancelled(deps: Deps, o: Order, s: Settings) {
+  const advance = onlineAmount(o) - o.refundedAmount;
+  const body = metaStrip([['Order', `#${o.number}`], ['Advance paid', inr(advance)], ['Cash due', 'Nothing']])
+    + section(p(`As set out at checkout and in our refund policy, the advance of <strong style="color:${INK}">${inr(advance)}</strong> paid online is non-refundable. Nothing else is due: no cash will be collected and nothing will be delivered.`)
+      + p('Changed your mind, or think this is a mistake? Just reply to this email. You are always welcome to order again.')
+      + button(`${deps.env.SITE_URL}/books`, 'Browse our books', INK), '4px 32px 32px');
+  await sendSafely(deps.mailer, {
+    to: o.email, subject: `Your order #${o.number} has been cancelled`, replyTo: s.supportEmail, bcc: copies(deps),
+    html: layout(deps, s, { preheader: 'Cancelled as you asked', kicker: 'Order cancelled', title: 'Your order has been cancelled.', intro: `As you asked, we have cancelled order <strong style="color:${INK}">#${o.number}</strong>.`, body }),
   });
 }

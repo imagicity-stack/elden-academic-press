@@ -138,7 +138,8 @@ export function sarvamCalls(cfg: SarvamCallsConfig): CallProvider {
   return {
     name: 'sarvam',
     async start({ callId, kind, phone, variables }) {
-      const campaignId = kind === 'cart' ? cfg.cartCampaignId : cfg.feedbackCampaignId;
+      // The cart agent also makes the cash-on-delivery confirmation calls (call_purpose tells it which).
+      const campaignId = kind === 'feedback' ? cfg.feedbackCampaignId : cfg.cartCampaignId;
       const url = `${base}/api/scheduling/v1/orgs/${e(cfg.orgId)}/workspaces/${e(cfg.workspaceId)}/campaigns/${e(campaignId)}/cohorts/stream`;
       // Sarvam takes string values only.
       const appVariables = Object.fromEntries(Object.entries(variables ?? {}).map(([k, v]) => [k, str(v)]));

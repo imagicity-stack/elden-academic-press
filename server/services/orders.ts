@@ -14,7 +14,7 @@ import { paymentMethodLabel } from '../lib/format.js';
 import { sendOrderConfirmation, sendStoreNewOrder } from './emails.js';
 import { orderWhatsApp } from './whatsapp.js';
 import { subscribe } from './newsletter.js';
-import { leadPaid } from './calls.js';
+import { leadPaid, queueCodConfirmation, stopCodConfirmation } from './calls.js';
 import { reportPurchase, type Visit } from './tracking.js';
 import { orderChannel, type OrderSource } from '../../src/shared/attribution.js';
 
@@ -355,6 +355,10 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
     await reportPurchase(deps, result.order, items);
     // Their saved checkout (if any) is converted, and a waiting cart-recovery call stops.
     await leadPaid(deps, result.order).catch((e) => console.error('[calls] lead paid', (e as Error).message));
+    // Cash on delivery: the cart agent calls to confirm the order before it's shipped.
+    if (result.order.paymentMode === 'cod') {
+      await queueCodConfirmation(deps, result.order).catch((e) => console.error('[calls] COD confirmation', (e as Error).message));
+    }
     // The same tick allows a WhatsApp confirmation (if switched on in Admin → WhatsApp).
     await orderWhatsApp(deps, 'order_confirmed', result.order).catch((e) => console.error('[whatsapp] order confirmed', (e as Error).message));
     // The buyer ticked "Email me about new books and offers" at checkout.
@@ -410,6 +414,32 @@ export async function cancelUnpaid(deps: Deps, orderId: string, reason: string, 
     await logEvent(tx, o.id, 'cancelled', `Order cancelled: ${reason}`, actor);
     return u;
   });
+}
+
+/**
+ * Cancel a cash-on-delivery order that won't be delivered (the customer said no, or refused the
+ * parcel), keeping the advance: it is non-refundable. Nothing is refunded and no cash is due.
+ * Optionally puts the printed copies back in stock.
+ */
+export async function cancelCodOrder(deps: Deps, orderId: string, args: { reason: string; restock: boolean }, actor: string) {
+  const u = await deps.db.transaction(async (tx) => {
+    const [o] = await tx.select().from(orders).where(eq(orders.id, orderId)).for('update');
+    if (!o) throw new HttpError(404, 'Order not found');
+    if (o.paymentMode !== 'cod') throw new HttpError(409, 'Only cash-on-delivery orders are cancelled this way. Paid orders are cancelled with a refund.');
+    if (o.cancelledAt) throw new HttpError(409, 'This order is already cancelled.');
+    if (!['paid', 'partially_refunded'].includes(o.paymentStatus)) throw new HttpError(409, 'The advance for this order isn’t paid.');
+    if (o.codCollectedAt || o.fulfillmentStatus === 'delivered') throw new HttpError(409, 'The cash was collected on delivery: cancel it with a refund instead.');
+    if (args.restock && o.stockReserved) await releaseStock(tx, o, 'cancelled', actor);
+    const [row] = await tx.update(orders).set({
+      cancelledAt: deps.now(), cancelReason: args.reason, needsAttention: false, updatedAt: sql`now()`,
+    }).where(eq(orders.id, o.id)).returning();
+    // The cash was never paid: it no longer counts towards what they spent.
+    if (o.customerId) await tx.update(customers).set({ totalSpent: sql`greatest(${customers.totalSpent} - ${o.codAmount}, 0)` }).where(eq(customers.id, o.customerId));
+    await logEvent(tx, o.id, 'cancelled', `Order cancelled, advance of ₹${((o.total - o.codAmount - o.refundedAmount) / 100).toFixed(2)} kept (non-refundable): ${args.reason}`, actor);
+    return row;
+  });
+  await stopCodConfirmation(deps, orderId, 'The order was cancelled').catch((e) => console.error('[calls] stop COD call', (e as Error).message));
+  return u;
 }
 
 /**

@@ -720,6 +720,8 @@ select.input { appearance: none; padding-right: 42px; background: #FFFFFF url("d
 .co-secure { display: flex; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--muted); }
 .co-terms { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
 .co-terms a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.co-cod-note { margin: 0 0 14px; padding: 12px 14px; border-radius: var(--r-sm); background: #FFF6D6; font: 400 13.5px/1.5 var(--f-text); color: var(--ink); }
+.co-cod-note a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
 @media (max-width: 960px) { .checkout { grid-template-columns: 1fr; } .checkout__summary { position: static; } }
 
 .order-thanks { display: flex; gap: 18px; align-items: flex-start; margin-bottom: 32px; padding: clamp(20px, 3vw, 32px); border-radius: var(--r-lg); background: var(--hl); animation: page-in .6s var(--ease) backwards; }

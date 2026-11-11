@@ -4,6 +4,7 @@ import { inr } from '../../store/api';
 import { adminApi, fmtDate, openPrintable, toPaise, useAdmin } from '../api';
 import { canManage, useMe } from '../AdminApp';
 import { Badge, Btn, Card, Check, ErrorBox, FulBadge, Loading, Modal, MoneyField, Page, PayBadge, SelectField, TextArea, TextField, useAction, useToast } from '../ui';
+import { CALL_STATUS_LABEL, COD_CONFIRMATION_LABEL, CONFIRMED_BY_CALL, type CallStatus, type CodConfirmation } from '../../shared/calls';
 
 interface Detail {
   order: {
@@ -14,7 +15,10 @@ interface Detail {
     invoiceNumber: string | null; courier: string | null; trackingNumber: string | null; trackingUrl: string | null; cancelledAt: string | null; cancelReason: string | null;
     customerNote: string; internalNote: string; ebookEmail: string | null; needsAttention: boolean; attentionReason: string | null; customerId: string | null;
     paymentMode?: 'online' | 'cod'; codAmount?: number; codCollectedAt?: string | null;
+    codConfirmation?: CodConfirmation; codConfirmedAt?: string | null; codConfirmedBy?: string | null;
   };
+  /** Cash on delivery: the agent's confirmation call, if there is one. */
+  codCall: { id: string; status: CallStatus; outcome: string; dueAt: string; attempts: number; endedAt: string | null; note: string; result: Record<string, unknown>; transcript: string; recordingUrl: string } | null;
   items: { id: string; title: string; formatLabel: string; sku: string | null; quantity: number; unitPrice: number; lineTotal: number; discount: number; taxAmount: number; isDigital: boolean; requiresShipping: boolean; downloadsUsed: number; productId: string | null; includesEbook: boolean }[];
   events: { id: number; type: string; message: string; actor: string; createdAt: string }[];
   payments: { id: string; razorpayPaymentId: string; amount: number; status: string; method: string | null; createdAt: string }[];
@@ -49,7 +53,7 @@ export default function OrderDetail() {
   const { data, error, reload } = useAdmin<Detail>(`/orders/${id}`);
   const { busy, run } = useAction();
   const toast = useToast();
-  const [dialog, setDialog] = useState<'ship' | 'refund' | 'cancel' | null>(null);
+  const [dialog, setDialog] = useState<'ship' | 'refund' | 'cancel' | 'cancel-cod' | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   if (error) return <Page title="Order" back={{ to: '/admin/orders', label: 'Orders' }}><ErrorBox error={error} retry={reload} /></Page>;
@@ -61,6 +65,14 @@ export default function OrderDetail() {
     const r = await run(key, () => adminApi(`/orders/${o.id}/${path}`, { body }), ok);
     if (r !== undefined) { reload(); refreshCounts(); setDialog(null); }
   };
+  // Cash on delivery: not confirmed yet (by the customer on the call, or by the team).
+  const cod = o.paymentMode === 'cod';
+  const unconfirmed = cod && active && Boolean(o.codConfirmation) && o.codConfirmation !== 'confirmed';
+  const canCancelCod = cod && active && !o.codCollectedAt && o.fulfillmentStatus !== 'delivered';
+  const notConfirmedWarning = o.codConfirmation === 'cancel_requested'
+    ? 'The customer said NO on the confirmation call. Ship it anyway? This marks the order as confirmed.'
+    : 'This order isn’t confirmed yet. Packing or shipping it marks it as confirmed and stops the confirmation call. Continue?';
+  const guard = (fn: () => void) => () => { if (!unconfirmed || window.confirm(notConfirmedWarning)) fn(); };
 
   return (
     <Page
@@ -79,6 +91,15 @@ export default function OrderDetail() {
         </div>
       )}
 
+      {unconfirmed && (
+        <div className={`ad-alert ${o.codConfirmation === 'pending' ? 'ad-alert--amber' : 'ad-alert--red'}`}>
+          <div><b>{o.codConfirmation === 'cancel_requested' ? 'The customer said no: don’t ship this order.' : 'Not confirmed yet: hold this order.'}</b> {o.codConfirmation === 'pending'
+            ? 'The agent will call the customer to confirm it. You can confirm it yourself instead, which stops the call.'
+            : o.codConfirmation === 'cancel_requested' ? 'Cancel it with the reason (the advance is kept), or confirm it if they changed their mind.'
+              : 'The confirmation call didn’t confirm it. Confirm or cancel it yourself, or have the agent call again.'}</div>
+        </div>
+      )}
+
       {active && o.requiresShipping && (
         <div className="ad-fulfil">
           <div className="ad-fulfil__steps">
@@ -87,8 +108,8 @@ export default function OrderDetail() {
             ))}
           </div>
           <div className="ad-fulfil__actions">
-            {o.fulfillmentStatus === 'unfulfilled' && <Btn kind="secondary" busy={busy === 'pack'} onClick={() => act('pack', 'fulfillment', { status: 'packed' }, 'Marked as packed')}>Mark packed</Btn>}
-            {['unfulfilled', 'packed'].includes(o.fulfillmentStatus) && <Btn kind="primary" onClick={() => setDialog('ship')}>Mark shipped…</Btn>}
+            {o.fulfillmentStatus === 'unfulfilled' && <Btn kind="secondary" busy={busy === 'pack'} onClick={guard(() => act('pack', 'fulfillment', { status: 'packed' }, 'Marked as packed'))}>Mark packed</Btn>}
+            {['unfulfilled', 'packed'].includes(o.fulfillmentStatus) && <Btn kind="primary" onClick={guard(() => setDialog('ship'))}>Mark shipped…</Btn>}
             {o.fulfillmentStatus === 'shipped' && <><Btn onClick={() => setDialog('ship')}>Edit tracking</Btn><Btn kind="primary" busy={busy === 'deliv'} onClick={() => act('deliv', 'fulfillment', { status: 'delivered', notify: false }, 'Marked as delivered')}>Mark delivered</Btn></>}
             {o.fulfillmentStatus === 'delivered' && <span className="ad-muted">Delivered — nothing left to do.</span>}
           </div>
@@ -125,6 +146,7 @@ export default function OrderDetail() {
 
           <Card title="Payment" actions={
             <div className="ad-row">
+              {canCancelCod && <Btn size="sm" kind="danger" onClick={() => setDialog('cancel-cod')}>Cancel order…</Btn>}
               {paid && canManage(me) && <Btn size="sm" kind="danger" onClick={() => setDialog('refund')}>Refund…</Btn>}
               {['pending', 'failed'].includes(o.paymentStatus) && !o.cancelledAt && <Btn size="sm" kind="danger" onClick={() => setDialog('cancel')}>Cancel order</Btn>}
             </div>
@@ -158,6 +180,12 @@ export default function OrderDetail() {
         </div>
 
         <div className="ad-stack">
+          {cod && o.codConfirmation && (
+            <CodConfirmCard o={o} call={data.codCall} busy={busy} active={active} canCancel={canCancelCod}
+              onConfirm={() => act('cod-confirm', 'cod-confirmation', { action: 'confirm' }, 'Order confirmed')}
+              onCall={() => act('cod-call', 'cod-confirmation', { action: 'call' }, 'The agent will call again')}
+              onCancel={() => setDialog('cancel-cod')} />
+          )}
           <Card title="Customer">
             <div className="ad-strong">{o.name}</div>
             <div><a href={`mailto:${o.email}`}>{o.email}</a></div>
@@ -203,6 +231,10 @@ export default function OrderDetail() {
 
       {dialog === 'ship' && <ShipDialog o={o} busy={busy === 'ship'} onClose={() => setDialog(null)} onSave={(b) => act('ship', 'fulfillment', b, 'Marked as shipped')} />}
       {dialog === 'refund' && <RefundDialog o={o} busy={busy === 'refund'} onClose={() => setDialog(null)} onSave={(b) => act('refund', 'refund', b, 'Refund started')} />}
+      {dialog === 'cancel-cod' && (
+        <CancelCodDialog o={o} suggested={String(data.codCall?.result.cancel_reason ?? '')} busy={busy === 'cancel-cod'} onClose={() => setDialog(null)}
+          onSave={(b) => act('cancel-cod', 'cancel-cod', b, 'Order cancelled, advance kept')} />
+      )}
       {dialog === 'cancel' && (
         <CancelDialog busy={busy === 'cancel'} onClose={() => setDialog(null)} onSave={(reason) => act('cancel', 'cancel', { reason }, 'Order cancelled')} />
       )}
@@ -258,6 +290,63 @@ function CancelDialog({ busy, onClose, onSave }: { busy: boolean; onClose: () =>
       <div className="ad-form">
         <p className="ad-muted">Any printed copies held for this order go back into stock.</p>
         <TextField label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+      </div>
+    </Modal>
+  );
+}
+
+const COD_TONE: Record<Exclude<CodConfirmation, ''>, 'green' | 'amber' | 'red'> = { pending: 'amber', confirmed: 'green', cancel_requested: 'red', unreachable: 'red', unclear: 'red' };
+const yesNo = (v: unknown) => (v === true || /^(true|yes|1)$/i.test(String(v)) ? 'Yes' : v === false || /^(false|no|0)$/i.test(String(v)) ? 'No' : '—');
+
+/** Cash on delivery: where the confirmation stands, the agent's call, and what the team can do. */
+function CodConfirmCard({ o, call, busy, active, canCancel, onConfirm, onCall, onCancel }: {
+  o: Detail['order']; call: Detail['codCall']; busy: string | null; active: boolean; canCancel: boolean;
+  onConfirm: () => void; onCall: () => void; onCancel: () => void;
+}) {
+  const state = o.codConfirmation as Exclude<CodConfirmation, ''>;
+  const r = call?.result ?? {};
+  const callLine = !call ? 'No call: the confirmation calls are off, so confirm it yourself.'
+    : call.status === 'queued' ? `Calling ${fmtDate(call.dueAt, true)}${call.attempts ? ` (try ${call.attempts + 1})` : ''}.`
+      : call.status === 'dialling' ? 'The agent is calling now.'
+        : `${CALL_STATUS_LABEL[call.status]}${call.attempts > 1 ? ` after ${call.attempts} tries` : ''}${call.endedAt ? ` · ${fmtDate(call.endedAt, true)}` : ''}${call.note ? `. ${call.note}` : ''}`;
+  const by = o.codConfirmedBy === CONFIRMED_BY_CALL ? 'by the customer on the call' : o.codConfirmedBy ? `by ${o.codConfirmedBy}` : '';
+  return (
+    <Card title="Order confirmation">
+      <dl className="ad-kv">
+        <div><dt>Status</dt><dd><Badge tone={COD_TONE[state]}>{COD_CONFIRMATION_LABEL[state]}</Badge>{state === 'confirmed' && by && <span className="ad-muted"> {by}{o.codConfirmedAt ? `, ${fmtDate(o.codConfirmedAt, true)}` : ''}</span>}</dd></div>
+        <div><dt>Agent call</dt><dd>{callLine}{call && <> <Link to={`/admin/calls/${call.id}`}>Open the call →</Link></>}</dd></div>
+        {String(r.cancel_reason ?? '') && <div><dt>Why they said no</dt><dd>{String(r.cancel_reason)}</dd></div>}
+        {String(r.order_confirmation ?? '') === 'cancel_requested' && <div><dt>Told the advance isn’t refunded</dt><dd>{yesNo(r.advance_refund_told)}</dd></div>}
+        {String(r.change_request ?? '') && <div><dt>Change asked for</dt><dd>{String(r.change_request)}</dd></div>}
+        {call?.recordingUrl && <div><dt>Recording</dt><dd><a href={call.recordingUrl} target="_blank" rel="noreferrer">Listen ↗</a></dd></div>}
+      </dl>
+      {call?.transcript && (
+        <details className="ad-mt"><summary>Transcript</summary><pre className="ad-transcript">{call.transcript}</pre></details>
+      )}
+      {active && state !== 'confirmed' && (
+        <div className="ad-row ad-mt">
+          <Btn size="sm" kind="primary" busy={busy === 'cod-confirm'} onClick={onConfirm}>Confirm order</Btn>
+          {call?.status !== 'queued' && call?.status !== 'dialling' && <Btn size="sm" busy={busy === 'cod-call'} onClick={onCall}>Have the agent call again</Btn>}
+          {canCancel && <Btn size="sm" kind="danger" onClick={onCancel}>Cancel order (keep advance)…</Btn>}
+        </div>
+      )}
+      {active && state === 'pending' && call?.status === 'queued' && <p className="ad-muted ad-mt">Confirming it yourself stops the call.</p>}
+    </Card>
+  );
+}
+
+function CancelCodDialog({ o, suggested, busy, onClose, onSave }: { o: Detail['order']; suggested: string; busy: boolean; onClose: () => void; onSave: (b: unknown) => void }) {
+  const [reason, setReason] = useState(suggested ? `Customer said no on the confirmation call: ${suggested}` : o.codConfirmation === 'cancel_requested' ? 'Customer said no on the confirmation call' : '');
+  const [restock, setRestock] = useState(true);
+  const [notify, setNotify] = useState(true);
+  const advance = o.total - (o.codAmount ?? 0) - o.refundedAmount;
+  return (
+    <Modal title="Cancel cash-on-delivery order" onClose={onClose} footer={<><Btn onClick={onClose}>Keep order</Btn><Btn kind="danger" busy={busy} disabled={reason.trim().length < 3} onClick={() => onSave({ reason: reason.trim(), restock, notify })}>Cancel order</Btn></>}>
+      <div className="ad-form">
+        <p className="ad-muted">Nothing is refunded: the advance of <strong>{inr(advance)}</strong> is non-refundable, and the {inr(o.codAmount ?? 0)} cash won’t be collected. To refund the advance instead, use Refund.</p>
+        <TextField label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
+        {o.requiresShipping && <Check label="Put printed copies back in stock" checked={restock} onChange={setRestock} />}
+        <Check label="Email the customer" hint="Says the order is cancelled and the advance isn’t refunded." checked={notify} onChange={setNotify} />
       </div>
     </Modal>
   );

@@ -129,6 +129,7 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
       ['0020_cod_advance_percent', () => db.select({ v: settings.codAdvanceType }).from(settings).limit(1)],
       ['0021_consent_stats', () => db.select({ v: consentStats.n }).from(consentStats).limit(1)],
       ['0022_ebook_email', () => db.select({ v: orders.ebookEmail }).from(orders).limit(1)],
+      ['0023_cod_confirmation', () => db.select({ v: orders.codConfirmation }).from(orders).limit(1)],
     ];
     checks.database = 'ok';
     for (const [file, probe] of updates) {

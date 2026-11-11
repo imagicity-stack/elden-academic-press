@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { orders, products, productVariants, settings } from '../server/db/schema.js';
 import { codAdvanceFor } from '../src/shared/cod.js';
+import { memoryWhatsApp } from '../server/lib/whatsapp.js';
 import { address, contact, setup, supabaseToken } from './helpers.js';
 
 let t: Awaited<ReturnType<typeof setup>>;
@@ -110,6 +111,44 @@ describe('cash on delivery', () => {
     expect(codAdvanceFor(20000, { ...r, min: 5000 })).toBe(5000); // the minimum
     expect(codAdvanceFor(3000, { ...r, min: 5000 })).toBe(3000); // never more than the order
     expect(codAdvanceFor(79900, { ...r, type: 'flat' })).toBe(6000);
+  });
+
+  it('on delivery, tells a buyer without an account how to create one (email and WhatsApp) to get the e-book', async () => {
+    const p = await book();
+    const wa = memoryWhatsApp();
+    t.deps.whatsapp = wa;
+    const h = await admin();
+    await t.call('PUT', '/admin/whatsapp/settings', { headers: h, body: { enabled: true, ebookReady: true } });
+    // They ticked "may call or WhatsApp me" at checkout.
+    await t.call('POST', '/checkout/lead', { body: { clientKey: 'browser-key-0000000009', name: contact.name, email: contact.email, phone: contact.phone, consent: true, items: [{ productId: p.id, kind: 'print', quantity: 1 }] } });
+    const r = await checkout([{ productId: p.id, kind: 'print', quantity: 1 }], 'cod');
+    await t.call('POST', '/checkout/verify', { body: t.razorpay.simulatePayment(r.json.razorpay.orderId) });
+    t.mailer.sent.length = 0;
+    await t.call('POST', `/admin/orders/${r.json.orderId}/fulfillment`, { headers: h, body: { status: 'delivered', notify: true } });
+
+    const mail = t.mailer.sent.find((m) => /free e-book is ready/.test(m.subject))!;
+    expect(mail.subject).toContain('create your account');
+    expect(mail.html).toContain('Continue with Google');
+    expect(mail.html).toContain(contact.email);
+    expect(mail.html).toContain('Get my free e-book');
+    expect(mail.html).toContain('https://eldenap.in/account?tab=library');
+    const msg = wa.sent.find((m) => m.template === 'elden_ebook_ready')!;
+    expect(msg.params).toEqual([contact.name.split(' ')[0], String(r.json.number), contact.email]);
+    expect(msg.button).toBe('account?tab=library');
+  });
+
+  it('on delivery, tells a buyer who already has an account that it is in their Library', async () => {
+    const p = await book();
+    const buyer = { authorization: `Bearer ${await supabaseToken({ sub: '44444444-4444-4444-8444-444444444444', email: contact.email, provider: 'google', name: 'Asha' })}` };
+    await t.call('GET', '/account', { headers: buyer });
+    const r = await checkout([{ productId: p.id, kind: 'print', quantity: 1 }], 'cod');
+    await t.call('POST', '/checkout/verify', { body: t.razorpay.simulatePayment(r.json.razorpay.orderId) });
+    t.mailer.sent.length = 0;
+    await t.call('POST', `/admin/orders/${r.json.orderId}/fulfillment`, { headers: await admin(), body: { status: 'delivered', notify: true } });
+    const mail = t.mailer.sent.find((m) => /free e-book is ready/.test(m.subject))!;
+    expect(mail.subject).not.toContain('create your account');
+    expect(mail.html).toContain('waiting in your Library');
+    expect(mail.html).toContain('Sign in to read &amp; download');
   });
 
   it('refunds only the advance through Razorpay', async () => {

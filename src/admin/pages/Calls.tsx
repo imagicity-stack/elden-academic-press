@@ -6,11 +6,11 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { adminApi, useAdmin } from '../api';
 import { Badge, Btn, Card, Check, Empty, ErrorBox, Loading, Page, Pagination, SelectField, TextArea, TextField, Toggle, useAction, type Tone } from '../ui';
 import { inr } from '../../store/api';
-import { CALL_KINDS, CALL_STATUS_LABEL, DAYS, INBOUND, OUTCOME_LABEL, type CallKind, type CallSettings, type CallStatus } from '../../shared/calls';
+import { CALL_KINDS, CALL_STATUS_LABEL, COD_CONFIRMATION_LABEL, DAYS, INBOUND, OUTCOME_LABEL, type CallKind, type CallSettings, type CallStatus, type CodConfirmation } from '../../shared/calls';
 
 const TABS = [['', 'Overview'], ['log', 'Calls'], ['queue', 'Queue'], ['leads', 'Checkouts'], ['do-not-call', 'Do not call'], ['settings', 'Settings']] as const;
 const STATUS_TONE: Record<CallStatus, Tone> = { queued: 'blue', dialling: 'amber', done: 'green', no_answer: 'grey', failed: 'red', skipped: 'grey', cancelled: 'grey' };
-const OUTCOME_TONE: Record<string, Tone> = { enquiry: 'blue', will_order: 'green', feedback_given: 'green', callback: 'blue', transferred: 'blue', not_interested: 'grey', declined: 'grey', wrong_person: 'grey', do_not_call: 'red' };
+const OUTCOME_TONE: Record<string, Tone> = { enquiry: 'blue', will_order: 'green', feedback_given: 'green', callback: 'blue', transferred: 'blue', not_interested: 'grey', declined: 'grey', wrong_person: 'grey', do_not_call: 'red', order_confirmed: 'green', cancel_requested: 'red', not_confirmed: 'amber' };
 
 interface SettingsData {
   settings: CallSettings;
@@ -94,7 +94,7 @@ function Overview() {
 
 interface KindStats { incoming: number; total: number; queued: number; dialling: number; attempted: number; answered: number; answerRate: number; outcomes: Record<string, number> }
 interface Stats {
-  cart: KindStats; feedback: KindStats; recovered: { orders: number; revenue: number }; couponsGiven: number;
+  cart: KindStats; cod: KindStats; feedback: KindStats; codOrders: Record<string, number>; recovered: { orders: number; revenue: number }; couponsGiven: number;
   rating: { average: number | null; count: number }; openIssues: number; leads: { total: number; paid: number };
   daily: { day: string; placed: number; answered: number }[];
   subscribersCallable: number;
@@ -112,22 +112,24 @@ function StatsView({ d }: { d: Stats }) {
         <Stat label="Cart calls answered" value={`${d.cart.answered} / ${d.cart.attempted}`} sub={`${pct(d.cart.answerRate)} answer rate`} />
         <Stat label="Recovered by a call" value={inr(d.recovered.revenue)} sub={`${d.recovered.orders} order${d.recovered.orders === 1 ? '' : 's'} paid after the call`} />
         <Stat label="Coupons given on calls" value={d.couponsGiven} />
+        <Stat label="COD orders confirmed" value={`${d.codOrders.confirmed ?? 0} / ${Object.values(d.codOrders).reduce((n, x) => n + x, 0)}`}
+          sub={`${d.codOrders.cancel_requested ?? 0} said no · ${(d.codOrders.unreachable ?? 0) + (d.codOrders.unclear ?? 0)} not confirmed · ${d.codOrders.pending ?? 0} waiting`} />
         <Stat label="Feedback calls answered" value={`${d.feedback.answered} / ${d.feedback.attempted}`} sub={`${pct(d.feedback.answerRate)} answer rate`} />
         <Stat label="Average rating" value={d.rating.average == null ? '—' : `${d.rating.average.toFixed(1)} / 5`} sub={`${d.rating.count} rating${d.rating.count === 1 ? '' : 's'}`} />
         <Stat label="Problems to look at" value={<Link to="/admin/calls/log?issues=1">{d.openIssues}</Link>} sub="reported on feedback calls" />
         <Stat label="Subscribers who allow calls" value={d.subscribersCallable} sub="ticked the box on the newsletter form" />
-        <Stat label="Incoming calls" value={d.cart.incoming + d.feedback.incoming} sub="customers who rang our numbers" />
-        <Stat label="Waiting to be called" value={<Link to="/admin/calls/queue">{d.cart.queued + d.feedback.queued}</Link>} />
+        <Stat label="Incoming calls" value={d.cart.incoming + d.cod.incoming + d.feedback.incoming} sub="customers who rang our numbers" />
+        <Stat label="Waiting to be called" value={<Link to="/admin/calls/queue">{d.cart.queued + d.cod.queued + d.feedback.queued}</Link>} />
       </div>
       <div className="ad-grid-2">
         <Card title="Calls per day">{d.daily.length ? <DailyChart rows={d.daily} /> : <p className="ad-muted">No calls yet.</p>}</Card>
         <Card title="How calls ended">
-          {(['cart', 'feedback'] as const).map((k) => (
+          {([['cart', 'cart'], ['cod', 'cod_confirm'], ['feedback', 'feedback']] as const).map(([k, kind]) => (
             <div key={k} className="ad-stack-sm ad-mt">
-              <strong>{kindLabel(k)}</strong>
+              <strong>{kindLabel(kind)}</strong>
               {Object.keys(d[k].outcomes).length ? (
                 <ul className="ad-list">{Object.entries(d[k].outcomes).sort((a, b) => b[1] - a[1]).map(([o, n]) => (
-                  <li key={o}><Link to={`/admin/calls/log?kind=${k}&outcome=${o}`}><Outcome o={o} /></Link> <b>{n}</b></li>
+                  <li key={o}><Link to={`/admin/calls/log?kind=${kind}&outcome=${o}`}><Outcome o={o} /></Link> <b>{n}</b></li>
                 ))}</ul>
               ) : <span className="ad-muted">No answered calls yet.</span>}
             </div>
@@ -219,13 +221,16 @@ function CallList({ queue = false }: { queue?: boolean }) {
 interface Detail {
   call: Row & { variables: Record<string, string>; result: Record<string, unknown>; transcript: string; recordingUrl: string; providerCallId: string | null };
   lead: { email: string; items: { title: string; kind: string; quantity: number }[]; total: number; orderId: string | null; createdAt: string } | null;
+  order: { id: string; number: number; total: number; codAmount: number; paymentMode: string; codConfirmation: CodConfirmation; cancelledAt: string | null } | null;
   history: Row[];
   doNotCall: boolean;
 }
 const RESULT_LABEL: Record<string, string> = {
   call_outcome: 'Outcome', wants_link: 'Wants the link', discount_offered: 'Coupon given', callback_time: 'Call back', objection: 'Why they hadn’t ordered',
   rating: 'Rating', feedback_summary: 'Feedback', issue_reported: 'Problem reported', issue_detail: 'The problem', interested_in: 'Interested in', wants_details: 'Wants details of new books',
+  order_confirmation: 'Order confirmation', cancel_reason: 'Why they said no', change_request: 'Change asked for', advance_refund_told: 'Told the advance isn’t refunded',
 };
+const CONFIRMATION_LABEL: Record<string, string> = { confirmed: 'Confirmed', cancel_requested: 'Wants to cancel', unclear: 'No clear answer' };
 
 function CallDetail({ id }: { id: string }) {
   const { data, error, reload } = useAdmin<Detail>(`/calls/${id}`);
@@ -258,7 +263,7 @@ function CallDetail({ id }: { id: string }) {
           <Card title="What the agent recorded">
             {Object.keys(c.result).length ? (
               <dl className="ad-dl">{Object.entries(c.result).filter(([, v]) => v !== '' && v != null).map(([k, v]) => (
-                <div key={k}><dt>{RESULT_LABEL[k] ?? k}</dt><dd>{k === 'call_outcome' ? <Outcome o={String(v)} /> : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)}</dd></div>
+                <div key={k}><dt>{RESULT_LABEL[k] ?? k}</dt><dd>{k === 'call_outcome' ? <Outcome o={String(v)} /> : k === 'order_confirmation' ? <b>{CONFIRMATION_LABEL[String(v)] ?? String(v)}</b> : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)}</dd></div>
               ))}</dl>
             ) : <p className="ad-muted">Nothing yet: it's filled in when the call ends.</p>}
           </Card>
@@ -268,6 +273,13 @@ function CallDetail({ id }: { id: string }) {
           <Card title="What the agent was told">
             <dl className="ad-dl">{Object.entries(c.variables).map(([k, v]) => <div key={k}><dt>{k.replace(/_/g, ' ')}</dt><dd>{v || <span className="ad-muted">—</span>}</dd></div>)}</dl>
           </Card>
+          {data.order && (
+            <Card title="Their order">
+              <p><Link to={`/admin/orders/${data.order.id}`}><b>Order #{data.order.number}</b> →</Link> · {inr(data.order.total)}{data.order.paymentMode === 'cod' && <> · {inr(data.order.codAmount)} cash on delivery</>}</p>
+              {data.order.cancelledAt ? <Badge tone="grey">Cancelled</Badge>
+                : data.order.codConfirmation && <Badge tone={data.order.codConfirmation === 'confirmed' ? 'green' : data.order.codConfirmation === 'pending' ? 'amber' : 'red'}>{COD_CONFIRMATION_LABEL[data.order.codConfirmation]}</Badge>}
+            </Card>
+          )}
           {data.lead && (
             <Card title="Their checkout">
               <ul className="ad-list">{data.lead.items.map((i, n) => <li key={n}>{i.title} · {i.kind === 'digital' ? 'E-book' : 'Print'} × {i.quantity}</li>)}</ul>
@@ -367,6 +379,11 @@ function SettingsTab() {
           <TextField label="Coupon the agent may offer" value={s.cart.discountCode} onChange={(e) => setS({ ...s, cart: { ...s.cart, discountCode: e.target.value.toUpperCase() } })}
             hint="Create it in Discounts first. Offered only after the customer hesitates twice. Leave empty for no coupon." />
           <TextField label="What the coupon gives (as the agent says it)" value={s.cart.discountOffer} onChange={(e) => setS({ ...s, cart: { ...s.cart, discountOffer: e.target.value } })} placeholder="10 percent off the whole order" />
+        </Card>
+        <Card title="COD order confirmation">
+          <TextField label="Call after (minutes)" type="number" min={0} max={1440} value={s.cod_confirm.delayMinutes} onChange={(e) => setS({ ...s, cod_confirm: { ...s.cod_confirm, delayMinutes: Number(e.target.value) } })}
+            hint="How long after a cash-on-delivery order is placed. Calls only go out inside the calling hours." />
+          <p className="ad-muted">The cart agent asks whether they want the order. Yes confirms it. No flags the order and emails you to cancel it by hand (the advance isn’t refunded). No answer after every try, or no clear answer, flags it and emails you too. You can confirm an order yourself at any time from the order page, which stops the call.</p>
         </Card>
         <Card title="Order feedback">
           <TextField label="Call after (days)" type="number" min={1} max={30} value={s.feedback.daysAfter} onChange={(e) => setS({ ...s, feedback: { ...s.feedback, daysAfter: Number(e.target.value) } })}

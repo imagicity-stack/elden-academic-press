@@ -4,10 +4,11 @@ import { inr } from '../../store/api';
 import { downloadFile, fmtDate, useAdmin } from '../api';
 import { Badge, Btn, Card, Empty, ErrorBox, FulBadge, Loading, Page, Pagination, PayBadge, useAction } from '../ui';
 import { CHANNELS } from '../../shared/attribution';
+import { COD_CONFIRMATION_LABEL, type CodConfirmation } from '../../shared/calls';
 
 interface Row {
   id: string; number: number; createdAt: string; name: string; email: string; phone: string; total: number;
-  paymentStatus: string; fulfillmentStatus: string; cancelledAt: string | null; requiresShipping: boolean; needsAttention: boolean; items: number; status: string; paymentMode?: string; codAmount?: number; codCollectedAt?: string | null;
+  paymentStatus: string; fulfillmentStatus: string; cancelledAt: string | null; requiresShipping: boolean; needsAttention: boolean; items: number; status: string; paymentMode?: string; codAmount?: number; codCollectedAt?: string | null; codConfirmation?: CodConfirmation;
   channel: string; sourceLabel: string; sourceDetail: string;
 }
 interface Sources {
@@ -124,7 +125,9 @@ export default function Orders() {
                     <td><div>{o.name}</div><div className="ad-muted">{o.email}</div></td>
                     <td><div className={o.channel === 'unknown' ? 'ad-muted' : ''}>{o.sourceLabel}</div>{o.sourceDetail && <div className="ad-muted">{o.sourceDetail}</div>}</td>
                     <td>{o.cancelledAt && o.paymentStatus !== 'expired' ? <Badge tone="grey">Cancelled</Badge> : <PayBadge s={o.paymentStatus} />}
-                      {o.paymentMode === 'cod' && !o.cancelledAt && <Badge tone={o.codCollectedAt ? 'green' : 'amber'}>{o.codCollectedAt ? 'COD collected' : `COD ${inr(o.codAmount ?? 0)}`}</Badge>}</td>
+                      {o.paymentMode === 'cod' && !o.cancelledAt && <Badge tone={o.codCollectedAt ? 'green' : 'amber'}>{o.codCollectedAt ? 'COD collected' : `COD ${inr(o.codAmount ?? 0)}`}</Badge>}
+                      {o.paymentMode === 'cod' && !o.cancelledAt && o.codConfirmation && o.codConfirmation !== 'confirmed' && ['paid', 'partially_refunded'].includes(o.paymentStatus)
+                        && <Badge tone={o.codConfirmation === 'pending' ? 'amber' : 'red'}>{COD_CONFIRMATION_LABEL[o.codConfirmation]}</Badge>}</td>
                     <td>{['paid', 'partially_refunded'].includes(o.paymentStatus) && !o.cancelledAt ? <FulBadge s={o.fulfillmentStatus} /> : <span className="ad-muted">—</span>}</td>
                     <td className="ad-num">{o.items}</td>
                     <td className="ad-num ad-strong">{inr(o.total)}</td>
