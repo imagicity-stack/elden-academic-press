@@ -202,6 +202,9 @@ export const orders = pgTable('orders', {
   customerNote: text('customer_note').notNull().default(''),
   /** Ticked "email me about new books and offers" at checkout; subscribed once paid. */
   newsletterOptIn: boolean('newsletter_opt_in').notNull().default(false),
+  /** Another email whose account may also open this order's e-books (set by staff, e.g. the
+   *  buyer's Google address when they ordered with a different one). */
+  ebookEmail: text('ebook_email'),
   /** 'online' (paid in full) or 'cod' (an advance paid online, the rest in cash on delivery). */
   paymentMode: text('payment_mode').notNull().default('online'),
   /** Cash on delivery: the balance to collect when the books are delivered (0 for online orders). */

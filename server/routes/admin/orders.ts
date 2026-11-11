@@ -222,6 +222,22 @@ adminOrders.post('/:id/note', async (c) => {
   return c.json({ order: u });
 });
 
+/**
+ * E-books open only in the account of the order's email. When a buyer ordered with an address
+ * they can't sign in with Google as, staff give the e-books to their Google address too ('' removes it).
+ */
+adminOrders.post('/:id/ebook-email', async (c) => {
+  const { db } = c.get('deps');
+  const o = await loadOrder(c);
+  const input = await body(c, z.object({ email: z.union([z.literal(''), z.email().max(200)]) }));
+  const email = input.email.trim().toLowerCase() || null;
+  if (email && email === o.email.toLowerCase()) throw new HttpError(400, 'That’s already the order’s email.');
+  const [u] = await db.update(orders).set({ ebookEmail: email, updatedAt: sql`now()` }).where(eq(orders.id, o.id)).returning();
+  await logEvent(db, o.id, 'note', email ? `E-books also opened for ${email}` : 'Removed the extra e-book email', c.get('admin').email);
+  await audit(c, 'order.ebook_email', 'order', o.number, { email });
+  return c.json({ order: u });
+});
+
 adminOrders.post('/:id/resolve', async (c) => {
   const { db } = c.get('deps');
   const o = await loadOrder(c);

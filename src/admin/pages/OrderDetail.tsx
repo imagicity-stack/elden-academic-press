@@ -12,10 +12,10 @@ interface Detail {
     requiresShipping: boolean; subtotal: number; discount: number; shipping: number; tax: number; total: number; couponCode: string | null; refundedAmount: number;
     paymentStatus: string; fulfillmentStatus: string; razorpayOrderId: string | null; razorpayPaymentId: string | null; paymentMethod: string | null;
     invoiceNumber: string | null; courier: string | null; trackingNumber: string | null; trackingUrl: string | null; cancelledAt: string | null; cancelReason: string | null;
-    customerNote: string; internalNote: string; needsAttention: boolean; attentionReason: string | null; customerId: string | null;
+    customerNote: string; internalNote: string; ebookEmail: string | null; needsAttention: boolean; attentionReason: string | null; customerId: string | null;
     paymentMode?: 'online' | 'cod'; codAmount?: number; codCollectedAt?: string | null;
   };
-  items: { id: string; title: string; formatLabel: string; sku: string | null; quantity: number; unitPrice: number; lineTotal: number; discount: number; taxAmount: number; isDigital: boolean; requiresShipping: boolean; downloadsUsed: number; productId: string | null }[];
+  items: { id: string; title: string; formatLabel: string; sku: string | null; quantity: number; unitPrice: number; lineTotal: number; discount: number; taxAmount: number; isDigital: boolean; requiresShipping: boolean; downloadsUsed: number; productId: string | null; includesEbook: boolean }[];
   events: { id: number; type: string; message: string; actor: string; createdAt: string }[];
   payments: { id: string; razorpayPaymentId: string; amount: number; status: string; method: string | null; createdAt: string }[];
   refunds: { id: string; amount: number; status: string; reason: string; actor: string; createdAt: string }[];
@@ -192,6 +192,7 @@ export default function OrderDetail() {
             {data.source.channel === 'unknown' && <p className="ad-muted">This order was placed before sources were recorded.</p>}
             {data.source.channel === 'direct' && <p className="ad-muted">No link or site was recorded: the address was typed, opened from a bookmark, or shared in an app that hides where links come from (often WhatsApp).</p>}
           </Card>
+          {data.items.some((i) => i.isDigital || i.includesEbook) && <EbookAccess orderId={o.id} email={o.email} extra={o.ebookEmail} onSaved={reload} />}
           {o.customerNote && <Card title="Customer note"><p className="ad-pre">{o.customerNote}</p></Card>}
           <Card title="Internal note">
             <TextArea label="Only staff can see this" rows={3} value={note ?? o.internalNote} onChange={(e) => setNote(e.target.value)} />
@@ -259,5 +260,22 @@ function CancelDialog({ busy, onClose, onSave }: { busy: boolean; onClose: () =>
         <TextField label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
       </div>
     </Modal>
+  );
+}
+
+/** E-books open only in the account of the order's email; staff can add the buyer's Google address. */
+function EbookAccess({ orderId, email, extra, onSaved }: { orderId: string; email: string; extra: string | null; onSaved: () => void }) {
+  const [value, setValue] = useState(extra ?? '');
+  const { busy, run } = useAction();
+  const save = (v: string) => run('ebook', () => adminApi(`/orders/${orderId}/ebook-email`, { body: { email: v } }), v ? 'E-books opened for that email too' : 'Extra email removed').then((r) => r !== undefined && onSaved());
+  return (
+    <Card title="E-book access">
+      <p className="ad-muted">The e-books open only in the website account of <strong>{email}</strong> (signed in with Google). If the buyer signs in with a different Google address, add it here.</p>
+      <TextField label="Also open for (Google email)" type="email" value={value} onChange={(e) => setValue(e.target.value)} placeholder="name@gmail.com" />
+      <div className="ad-row ad-mt">
+        <Btn size="sm" kind="primary" busy={busy === 'ebook'} disabled={value.trim() === (extra ?? '')} onClick={() => save(value.trim())}>Save</Btn>
+        {extra && <Btn size="sm" onClick={() => { setValue(''); save(''); }}>Remove</Btn>}
+      </div>
+    </Card>
   );
 }

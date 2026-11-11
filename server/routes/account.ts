@@ -21,7 +21,7 @@ import { orderToken } from '../services/orders.js';
 import { metaAllowed, report, visitOf } from '../services/tracking.js';
 import { verifySupabaseToken } from './admin/auth.js';
 import { orderStatusLabel } from './orders.js';
-import { downloadLimit, ebookAwaitsDelivery, fileLabel, filesForItems } from '../services/ebooks.js';
+import { downloadLimit, downloadName, ebookAwaitsDelivery, fileLabel, filesForItems } from '../services/ebooks.js';
 import { SIGNUP_EVENT, signupEventId, signupParams } from '../../src/shared/metaEvents.js';
 
 export interface Customer { userId: string; email: string; name: string; avatar: string | null }
@@ -116,7 +116,7 @@ account.get('/', async (c) => {
   await subscribeNewAccount(deps, me, c.get('ip'), visit);
   const [sub] = await db.select({ status: subscribers.status }).from(subscribers).where(eq(subscribers.email, me.email));
   const s = await getSettings(db);
-  const mine = await db.select().from(orders).where(and(eq(orders.email, me.email), inArray(orders.paymentStatus, OWNED)))
+  const mine = await db.select().from(orders).where(and(ownedBy(me.email), inArray(orders.paymentStatus, OWNED)))
     .orderBy(desc(orders.createdAt)).limit(200);
   const items = mine.length ? await db.select().from(orderItems).where(inArray(orderItems.orderId, mine.map((o) => o.id))) : [];
   const files = await filesForItems(db, items);
@@ -141,11 +141,9 @@ account.get('/', async (c) => {
         downloadsLeft: Math.max(0, limit - i.downloadsUsed),
         canRead: open && fs.length > 0,
         awaitingDelivery,
-        downloadUrl: canDownload && fs.length ? `/api/orders/${o.number}/download/${i.id}?t=${token(o.id)}` : null,
-        files: fs.map((f, k) => ({
-          index: k, label: fileLabel(f, k, fs.length),
-          downloadUrl: canDownload ? `/api/orders/${o.number}/download/${i.id}?t=${token(o.id)}&f=${k}` : null,
-        })),
+        // Downloads go through POST /account/library/:itemId/download (signed in), never a shareable link.
+        canDownload: canDownload && fs.length > 0,
+        files: fs.map((f, k) => ({ index: k, label: fileLabel(f, k, fs.length), canDownload })),
       });
     }
   }
@@ -185,15 +183,17 @@ account.get('/', async (c) => {
   });
 });
 
-/** Open a purchased e-book in the browser's reader: a short-lived link, not counted as a download. */
-account.post('/library/:itemId/read', async (c) => {
-  const { db, storage, now } = c.get('deps');
+/** Orders this account may see: placed with its email, or given to it by staff (ebook_email). */
+const ownedBy = (email: string) => or(sql`lower(${orders.email}) = ${email.toLowerCase()}`, sql`lower(${orders.ebookEmail}) = ${email.toLowerCase()}`)!;
+
+/** One purchased e-book of this account, checked: paid, not cancelled, unlocked, not expired. */
+async function libraryFile(c: Context<AppEnv>) {
+  const { db, now } = c.get('deps');
   const me = c.get('customer');
-  await rateLimit(db, `read:${me.email}`, 60, 3600);
   const s = await getSettings(db);
   const [row] = await db.select({ item: orderItems, order: orders }).from(orderItems)
     .innerJoin(orders, eq(orders.id, orderItems.orderId))
-    .where(and(eq(orderItems.id, c.req.param('itemId')), eq(orders.email, me.email), inArray(orders.paymentStatus, ['paid', 'partially_refunded'])));
+    .where(and(eq(orderItems.id, c.req.param('itemId') ?? ''), ownedBy(me.email), inArray(orders.paymentStatus, ['paid', 'partially_refunded'])));
   if (!row || row.order.cancelledAt || !row.order.paidAt) throw notFound('This e-book isn’t in your library.');
   if (ebookAwaitsDelivery(row.order)) throw new HttpError(403, 'Your free e-book unlocks once your books are delivered.', 'awaiting_delivery');
   if (s.downloadExpiryDays > 0 && row.order.paidAt.getTime() + s.downloadExpiryDays * 86400_000 < now().getTime()) {
@@ -201,9 +201,34 @@ account.post('/library/:itemId/read', async (c) => {
   }
   // ?f= picks one of the e-book's files (0 = the first).
   const fs = (await filesForItems(db, [row.item])).get(row.item.id) ?? [];
-  const file = fs[Math.max(0, Number.parseInt(c.req.query('f') ?? '0', 10) || 0)];
+  const index = Math.max(0, Number.parseInt(c.req.query('f') ?? '0', 10) || 0);
+  const file = fs[index];
   if (!file) throw new HttpError(404, 'This e-book file is not available. Please contact us.');
+  return { ...row, fs, file, index, s };
+}
+
+/** Open a purchased e-book in the browser's reader: a short-lived link, not counted as a download. */
+account.post('/library/:itemId/read', async (c) => {
+  const { db, storage } = c.get('deps');
+  await rateLimit(db, `read:${c.get('customer').email}`, 60, 3600);
+  const { file } = await libraryFile(c);
   return c.json({ url: await storage.signedDownloadUrl('ebooks', file.path, 300) });
+});
+
+/**
+ * Download a purchased e-book: only here, signed in to the account the order belongs to.
+ * Counts towards the download limit; the link it returns works for five minutes.
+ */
+account.post('/library/:itemId/download', async (c) => {
+  const { db, storage } = c.get('deps');
+  await rateLimit(db, `download:${c.get('customer').email}`, 30, 3600);
+  const { item: found, fs, file, index, s } = await libraryFile(c);
+  const [item] = await db.update(orderItems)
+    .set({ downloadsUsed: sql`${orderItems.downloadsUsed} + 1` })
+    .where(and(eq(orderItems.id, found.id), sql`${orderItems.downloadsUsed} < ${downloadLimit(s, fs.length)}`))
+    .returning();
+  if (!item) throw new HttpError(403, 'Download limit reached for this e-book. Please contact us if you need more.');
+  return c.json({ url: await storage.signedDownloadUrl('ebooks', file.path, 300, downloadName(file, index, fs.length, item.title)) });
 });
 
 const ACCOUNT_TYPES = ['student', 'parent', 'teacher', 'other'] as const;

@@ -39,7 +39,9 @@ describe('cash on delivery', () => {
     expect(view.json.items[0]).toMatchObject({ canDownload: false });
     expect(view.json.items[0].files.length).toBeGreaterThan(0);
     const item = view.json.items[0].id;
-    const early = await t.call('GET', `/orders/${r.json.number}/download/${item}?t=${r.json.token}`);
+    const buyer = { authorization: `Bearer ${await supabaseToken({ sub: '33333333-3333-4333-8333-333333333333', email: contact.email, provider: 'google', name: 'Asha' })}` };
+    await t.call('GET', '/account', { headers: buyer });
+    const early = await t.call('POST', `/account/library/${item}/download`, { headers: buyer });
     expect(early.status).toBe(403);
     expect(early.json.code).toBe('awaiting_delivery');
 
@@ -55,9 +57,10 @@ describe('cash on delivery', () => {
     expect(done.status).toBe(200);
     expect(done.json.order.codCollectedAt).toBeTruthy();
     const unlocked = t.mailer.sent.find((m) => /free e-book is ready/.test(m.subject))!;
-    expect(unlocked.html).toContain(`/download/${item}`);
-    const dl = await t.call('GET', `/orders/${r.json.number}/download/${item}?t=${r.json.token}`);
-    expect(dl.status).toBe(302);
+    expect(unlocked.html).toContain('/account?tab=library');
+    expect(unlocked.html).not.toContain('/download/');
+    const dl = await t.call('POST', `/account/library/${item}/download`, { headers: buyer });
+    expect(dl.status).toBe(200);
   });
 
   it('is only for printed books', async () => {

@@ -68,7 +68,7 @@ function Terms() {
 
       <Section title="4. E-books">
         <p>When you buy an e-book you receive a personal, non-transferable licence to download it and read it for your own study or teaching. It is not a sale of the copyright.</p>
-        <p>Each purchase allows a limited number of downloads within a set period, shown on your order page. Please save a copy on your device.</p>
+        <p>Your e-books open only in your account on this website: sign in with Google using the email address you ordered with (or one we have added to your order at your request) and they are in your Library. Each purchase allows a limited number of downloads within a set period, shown there. Please save a copy on your device.</p>
         <p>You may not share, copy, upload, resell or distribute e-book files, or remove any marks that identify the buyer. We may stop access to downloads if a file is being misused.</p>
       </Section>
 
@@ -255,7 +255,7 @@ function Shipping() {
       </Section>
 
       <Section title="5. E-books">
-        <p>E-books are not shipped. They are available to download as soon as your payment is confirmed, from your order page and the link in your confirmation email. A free e-book that comes with a printed book paid by cash on delivery becomes available once the books are delivered.</p>
+        <p>E-books are not shipped. They are available as soon as your payment is confirmed, in the Library of your account on this website: sign in with Google using the email you ordered with. A free e-book that comes with a printed book paid by cash on delivery becomes available once the books are delivered.</p>
       </Section>
 
       <Section title="6. Your address">

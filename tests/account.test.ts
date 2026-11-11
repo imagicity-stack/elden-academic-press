@@ -32,7 +32,8 @@ describe('customer accounts', () => {
     expect(r.json.orders[0]).toMatchObject({ status: 'Complete', token: mine.token });
     expect(r.json.library).toHaveLength(1);
     expect(r.json.library[0]).toMatchObject({ title: 'Mathematics Today', orderNumber: mine.number, canRead: true, downloadsLeft: 10 });
-    expect(r.json.library[0].downloadUrl).toContain(`/api/orders/${mine.number}/download/`);
+    expect(r.json.library[0]).toMatchObject({ canDownload: true });
+    expect(r.json.library[0].downloadUrl).toBeUndefined(); // no shareable links
   });
 
   it('opens an owned e-book for reading without using a download', async () => {

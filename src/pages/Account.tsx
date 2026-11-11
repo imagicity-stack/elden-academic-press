@@ -75,7 +75,9 @@ function SignIn({ onDone }: { onDone: () => void }) {
       <div className="acct-in__text">
         <div className="t-label">Your account</div>
         <h1 className="t-display acct-in__title"><SplitWords text="Your shelf," /> <span className="serif-i">in one place.</span></h1>
-        <Reveal delay={0.3}><p className="t-lead">Read your e-books and journals online, download them again, and see every order. No password to remember.</p></Reveal>
+        <Reveal delay={0.3}><p className="t-lead">{new URLSearchParams(location.search).get('tab') === 'library'
+          ? <>Your e-books are waiting. <b>Sign in with Google using the email you ordered with</b> to read and download them. For your security, they open only here.</>
+          : 'Read your e-books and journals online, download them again, and see every order. No password to remember.'}</p></Reveal>
         <Reveal delay={0.4} className="acct-in__actions">
           {googleButtonAvailable && !fallback && <div ref={googleSlot} className="acct-gsi" />}
           {accountsEnabled && fallback && (
@@ -224,7 +226,7 @@ function Library({ items }: { items: LibraryItem[] }) {
     return (
       <div className="empty">
         <div className="empty__title">No e-books yet.</div>
-        <div className="empty__body">E-books and journal issues you buy appear here, ready to read.</div>
+        <div className="empty__body">E-books and journal issues you buy appear here, ready to read. Ordered with a different email? Sign in with the Google account for that email, or write to us and we’ll add this one to your order.</div>
         <Link to={catalogueHref({ format: ['ebook'] })} className="btn btn--ink btn--md">Browse e-books <Arrow /></Link>
       </div>
     );
@@ -239,6 +241,19 @@ function Library({ items }: { items: LibraryItem[] }) {
     } catch (e) {
       win?.close();
       setErr((e as Error).message);
+    }
+  };
+  // Downloads only from here: the server checks the account, counts it, and returns a five-minute link.
+  const [busy, setBusy] = useState<string | null>(null);
+  const download = async (item: LibraryItem, file = 0) => {
+    setErr(null); setBusy(`${item.itemId}:${file}`);
+    try {
+      const { url } = await accountApi<{ url: string }>(`/library/${item.itemId}/download?f=${file}`, { method: 'POST' });
+      window.location.href = new URL(url, window.location.origin).href;
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
     }
   };
   return (
@@ -260,16 +275,16 @@ function Library({ items }: { items: LibraryItem[] }) {
                         <li key={f.index}>
                           <span>{f.label}</span>
                           <button type="button" className="text-link" disabled={!i.canRead} onClick={() => read(i, f.index)}>Read</button>
-                          {f.downloadUrl && <a className="text-link" href={f.downloadUrl}>Download</a>}
+                          {f.canDownload && <button type="button" className="text-link" disabled={busy !== null} onClick={() => download(i, f.index)}>{busy === `${i.itemId}:${f.index}` ? 'Preparing…' : 'Download'}</button>}
                         </li>
                       ))}
                     </ul>
-                    <div className="acct-book__muted">{i.awaitingDelivery ? 'Unlocks when your books are delivered' : i.downloadUrl ? `${i.downloadsLeft} downloads left` : i.canRead ? 'No downloads left' : 'Access ended'}</div>
+                    <div className="acct-book__muted">{i.awaitingDelivery ? 'Unlocks when your books are delivered' : i.canDownload ? `${i.downloadsLeft} downloads left` : i.canRead ? 'No downloads left' : 'Access ended'}</div>
                   </>
                 ) : (
                   <div className="acct-book__actions">
                     <button type="button" className="btn btn--accent btn--sm" disabled={!i.canRead} onClick={() => read(i)}>Read</button>
-                    {i.downloadUrl ? <a className="text-link" href={i.downloadUrl}>Download · {i.downloadsLeft} left</a> : <span className="acct-book__muted">{i.awaitingDelivery ? 'Unlocks when your books are delivered' : i.canRead ? 'No downloads left' : 'Access ended'}</span>}
+                    {i.canDownload ? <button type="button" className="text-link" disabled={busy !== null} onClick={() => download(i)}>{busy === `${i.itemId}:0` ? 'Preparing…' : `Download · ${i.downloadsLeft} left`}</button> : <span className="acct-book__muted">{i.awaitingDelivery ? 'Unlocks when your books are delivered' : i.canRead ? 'No downloads left' : 'Access ended'}</span>}
                   </div>
                 )}
                 {i.expiresAt && <div className="acct-book__muted">Available until {day(i.expiresAt)}</div>}

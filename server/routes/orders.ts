@@ -1,17 +1,17 @@
 // Customer order pages: private order link, tracking lookup, invoice, e-book downloads.
 import { Hono, type Context } from 'hono';
-import { and, asc, eq, or, sql } from 'drizzle-orm';
+import { and, asc, eq, or } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
 import { orderEvents, orderItems, orders } from '../db/schema.js';
-import { body, HttpError, notFound, rateLimit } from '../lib/http.js';
+import { body, notFound, rateLimit } from '../lib/http.js';
 import { getSettings } from '../services/catalog.js';
 import { sendOrderLink } from '../services/emails.js';
 import { invoiceFileName, renderInvoicePdf } from '../services/invoicePdf.js';
 import { stateName } from '../lib/states.js';
 import { paymentMethodLabel } from '../lib/format.js';
 import { checkOrderToken, type Order } from '../services/orders.js';
-import { downloadLimit, downloadName, ebookAwaitsDelivery, fileLabel, filesForItems } from '../services/ebooks.js';
+import { downloadLimit, ebookAwaitsDelivery, fileLabel, filesForItems, libraryPath, maskEmail } from '../services/ebooks.js';
 
 
 export const customerOrders = new Hono<AppEnv>();
@@ -84,6 +84,8 @@ customerOrders.get('/:number', async (c) => {
     }),
     downloadsExpireAt: expiry,
     ebooksAfterDelivery: awaitingDelivery,
+    // E-books open only in the account of the order's email (or the one staff added).
+    library: { path: libraryPath, emails: [o.email, o.ebookEmail].filter((e): e is string => Boolean(e)).map(maskEmail) },
     paymentMode: o.paymentMode,
     paidOnline: o.total - o.codAmount,
     codAmount: o.codAmount,
@@ -110,33 +112,12 @@ customerOrders.get('/:number/invoice', async (c) => {
   });
 });
 
-customerOrders.get('/:number/download/:itemId', async (c) => {
-  const deps = c.get('deps');
-  const o = await loadByToken(c, c.req.param('number'), c.req.query('t'));
-  await rateLimit(deps.db, `download:${o.id}`, 30, 3600);
-  const s = await getSettings(deps.db);
-  if (!isPaid(o)) throw new HttpError(403, 'Downloads are available once the order is paid.');
-  if (ebookAwaitsDelivery(o)) throw new HttpError(403, 'Your free e-book unlocks once your books are delivered.', 'awaiting_delivery');
-  if (o.paidAt && s.downloadExpiryDays > 0 && o.paidAt.getTime() + s.downloadExpiryDays * 86400_000 < deps.now().getTime()) {
-    throw new HttpError(410, 'This download link has expired. Please contact us.');
-  }
-  const itemId = c.req.param('itemId');
-  const [found] = await deps.db.select().from(orderItems).where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, o.id)));
-  if (!found) throw notFound('This e-book isn’t in this order.');
-  // ?f= picks one of the e-book's files (0 = the first).
-  const fs = (await filesForItems(deps.db, [found])).get(found.id) ?? [];
-  const index = Math.max(0, Number.parseInt(c.req.query('f') ?? '0', 10) || 0);
-  const file = fs[index];
-  if (!file) throw new HttpError(404, 'This e-book file is not available. Please contact us.');
-  const [item] = await deps.db.update(orderItems)
-    .set({ downloadsUsed: sql`${orderItems.downloadsUsed} + 1` })
-    .where(and(eq(orderItems.id, found.id), sql`${orderItems.downloadsUsed} < ${downloadLimit(s, fs.length)}`))
-    .returning();
-  if (!item) throw new HttpError(403, 'Download limit reached for this e-book. Please contact us if you need more.');
-  const url = await deps.storage.signedDownloadUrl('ebooks', file.path, 300, downloadName(file, index, fs.length, item.title));
-  c.header('Cache-Control', 'no-store');
-  return c.redirect(url, 302);
-});
+/**
+ * Download links from older emails and order pages. E-books now open only from the buyer's
+ * account (signed in with Google using the order's email), so a forwarded link is no use to
+ * anyone else: this sends them to the Library, which asks them to sign in.
+ */
+customerOrders.get('/:number/download/:itemId', (c) => c.redirect(`${c.get('deps').env.SITE_URL}${libraryPath}`, 302));
 
 const zLookup = z.object({
   number: z.coerce.number().int().positive(),
