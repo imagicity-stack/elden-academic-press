@@ -16,7 +16,7 @@ interface Data {
 const PERIODS: [number, string][] = [[7, '7 days'], [30, '30 days'], [90, '90 days'], [365, '12 months']];
 const fmt = (n: number) => n.toLocaleString('en-IN');
 const rate = (r: number | null) => (r === null ? '—' : `${r}%`);
-const dayLabel = (d: string) => new Date(`${d}T00:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+const dayLabel = (d: string) => new Date(`${d}T00:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
 
 export default function CookieConsent() {
   const [days, setDays] = useState(30);

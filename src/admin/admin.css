@@ -580,3 +580,23 @@ a.ad-stat:hover { border-color: var(--ad-navy); }
 .cc-meter__track { flex: 1; height: 8px; background: var(--ad-line2); border-radius: 0 4px 4px 0; overflow: hidden; }
 .cc-meter__fill { display: block; height: 100%; background: var(--ad-navy); border-radius: 0 4px 4px 0; }
 .cc-meter b { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Dashboard */
+.db-up { color: var(--ad-green); font-weight: 700; }
+.db-down { color: var(--ad-red); font-weight: 700; }
+.db-strong { color: var(--ad-ink); }
+.db-stat--cod { border-left: 4px solid #E0A33A; }
+.db-money--warn .au-bar__fill { background: var(--ad-bronze); }
+.db-money--muted .au-bar__fill { background: #A9A397; }
+.db-mix { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ad-line2); }
+.db-mix__row { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 6px; font-size: 13px; }
+.db-cod-head { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.db-cod-head > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--ad-bg); border-radius: 8px; }
+.db-cod-head b { font: 600 20px/1.2 Montserrat, sans-serif; color: var(--ad-navy); }
+.db-cod-head small { color: var(--ad-muted); font-size: 12px; }
+.db-oldest { margin-top: 6px; }
+.db-oldest li { font-size: 13px; }
+.db-chart-head { justify-content: space-between; margin-bottom: 8px; }
+.db-chart-head .ad-chart__readout { margin: 0; }
+.db-note { margin: 6px 0 0; font-size: 12.5px; }
+@media (max-width: 700px) { .db-cod-head { grid-template-columns: 1fr; } }

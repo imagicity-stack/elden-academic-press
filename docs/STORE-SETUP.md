@@ -402,6 +402,17 @@ Visits and form steps are counted by the website anonymously (each browser once 
 
 It is counted anonymously, as the privacy policy says: each browser adds one to a counter when it first sees the banner and once when it chooses. No IP address, browser string, id or contact detail is stored (the IP is only used, at that moment, to tell the region and to stop abuse). That's deliberate: recording identifying details of people before they agree, or after they choose *Only essential*, would go against the Digital Personal Data Protection Act and the privacy policy. Staff browsers and search-engine bots aren't counted.
 
+## 20. Dashboard
+
+The dashboard looks at a period (today, 7 days, 30 days, 90 days or 12 months) and compares it with the period before:
+- **Sales booked:** orders paid in the period, less refunds and the cash of cash-on-delivery parcels refused or cancelled before it was collected.
+- **Money received:** what actually reached you in the period: payments online (full prepayments and cash-on-delivery advances, less refunds) plus cash collected on delivery.
+- **Cash still to collect:** right now, across every open cash-on-delivery order, whenever it was placed.
+- **Where the money is:** paid online, COD advances, COD cash collected, COD cash still to collect and COD cash lost, each on its own line, plus the payment mix (online and cash-on-delivery orders).
+- **Cash on delivery:** what is still to collect by how long it has been waiting (not shipped, shipped 0–3, 4–7 or 8+ days ago), the collection rate (collected against refused or cancelled), the average days from order to cash, and the oldest cash due.
+
+Cash on delivery counts as collected when the order is marked **Delivered**. A daily chart switches between sales booked, money received and orders. Dates are India time.
+
 ## Running costs
 
 | Service | Cost |
