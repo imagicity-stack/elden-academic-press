@@ -5,6 +5,7 @@ import { getCookie } from 'hono/cookie';
 import type { AppEnv } from '../app.js';
 import type { Deps } from '../deps.js';
 import type { MetaEvent } from '../lib/meta.js';
+import { isoStateName } from '../lib/states.js';
 import type { Order, OrderItem } from './orders.js';
 import { registrationEventId, registrationParams } from '../../src/shared/metaEvents.js';
 import { todayIST } from '../../src/shared/profile.js';
@@ -21,7 +22,28 @@ export function metaAllowed(deps: Pick<Deps, 'env' | 'now'>, a: { accountType: s
   return age !== null && age >= deps.env.META_MIN_AGE;
 }
 
-export interface Visit { consent: boolean; ip: string | null; userAgent: string | null; fbp: string | null; fbc: string | null }
+export interface Visit {
+  consent: boolean; ip: string | null; userAgent: string | null; fbp: string | null; fbc: string | null;
+  /** Approximate location from the IP address (Vercel adds it to every request). */
+  geo: { city: string | null; state: string | null; pincode: string | null; country: string | null } | null;
+}
+
+/** Vercel's IP geolocation headers → city, state (Indian states by name), PIN code, country. */
+function geoOf(c: Context<AppEnv>): Visit['geo'] {
+  const h = (k: string) => c.req.header(k)?.trim() || null;
+  const country = h('x-vercel-ip-country')?.toUpperCase() ?? null;
+  if (!country || !/^[A-Z]{2}$/.test(country)) return null;
+  let city = h('x-vercel-ip-city');
+  try { city = city ? decodeURIComponent(city) : null; } catch { city = null; }
+  const region = h('x-vercel-ip-country-region');
+  const pin = h('x-vercel-ip-postal-code');
+  return {
+    country,
+    city: city && city.length <= 80 ? city : null,
+    state: country === 'IN' ? isoStateName(region) : null,
+    pincode: pin && /^[\w -]{3,10}$/.test(pin) ? pin : null,
+  };
+}
 
 const metaCookie = (v: string | undefined) => (v && v.length < 400 && /^fb\.\d+\.\d+\.\S+$/.test(v) ? v : null);
 
@@ -33,6 +55,7 @@ export function visitOf(c: Context<AppEnv>): Visit {
     userAgent: c.req.header('user-agent')?.slice(0, 500) ?? null,
     fbp: metaCookie(getCookie(c, '_fbp')),
     fbc: metaCookie(getCookie(c, '_fbc')),
+    geo: geoOf(c),
   };
 }
 

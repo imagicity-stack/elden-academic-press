@@ -1011,3 +1011,7 @@ select.input { appearance: none; padding-right: 42px; background: #FFFFFF url("d
   .header__actions .icon-btn { width: 38px; }
   .hero__kicker { flex-wrap: wrap; }
 }
+
+/* Order page: e-books open only in the buyer's account */
+.order-library { margin-top: 14px; padding: 16px 18px; background: #F2ECE1; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.order-library p { margin: 0; font-size: 14.5px; line-height: 1.5; }

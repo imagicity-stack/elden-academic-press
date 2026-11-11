@@ -26,6 +26,7 @@ const PopupsAdmin = lazy(() => import('./pages/Popups'));
 const CallsAdmin = lazy(() => import('./pages/Calls'));
 const WhatsAppAdmin = lazy(() => import('./pages/WhatsApp'));
 const Audience = lazy(() => import('./pages/Audience'));
+const CookieConsent = lazy(() => import('./pages/CookieConsent'));
 const CompetitionsAdmin = lazy(() => import('./pages/Competitions'));
 
 export interface Me { userId: string; email: string; name: string; role: 'owner' | 'manager' | 'staff'; aal: string; mfaRequired: boolean; mfaSatisfied: boolean }
@@ -220,6 +221,7 @@ const NAV: { to: string; label: string; icon: string; count?: keyof Counts; owne
   { to: '/admin/customers', label: 'Customers', icon: 'M16 19a4 4 0 0 0-8 0M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19a3 3 0 0 0-3-3M4 19a3 3 0 0 1 3-3' },
   { to: '/admin/discounts', label: 'Discounts', icon: 'M20 12l-8 8-9-9V3h8zM7.5 7.5h.01' },
   { to: '/admin/audience', label: 'Audience', icon: 'M3 20v-1a5 5 0 0 1 5-5h2M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM14 20l2-2 2 2 4-5' },
+  { to: '/admin/cookies', label: 'Cookie consent', icon: 'M12 3a9 9 0 1 0 9 9 4 4 0 0 1-5-4 4 4 0 0 1-4-5zM8.5 11.5h.01M11 15.5h.01M15.5 14h.01' },
   { to: '/admin/newsletter', label: 'Newsletter', icon: 'M3 6h18v12H3zM3 7l9 6 9-6' },
   { to: '/admin/popups', label: 'Popups', icon: 'M4 5h16v14H4zM8 9h8M8 13h5M15 16l3 3', manage: true },
   { to: '/admin/calls', label: 'Calls', icon: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2', manage: true },
@@ -295,6 +297,7 @@ function Shell({ me }: { me: Me }) {
               <Route path="/admin/calls" element={<CallsAdmin />} />
               <Route path="/admin/calls/:tab" element={<CallsAdmin />} />
               <Route path="/admin/audience" element={<Audience />} />
+              <Route path="/admin/cookies" element={<CookieConsent />} />
               <Route path="/admin/whatsapp" element={<WhatsAppAdmin />} />
               <Route path="/admin/whatsapp/:tab" element={<WhatsAppAdmin />} />
               <Route path="/admin/competitions" element={<CompetitionsAdmin />} />

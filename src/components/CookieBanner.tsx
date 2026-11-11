@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { getConsent, setConsent, type Consent } from '../consent';
+import { bannerShown, choiceMade } from '../consentTrack';
 import { EASE } from './motion';
 
 /** The cookie choice: shown until the visitor picks, and again from "Cookie settings" in the footer. */
@@ -12,7 +13,9 @@ export function CookieBanner() {
     window.addEventListener('elden:consent-open', show);
     return () => window.removeEventListener('elden:consent-open', show);
   }, []);
-  const choose = (c: Consent) => { setConsent(c); setOpen(false); };
+  // Analytics: counted once when a browser first sees the banner (anonymous counters only).
+  useEffect(() => { if (open && getConsent() === null) bannerShown(); }, [open]);
+  const choose = (c: Consent) => { choiceMade(getConsent(), c); setConsent(c); setOpen(false); };
   return (
     <AnimatePresence>
       {open && (

@@ -41,3 +41,9 @@ export function downloadName(f: EbookFile, i: number, count: number, bookTitle: 
   const ext = f.path.split('.').pop()?.toLowerCase() === 'epub' ? 'epub' : 'pdf';
   return `${bookTitle}${count > 1 ? ` - ${fileLabel(f, i, count)}` : ''}.${ext}`;
 }
+
+/** The address shown in "sign in with Google as …" (masked), e.g. "as•••@gmail.com". */
+export const maskEmail = (email: string) => email.replace(/^(.{2}).*(@.*)$/, '$1•••$2');
+
+/** Where buyers open their e-books: the Library in their account (signed in with Google). */
+export const libraryPath = '/account?tab=library';

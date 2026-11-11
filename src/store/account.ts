@@ -27,9 +27,11 @@ declare global { interface Window { google?: { accounts?: { id?: GoogleId } } } 
 
 export interface LibraryItem {
   itemId: string; productId: string | null; title: string; format: string; orderNumber: number;
-  purchasedAt: string; expiresAt: string | null; downloadsLeft: number; canRead: boolean; downloadUrl: string | null;
+  purchasedAt: string; expiresAt: string | null; downloadsLeft: number; canRead: boolean;
+  /** Downloads go through POST /account/library/:itemId/download (only signed in). */
+  canDownload: boolean;
   /** The e-book's files (several for books in parts). */
-  files?: { index: number; label: string; downloadUrl: string | null }[];
+  files?: { index: number; label: string; canDownload: boolean }[];
   /** Cash on delivery: unlocks once the books are delivered. */
   awaitingDelivery?: boolean;
 }

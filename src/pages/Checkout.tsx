@@ -272,7 +272,10 @@ export function Checkout() {
               <Input label="Full name" value={d.name} onChange={set('name')} autoComplete="name" required />
               <Input label="Mobile number" value={d.phone} onChange={set('phone')} type="tel" autoComplete="tel-national" inputMode="numeric" placeholder="10-digit mobile" required />
             </div>
-            <Input label="Email" value={d.email} onChange={set('email')} type="email" autoComplete="email" required hint="Your order confirmation and e-book links are sent here." />
+            <Input label="Email" value={d.email} onChange={set('email')} type="email" autoComplete="email" required
+              hint={quote?.lines.some((l) => l.isDigital || l.includesEbook)
+                ? 'Use your Gmail (Google) address: your e-books open in your account when you sign in with Google using this email.'
+                : 'Your order confirmation is sent here.'} />
             <label className="tick">
               <input type="checkbox" checked={newsletter} onChange={(e) => setNewsletter(e.target.checked)} />
               <span className="tick__box" aria-hidden="true" />

@@ -26,6 +26,9 @@ export interface MetaUser {
   userAgent?: string | null;
   fbp?: string | null;
   fbc?: string | null;
+  /** Approximate location from the IP address (Vercel's geolocation). Used only where the
+   *  visitor hasn't given their own city, state or PIN code. */
+  geo?: { city?: string | null; state?: string | null; pincode?: string | null; country?: string | null } | null;
 }
 
 export interface MetaEvent {
@@ -60,11 +63,19 @@ export function userData(u: MetaUser): Record<string, unknown> {
   const parts = (u.name ?? '').trim().split(/\s+/).filter(Boolean);
   add('fn', parts.length ? letters(parts[0]) : null);
   add('ln', parts.length > 1 ? letters(parts[parts.length - 1]) : null);
-  add('ct', u.city ? letters(u.city) : null);
-  const state = u.state ? stateName(u.state) ?? u.state : null;
+  // What they told us first; otherwise where their IP address points (so even a first visit
+  // carries a matching key: Meta needs at least one of em, ph, fn, ln, ct, st, zp…).
+  const own = Boolean(u.city || u.state || u.pincode);
+  const geo = own ? null : u.geo ?? null;
+  const city = u.city || geo?.city;
+  add('ct', city ? letters(city) : null);
+  const stateRaw = u.state || geo?.state;
+  const state = stateRaw ? stateName(stateRaw) ?? stateRaw : null;
   add('st', state ? letters(state) : null);
-  add('zp', u.pincode ? u.pincode.replace(/\s/g, '') : null);
-  if (email || u.phone || u.city || u.pincode) add('country', 'in');
+  const pin = u.pincode || geo?.pincode;
+  add('zp', pin ? pin.replace(/\s/g, '').toLowerCase() : null);
+  const country = own || email || u.phone ? 'in' : geo?.country?.toLowerCase() ?? null;
+  add('country', country && /^[a-z]{2}$/.test(country) ? country : null);
   add('external_id', u.externalId ? u.externalId.trim().toLowerCase() : email);
   if (u.ip) out.client_ip_address = u.ip;
   if (u.userAgent) out.client_user_agent = u.userAgent;

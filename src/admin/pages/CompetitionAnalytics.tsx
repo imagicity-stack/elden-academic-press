@@ -20,7 +20,7 @@ interface Data {
 const PERIODS: [number, string][] = [[7, '7 days'], [30, '30 days'], [90, '90 days'], [3650, 'All time']];
 const fmt = (n: number) => n.toLocaleString('en-IN');
 const pct = (n: number, of: number) => (of ? Math.round((n / of) * 100) : 0);
-const dayLabel = (d: string) => new Date(`${d}T00:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+const dayLabel = (d: string) => new Date(`${d}T00:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
 
 export function CompetitionAnalytics({ slug }: { slug: string }) {
   const [days, setDays] = useState(30);

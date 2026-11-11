@@ -19,6 +19,8 @@ interface OrderView {
   downloadsExpireAt: string | null;
   /** Cash on delivery: the free e-book unlocks once the books are delivered. */
   ebooksAfterDelivery?: boolean;
+  /** E-books open only in the account of these (masked) emails. */
+  library?: { path: string; emails: string[] };
   paymentMode?: 'online' | 'cod';
   paidOnline?: number;
   codAmount?: number;
@@ -130,36 +132,23 @@ export function OrderStatus() {
               <ul className="dl-list">
                 {digital.map((i) => {
                   const files = i.files ?? [];
-                  const href = (f: number) => `/api/orders/${order.number}/download/${i.id}${q}&f=${f}`;
-                  const off = order.ebooksAfterDelivery
-                    ? <span className="dl-list__off">Unlocks when your books are delivered</span>
-                    : <span className="dl-list__off">Not available — <a href={`mailto:${cfg?.supportEmail ?? 'hello@eldenap.in'}`}>contact us</a></span>;
-                  const left = `${i.downloadsLeft} download${i.downloadsLeft === 1 ? '' : 's'} left`;
-                  if (files.length > 1) {
-                    return (
-                      <li key={i.id} className="dl-list__multi">
-                        <div><strong>{i.title}</strong><span>{i.format} · {files.length} files · {left}</span></div>
-                        <ul className="dl-files">
-                          {files.map((f) => (
-                            <li key={f.index}>
-                              <span className="dl-files__label">{f.label}</span>
-                              {i.canDownload ? <a className="btn btn--ink btn--sm" href={href(f.index)}>Download</a> : off}
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    );
-                  }
                   return (
                     <li key={i.id}>
-                      <div><strong>{i.title}</strong><span>{i.format} · {left}</span></div>
-                      {i.canDownload ? <a className="btn btn--ink btn--md" href={href(0)}>Download PDF</a> : off}
+                      <div><strong>{i.title}</strong><span>{i.format}{files.length > 1 ? ` · ${files.length} files` : ''}{i.downloadsLeft != null ? ` · ${i.downloadsLeft} download${i.downloadsLeft === 1 ? '' : 's'} left` : ''}</span></div>
+                      {order.ebooksAfterDelivery ? <span className="dl-list__off">Unlocks when your books are delivered</span>
+                        : !i.canDownload ? <span className="dl-list__off">Not available — <a href={`mailto:${cfg?.supportEmail ?? 'hello@eldenap.in'}`}>contact us</a></span> : null}
                     </li>
                   );
                 })}
               </ul>
-              {order.ebooksAfterDelivery && <p className="order-card__note">Cash on delivery: your free e-book unlocks as soon as your books are delivered. We’ll email you the download links.</p>}
-              {order.downloadsExpireAt && !order.ebooksAfterDelivery && <p className="order-card__note">Downloads are available until {new Date(order.downloadsExpireAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}. Save the files to your device.</p>}
+              {!order.ebooksAfterDelivery && digital.some((i) => i.canDownload) && (
+                <div className="order-library">
+                  <p>For your security, e-books open only in your account. Sign in with Google using <b>{(order.library?.emails ?? [order.email]).join(' or ')}</b> and they’re waiting in your Library.</p>
+                  <Link className="btn btn--ink btn--md" to={order.library?.path ?? '/account?tab=library'}>Sign in to read &amp; download</Link>
+                </div>
+              )}
+              {order.ebooksAfterDelivery && <p className="order-card__note">Cash on delivery: your free e-book unlocks as soon as your books are delivered. We’ll email you then, and it will be in your Library.</p>}
+              {order.downloadsExpireAt && !order.ebooksAfterDelivery && <p className="order-card__note">Your e-books are available until {new Date(order.downloadsExpireAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}. Save the files to your device.</p>}
             </section>
           )}
 

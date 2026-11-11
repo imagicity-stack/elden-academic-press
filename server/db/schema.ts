@@ -202,6 +202,9 @@ export const orders = pgTable('orders', {
   customerNote: text('customer_note').notNull().default(''),
   /** Ticked "email me about new books and offers" at checkout; subscribed once paid. */
   newsletterOptIn: boolean('newsletter_opt_in').notNull().default(false),
+  /** Another email whose account may also open this order's e-books (set by staff, e.g. the
+   *  buyer's Google address when they ordered with a different one). */
+  ebookEmail: text('ebook_email'),
   /** 'online' (paid in full) or 'cod' (an advance paid online, the rest in cash on delivery). */
   paymentMode: text('payment_mode').notNull().default('online'),
   /** Cash on delivery: the balance to collect when the books are delivered (0 for online orders). */
@@ -1140,3 +1143,24 @@ export const competitionStats = pgTable('competition_stats', {
   channel: text('channel').notNull(),
   n: integer('n').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.competitionSlug, t.day, t.step, t.channel] })]);
+
+/* ---------------- Cookie-banner analytics ---------------- */
+
+/** How many visitors saw the cookie banner and what they chose: counters only, nothing that identifies anyone. */
+export const consentStats = pgTable('consent_stats', {
+  /** India date. */
+  day: date('day', { mode: 'string' }).notNull(),
+  /** shown | accept | essential | change_all | change_essential */
+  event: text('event').notNull(),
+  /** mobile | tablet | desktop */
+  device: text('device').notNull(),
+  /** Approximate, from the IP address at the time (not stored): an Indian state, or a country code. '' = unknown. */
+  region: text('region').notNull(),
+  /** The visit's channel (meta_ads, search, direct…). */
+  channel: text('channel').notNull(),
+  /** The kind of page (home, book, checkout…). */
+  page: text('page').notNull(),
+  /** How long they took to choose (lt5, lt15…); '' for "shown". */
+  timing: text('timing').notNull(),
+  n: integer('n').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.day, t.event, t.device, t.region, t.channel, t.page, t.timing] })]);

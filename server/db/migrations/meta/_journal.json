@@ -148,6 +148,20 @@
       "when": 1794355136757,
       "tag": "0020_cod_advance_percent",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794369510754,
+      "tag": "0021_consent_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794370335880,
+      "tag": "0022_ebook_email",
+      "breakpoints": true
     }
   ]
 }

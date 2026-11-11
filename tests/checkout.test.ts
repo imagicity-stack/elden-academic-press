@@ -3,7 +3,10 @@ import { and, eq } from 'drizzle-orm';
 import { hmacHex } from '../server/lib/crypto.js';
 import { orderToken } from '../server/services/orders.js';
 import { inventoryMovements, orders, productVariants, products } from '../server/db/schema.js';
-import { address, contact, setup, WEBHOOK_SECRET } from './helpers.js';
+import { address, contact, setup, supabaseToken, WEBHOOK_SECRET } from './helpers.js';
+
+/** E-books download only from the buyer's account: signed in with Google as the order's email. */
+const buyer = async (email = contact.email) => ({ authorization: `Bearer ${await supabaseToken({ sub: '33333333-3333-4333-8333-333333333333', email, provider: 'google', name: 'Asha' })}` });
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
 let t: Ctx;
@@ -79,8 +82,11 @@ describe('checkout and payment', () => {
     expect(o.phone).toBe('9876543210');
     expect(t.mailer.sent.map((m) => m.subject)).toEqual(expect.arrayContaining([`Order #${o.number} confirmed: your e-books are ready`, expect.stringContaining('New order')]));
     const confirmation = t.mailer.sent.find((m) => m.to === contact.email)!;
-    expect(confirmation.html).toContain(`/api/orders/${o.number}/download/`);
-    // Only the invoice is attached; the e-book is downloaded from the email's button.
+    // No download links in the email: a button to the Library, where they sign in with Google.
+    expect(confirmation.html).not.toContain('/download/');
+    expect(confirmation.html).toContain('https://eldenap.in/account?tab=library');
+    expect(confirmation.html).toContain(contact.email);
+    // Only the invoice is attached.
     expect(confirmation.attachments!.map((a) => a.filename)).toEqual([expect.stringMatching(/^Elden-invoice-EAP-\d\d-\d\d-00001\.pdf$/)]);
     expect(new TextDecoder().decode(confirmation.attachments![0].content.slice(0, 5))).toBe('%PDF-');
 
@@ -233,16 +239,42 @@ describe('after purchase', () => {
     expect(r.json.timeline.map((e: any) => [e.type, e.message])).toEqual([['created', 'Order placed'], ['paid', 'Payment received · UPI']]);
   });
 
-  it('serves e-books through short-lived links, with a download limit', async () => {
+  it('serves e-books only from the buyer\'s account, through short-lived links, with a download limit', async () => {
     const o = await paidOrder();
     const status = await t.call('GET', `/orders/${o.number}?t=${o.token}`);
     const itemId = status.json.items[0].id;
-    const r = await t.call('GET', `/orders/${o.number}/download/${itemId}?t=${o.token}`);
-    expect(r.status).toBe(302);
-    expect(r.headers.get('location')).toMatch(/^https:\/\/files\.test\/signed\/ebooks\/samples\/mathematics-today\.pdf\?expires=300$/);
-    for (let i = 1; i < 10; i++) await t.call('GET', `/orders/${o.number}/download/${itemId}?t=${o.token}`);
-    const over = await t.call('GET', `/orders/${o.number}/download/${itemId}?t=${o.token}`);
-    expect(over.status).toBe(403);
+    expect(status.json.library).toEqual({ path: '/account?tab=library', emails: ['as•••@example.com'] });
+    // The order link (or an old email link) no longer downloads: it leads to the Library.
+    const old = await t.call('GET', `/orders/${o.number}/download/${itemId}?t=${o.token}`);
+    expect(old.status).toBe(302);
+    expect(old.headers.get('location')).toBe('https://eldenap.in/account?tab=library');
+    // Not signed in, or signed in as someone else: nothing.
+    expect((await t.call('POST', `/account/library/${itemId}/download`)).status).toBe(401);
+    const stranger = await buyer('someone@else.in');
+    await t.call('GET', '/account', { headers: stranger });
+    expect((await t.call('POST', `/account/library/${itemId}/download`, { headers: stranger })).status).toBe(404);
+    // The buyer, signed in with the order's email: a five-minute link, counted.
+    const h = await buyer();
+    await t.call('GET', '/account', { headers: h });
+    const r = await t.call('POST', `/account/library/${itemId}/download`, { headers: h });
+    expect(r.status).toBe(200);
+    expect(r.json.url).toMatch(/^https:\/\/files\.test\/signed\/ebooks\/samples\/mathematics-today\.pdf\?expires=300/);
+    for (let i = 1; i < 10; i++) await t.call('POST', `/account/library/${itemId}/download`, { headers: h });
+    expect((await t.call('POST', `/account/library/${itemId}/download`, { headers: h })).status).toBe(403);
+  });
+
+  it('staff can open an order\'s e-books for the buyer\'s Google address', async () => {
+    const o = await paidOrder();
+    const itemId = (await t.call('GET', `/orders/${o.number}?t=${o.token}`)).json.items[0].id;
+    const gmail = await buyer('asha.verma@gmail.com');
+    await t.call('GET', '/account', { headers: gmail });
+    expect((await t.call('POST', `/account/library/${itemId}/download`, { headers: gmail })).status).toBe(404);
+    const owner = { authorization: `Bearer ${await supabaseToken({ sub: '11111111-1111-4111-8111-111111111111', email: 'owner@eldenap.in', provider: 'email', aal: 'aal2' })}` };
+    const [row] = await t.db.select().from(orders).where(eq(orders.number, o.number));
+    expect((await t.call('POST', `/admin/orders/${row.id}/ebook-email`, { headers: owner, body: { email: 'Asha.Verma@gmail.com' } })).status).toBe(200);
+    expect((await t.call('GET', '/account', { headers: gmail })).json.library).toHaveLength(1);
+    expect((await t.call('POST', `/account/library/${itemId}/download`, { headers: gmail })).status).toBe(200);
+    expect((await t.call('GET', `/orders/${o.number}?t=${o.token}`)).json.library.emails).toEqual(['as•••@example.com', 'as•••@gmail.com']);
   });
 
   it('gives the e-book free with printed copies of books set that way, and not otherwise', async () => {
@@ -268,9 +300,11 @@ describe('after purchase', () => {
     expect(withEbook.items[0]).toMatchObject({ format: 'Printed book + free e-book', canDownload: true, downloadsLeft: 10 });
     expect(withEbook.items[0].files).toHaveLength(1);
     const token = await orderTokenFor(withEbook.number);
-    const dl = await t.call('GET', `/orders/${withEbook.number}/download/${withEbook.items[0].id}?t=${token}`);
-    expect(dl.status).toBe(302);
-    expect(dl.headers.get('location')).toContain('/ebooks/');
+    const h = await buyer();
+    await t.call('GET', '/account', { headers: h });
+    const dl = await t.call('POST', `/account/library/${withEbook.items[0].id}/download`, { headers: h });
+    expect(dl.status).toBe(200);
+    expect(dl.json.url).toContain('/ebooks/');
     const mail = t.mailer.sent.find((m) => m.to === contact.email)!;
     expect(mail.html).toContain('Free with your printed copy');
     expect(mail.attachments!.map((a) => a.filename)).toEqual([expect.stringMatching(/^Elden-invoice-/)]);
@@ -297,17 +331,18 @@ describe('after purchase', () => {
     expect(item.files.map((f: any) => f.label)).toEqual(['Part 1', 'Part 2', 'Answer key']);
     expect(item.downloadsLeft).toBe(30);
 
-    const get = (f: number) => t.call('GET', `/orders/${r.json.number}/download/${item.id}?t=${r.json.token}&f=${f}`);
-    expect((await get(0)).headers.get('location')).toContain('/ebooks/books/maths-part-1.pdf');
-    const second = await get(1);
-    expect(second.headers.get('location')).toContain('/ebooks/books/maths-part-2.pdf');
-    expect((await get(2)).headers.get('location')).toContain('/ebooks/books/maths-answers.pdf');
+    const h = await buyer();
+    await t.call('GET', '/account', { headers: h });
+    const get = (f: number) => t.call('POST', `/account/library/${item.id}/download?f=${f}`, { headers: h });
+    expect((await get(0)).json.url).toContain('/ebooks/books/maths-part-1.pdf');
+    expect((await get(1)).json.url).toContain('/ebooks/books/maths-part-2.pdf');
+    expect((await get(2)).json.url).toContain('/ebooks/books/maths-answers.pdf');
     expect((await get(3)).status).toBe(404);
 
     const mail = t.mailer.sent.find((m) => m.to === contact.email && m.subject.includes(`#${r.json.number}`))!;
     expect(mail.attachments!.map((a) => a.filename)).toEqual([expect.stringMatching(/^Elden-invoice-/)]);
-    for (const f of [0, 1, 2]) expect(mail.html).toContain(`/download/${item.id}?t=${r.json.token}&amp;f=${f}`);
-    expect(mail.html).toContain('Mathematics Today: Answer key');
+    expect(mail.html).not.toContain('/download/');
+    expect(mail.html).toContain('3 files');
   });
 
   it('serves the invoice as a PDF', async () => {

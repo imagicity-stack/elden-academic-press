@@ -41,3 +41,14 @@ export const STATES: { code: string; name: string }[] = [
 const byCode = new Map(STATES.map((s) => [s.code, s.name]));
 export const isStateCode = (code: string) => byCode.has(code);
 export const stateName = (code: string | null | undefined) => (code ? byCode.get(code) ?? code : '');
+
+/** ISO 3166-2:IN subdivision codes (as Vercel reports a visitor's region) → state names. */
+const ISO_STATES: Record<string, string> = {
+  AN: 'Andaman and Nicobar Islands', AP: 'Andhra Pradesh', AR: 'Arunachal Pradesh', AS: 'Assam', BR: 'Bihar', CH: 'Chandigarh',
+  CT: 'Chhattisgarh', CG: 'Chhattisgarh', DH: 'Dadra and Nagar Haveli and Daman and Diu', DN: 'Dadra and Nagar Haveli and Daman and Diu', DD: 'Dadra and Nagar Haveli and Daman and Diu',
+  DL: 'Delhi', GA: 'Goa', GJ: 'Gujarat', HR: 'Haryana', HP: 'Himachal Pradesh', JK: 'Jammu and Kashmir', JH: 'Jharkhand', KA: 'Karnataka',
+  KL: 'Kerala', LA: 'Ladakh', LD: 'Lakshadweep', MP: 'Madhya Pradesh', MH: 'Maharashtra', MN: 'Manipur', ML: 'Meghalaya', MZ: 'Mizoram',
+  NL: 'Nagaland', OR: 'Odisha', OD: 'Odisha', PY: 'Puducherry', PB: 'Punjab', RJ: 'Rajasthan', SK: 'Sikkim', TN: 'Tamil Nadu',
+  TG: 'Telangana', TS: 'Telangana', TR: 'Tripura', UP: 'Uttar Pradesh', UT: 'Uttarakhand', UK: 'Uttarakhand', WB: 'West Bengal',
+};
+export const isoStateName = (code: string | null | undefined) => (code ? ISO_STATES[code.toUpperCase()] ?? null : null);

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { dashboardMoney } from '../../services/dashboard.js';
 import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
@@ -17,6 +18,7 @@ import { adminTeams } from './teams.js';
 import { adminCalls } from '../calls.js';
 import { adminWhatsApp } from '../whatsapp.js';
 import { adminAudience } from './audience.js';
+import { adminConsent } from './consent.js';
 import { adminPopups } from './popups.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
@@ -50,6 +52,7 @@ admin.route('/enquiries', adminEnquiries);
 admin.route('/resources', adminResources);
 admin.route('/newsletter', adminNewsletter);
 admin.route('/audience', adminAudience);
+admin.route('/consent', adminConsent);
 // Popups: managers and the owner.
 admin.use('/popups', requireRole('manager'));
 admin.use('/popups/*', requireRole('manager'));
@@ -72,9 +75,12 @@ const PAID = ['paid', 'partially_refunded', 'refunded'] as const;
 const IST_DAY = sql`(${orders.paidAt} at time zone 'Asia/Kolkata')::date`;
 
 admin.get('/dashboard', async (c) => {
-  const { db } = c.get('deps');
+  const { db, now } = c.get('deps');
   const s = await getSettings(db);
   const since = new Date(Date.now() - 31 * 86400_000);
+  // The period the dashboard is looking at (days, including today), for the money figures and best sellers.
+  const periodDays = [1, 7, 30, 90, 365].includes(Number(c.req.query('days'))) ? Number(c.req.query('days')) : 30;
+  const periodFrom = new Date(Date.parse(`${new Date(now().getTime() + 330 * 60_000).toISOString().slice(0, 10)}T00:00:00+05:30`) - (periodDays - 1) * 86400_000);
   const net = sql<number>`coalesce(sum(${orders.total} - ${orders.refundedAmount}), 0)::int`;
   const [series, toFulfil, attention, lowStock, newEnquiries, recent, top, abandoned] = await Promise.all([
     db.select({ day: sql<string>`${IST_DAY}::text`, revenue: net, orders: sql<number>`count(*)::int` }).from(orders)
@@ -90,7 +96,7 @@ admin.get('/dashboard', async (c) => {
     db.select().from(orders).where(inArray(orders.paymentStatus, PAID)).orderBy(desc(orders.paidAt)).limit(8),
     db.select({ title: orderItems.title, quantity: sql<number>`sum(${orderItems.quantity})::int`, revenue: sql<number>`sum(${orderItems.lineTotal} - ${orderItems.discount})::int` })
       .from(orderItems).innerJoin(orders, eq(orders.id, orderItems.orderId))
-      .where(and(inArray(orders.paymentStatus, ['paid', 'partially_refunded']), gte(orders.paidAt, since)))
+      .where(and(inArray(orders.paymentStatus, ['paid', 'partially_refunded']), gte(orders.paidAt, periodFrom)))
       .groupBy(orderItems.title).orderBy(desc(sql`sum(${orderItems.quantity})`)).limit(5),
     db.select({ n: count() }).from(orders).where(and(eq(orders.paymentStatus, 'expired'), gte(orders.createdAt, new Date(Date.now() - 7 * 86400_000)))),
   ]);
@@ -108,6 +114,8 @@ admin.get('/dashboard', async (c) => {
     today: sum(29), week: sum(23), month: m30, aov: m30.orders ? Math.round(m30.revenue / m30.orders) : 0,
     series: days, toFulfil: toFulfil[0].n, attention: attention[0].n, newEnquiries: newEnquiries[0].n, abandonedWeek: abandoned[0].n,
     lowStock, lowStockThreshold: s.lowStockThreshold, topProducts: top,
+    // Sales and money for the chosen period, cash on delivery kept apart (services/dashboard.ts).
+    analytics: await dashboardMoney(db, periodDays, now()),
     recentOrders: recent.map((o) => ({ id: o.id, number: o.number, name: o.name, total: o.total, paidAt: o.paidAt, status: orderStatusLabel(o) })),
   });
 });

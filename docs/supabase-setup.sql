@@ -1265,6 +1265,24 @@ ALTER TABLE "settings" ADD COLUMN "cod_advance_type" text DEFAULT 'flat' NOT NUL
 ALTER TABLE "settings" ADD COLUMN "cod_advance_bps" integer DEFAULT 1000 NOT NULL;--> statement-breakpoint
 ALTER TABLE "settings" ADD COLUMN "cod_advance_min" integer DEFAULT 0 NOT NULL;
 
+-- ===== 0021_consent_stats =====
+
+CREATE TABLE "consent_stats" (
+	"day" date NOT NULL,
+	"event" text NOT NULL,
+	"device" text NOT NULL,
+	"region" text NOT NULL,
+	"channel" text NOT NULL,
+	"page" text NOT NULL,
+	"timing" text NOT NULL,
+	"n" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "consent_stats_day_event_device_region_channel_page_timing_pk" PRIMARY KEY("day","event","device","region","channel","page","timing")
+);
+
+-- ===== 0022_ebook_email =====
+
+ALTER TABLE "orders" ADD COLUMN "ebook_email" text;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -1290,7 +1308,9 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('44f53a68827b686d98b0eb0418dce2942b9b6b3732aa849d7cf46a6d5bc6950f', 1794326037898),
   ('4b29e4d37076384f804620c9a867f9a29044b0b3a7b8ea4f9d66b0f60bbec2e5', 1794335003607),
   ('f7171c94bb2cab04f493ae425ad30b664e454756c8a19c4b8ecae89989ad5b86', 1794337425917),
-  ('c7da677b10a38be073b8e2663665bcbda8dd06941f6c8b2ca132b4cddb3bfea8', 1794355136757);
+  ('c7da677b10a38be073b8e2663665bcbda8dd06941f6c8b2ca132b4cddb3bfea8', 1794355136757),
+  ('21f9eeca6ca245d29d4e2616dc430e674f7bc63a000af91ecf857aae1faebe42', 1794369510754),
+  ('f510d7b0f559376bc9957abf13a7be917f3cabe1cc97dc9ef6239b884754cd6c', 1794370335880);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 
