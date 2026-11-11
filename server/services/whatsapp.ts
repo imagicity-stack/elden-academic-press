@@ -18,6 +18,7 @@ import {
   DEFAULT_WA_SETTINGS, WA_DAY, WA_REPLY_WINDOW_MS, WA_START, WA_STOP, WA_TEMPLATES, type WaKind, type WaStatus, type WaTemplateDef, type WaTemplateKey, type WhatsAppSettings,
 } from '../../src/shared/whatsapp.js';
 import { orderLink, type Order } from './orders.js';
+import { libraryPath } from './ebooks.js';
 
 export type WaMessage = typeof whatsappMessages.$inferSelect;
 
@@ -111,8 +112,9 @@ export async function orderWhatsApp(deps: Deps, kind: 'order_confirmed' | 'shipp
     : 'We will share the tracking details soon.';
   const params = kind === 'order_confirmed' ? [name, String(o.number), inr(o.total)]
     : kind === 'shipped' ? [name, String(o.number), tracking]
-      : [name, String(o.number)];
-  const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: o.name, params, link, orderId: o.id, leadId: lead.id });
+      // E-books open only in the account of the order's email: say which one, and link to the Library.
+      : [name, String(o.number), o.email];
+  const queued = await enqueue(deps, s, { kind, phone: lead.phone, name: o.name, params, link: kind === 'ebook_ready' ? `${deps.env.SITE_URL}${libraryPath}` : link, orderId: o.id, leadId: lead.id });
   if (queued) await kickWhatsApp(deps);
   return queued;
 }

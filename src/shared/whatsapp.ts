@@ -67,11 +67,11 @@ export const WA_TEMPLATES: WaTemplateDef[] = [
   {
     key: 'ebook_ready', label: 'Free e-book ready', category: 'UTILITY', name: 'elden_ebook_ready',
     header: 'Your free e-book is ready',
-    text: 'Hi {{1}}, your books for order *#{{2}}* have arrived, and your free e-book is now unlocked! 📖\n\nDownload it any time from your order page and start reading right away. Happy learning!',
-    vars: ['customer name', 'order number'],
-    samples: ['Asha', '1042'],
+    text: 'Hi {{1}}, your books for order *#{{2}}* have arrived, and your free e-book is now unlocked! 📖\n\nTo get it, sign in on our website with Google using *{{3}}*, the email you ordered with. It takes a minute, and your e-book will be waiting in your Library. Happy learning!',
+    vars: ['customer name', 'order number', 'email to sign in with'],
+    samples: ['Asha', '1042', 'asha.verma@gmail.com'],
     footer: 'Elden Academic Press · eldenap.in',
-    button: { label: 'Download my e-book', sample: 'order/1042?t=abc123' },
+    button: { label: 'Get my e-book', sample: 'account?tab=library' },
   },
   {
     key: 'call_followup', label: 'After a call', category: 'UTILITY', name: 'elden_call_followup',

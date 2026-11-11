@@ -1,6 +1,8 @@
 // Transactional emails. Table-based HTML with inline styles so they render the
 // same in Gmail, Outlook and Apple Mail; a plain-text part is added on send.
 import type { Deps } from '../deps.js';
+import { inArray, sql } from 'drizzle-orm';
+import { accounts } from '../db/schema.js';
 import type { EbookFile, enquiries, orderItems, orders } from '../db/schema.js';
 import { esc, inr, istDate } from '../lib/format.js';
 import { addressList, sendSafely, type Attachment } from '../lib/mail.js';
@@ -176,7 +178,7 @@ export async function sendStoreNewOrder(deps: Deps, o: Order, items: Item[], s: 
  * buyer's account (signed in with Google using this order's email), so there are no download
  * links here that would work for anyone the email is forwarded to.
  */
-function ebookBlock(deps: Deps, o: Order, digital: Item[], files: Map<string, EbookFile[]>, s: Settings, awaiting: boolean) {
+function ebookBlock(deps: Deps, o: Order, digital: Item[], files: Map<string, EbookFile[]>, s: Settings, awaiting: boolean, signUp = false) {
   const site = deps.env.SITE_URL.replace(/\/$/, '');
   const rows = digital.flatMap((i) => {
     const fs = files.get(i.id) ?? [];
@@ -192,22 +194,42 @@ function ebookBlock(deps: Deps, o: Order, digital: Item[], files: Map<string, Eb
   return section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:${INK};padding:22px 22px 8px">
 ${label('Your e-books', YELLOW)}<div style="margin:10px 0 4px;font:700 20px/1.25 ${FONT};color:#FFFFFF">${awaiting ? 'Coming with your delivery.' : 'Waiting in your Library.'}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>
-${awaiting ? '' : `<div style="padding:14px 0 6px">${button(`${site}${libraryPath}`, 'Sign in to read & download', YELLOW, INK)}</div>`}
+${awaiting ? '' : `<div style="padding:14px 0 6px">${button(`${site}${libraryPath}`, signUp ? 'Get my free e-book' : 'Sign in to read & download', YELLOW, INK)}</div>`}
 </td></tr><tr><td style="background:${INK};padding:0 22px 18px;font:400 12.5px/1.5 ${FONT};color:#A9B0BC">${foot}</td></tr></table>`);
 }
 
-/** Cash on delivery: the books were delivered, so the free e-book is unlocked. */
+/** Has this buyer created an account with the order's email (or the extra one staff added)? */
+async function hasAccount(deps: Deps, o: Order) {
+  const emails = [o.email, o.ebookEmail].filter((e): e is string => Boolean(e)).map((e) => e.toLowerCase());
+  const [row] = await deps.db.select({ id: accounts.userId }).from(accounts).where(inArray(sql`lower(${accounts.email})`, emails)).limit(1);
+  return Boolean(row);
+}
+
+/**
+ * Cash on delivery: the books were delivered, so the free e-book is unlocked. It opens only in
+ * the buyer's account, so someone without one yet is shown how to create it (with Google, using
+ * the email they ordered with); someone who has one is told it's in their Library.
+ */
 export async function sendEbookUnlocked(deps: Deps, o: Order, items: Item[], s: Settings) {
   const files = await filesForItems(deps.db, items);
   const digital = items.filter((i) => (files.get(i.id)?.length ?? 0) > 0);
   if (!digital.length) return;
-  const body = ebookBlock(deps, o, digital, files, s, false) + section(button(orderLink(deps, o), 'View your order', INK), '4px 32px 32px');
+  const signUp = !(await hasAccount(deps, o));
+  const steps = signUp ? section(`${h2('Get your e-book in a minute')}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+${[['1', 'Tap “Get my free e-book” below', 'It opens your account page on our website.'], ['2', 'Continue with Google', `Use the Google account for <strong style="color:${INK}">${esc(o.email)}</strong>, the email you ordered with. It's free, with no password to remember.`], ['3', 'Open your Library', 'Your e-book is waiting there: read it online or download it.']]
+  .map(([n, t, d]) => `<tr><td style="width:34px;padding:0 0 12px;vertical-align:top"><div style="width:24px;height:24px;background:${INK};color:#FFFFFF;font:700 12px/24px ${FONT};text-align:center">${n}</div></td><td style="padding:0 0 12px;font:600 14.5px/1.4 ${FONT};color:${INK}">${t}<div style="font:400 13.5px/1.4 ${FONT};color:${MUTED}">${d}</div></td></tr>`).join('')}
+</table>`) : '';
+  const body = steps + ebookBlock(deps, o, digital, files, s, false, signUp) + section(button(orderLink(deps, o), 'View your order', INK), '4px 32px 32px');
   await sendSafely(deps.mailer, {
-    to: o.email, subject: `Your free e-book is ready · order #${o.number}`, replyTo: s.supportEmail, bcc: copies(deps),
+    to: o.email, subject: signUp ? `Your free e-book is ready: create your account to get it · order #${o.number}` : `Your free e-book is ready · order #${o.number}`,
+    replyTo: s.supportEmail, bcc: copies(deps),
     html: layout(deps, s, {
-      preheader: 'Your books were delivered, and your free e-book is ready to download.',
+      preheader: signUp ? 'Your books were delivered. Create your free account with Google to get your e-book.' : 'Your books were delivered, and your free e-book is in your Library.',
       kicker: 'Delivered', title: 'Your free e-book is ready.',
-      intro: `Your books for order <strong style="color:${INK}">#${o.number}</strong> have been delivered. Thank you! Your free e-book is now waiting in your Library.`,
+      intro: signUp
+        ? `Your books for order <strong style="color:${INK}">#${o.number}</strong> have been delivered. Thank you! Your free e-book is unlocked. For your security it opens only in your own account on our website, so create one with Google using <strong style="color:${INK}">${esc(o.email)}</strong>.`
+        : `Your books for order <strong style="color:${INK}">#${o.number}</strong> have been delivered. Thank you! Your free e-book is now waiting in your Library.`,
       body,
     }),
   });
