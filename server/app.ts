@@ -10,6 +10,7 @@ import { competitions } from './routes/competitions.js';
 import { competitionInfo, teams } from './routes/teams.js';
 import { publicCalls } from './routes/calls.js';
 import { publicWhatsApp } from './routes/whatsapp.js';
+import { consent } from './routes/consent.js';
 import { bookPage, competitionPage } from './routes/og.js';
 import { admin, type AdminSession } from './routes/admin/index.js';
 import { cron, dev, forms } from './routes/misc.js';
@@ -133,6 +134,7 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/meta', meta);
   app.route('/', publicCalls);
   app.route('/whatsapp', publicWhatsApp);
+  app.route('/consent', consent);
   app.route('/cron', cron);
   app.route('/dev', dev);
   return app;

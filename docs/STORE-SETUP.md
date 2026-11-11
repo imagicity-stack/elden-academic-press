@@ -394,6 +394,14 @@ Every competition (DoomsDay Diaries included) has an **Analytics** tab in Admin 
 
 Visits and form steps are counted by the website anonymously (each browser once per step; staff browsers aren't counted) from the day this version goes live; registrations, approvals and uploads come from the saved forms, so they include everything before too.
 
+## 19. Cookie consent analytics
+
+**One-time:** run [`0021_consent_stats.sql`](supabase-updates/0021_consent_stats.sql) in Supabase → SQL Editor before this version goes live.
+
+**Admin → Cookie consent** shows how many visitors see the cookie banner and what they choose: *Accept all*, *Only essential*, or no choice (left it open), and how many later change their mind. Each is broken down by day (with the daily acceptance rate), device (mobile, tablet, desktop), approximate region (an Indian state or a country), traffic source (Meta ads, Google…), the kind of page where they chose, and how long they took. Use it to see where acceptance is low and whether changes to the banner help.
+
+It is counted anonymously, as the privacy policy says: each browser adds one to a counter when it first sees the banner and once when it chooses. No IP address, browser string, id or contact detail is stored (the IP is only used, at that moment, to tell the region and to stop abuse). That's deliberate: recording identifying details of people before they agree, or after they choose *Only essential*, would go against the Digital Personal Data Protection Act and the privacy policy. Staff browsers and search-engine bots aren't counted.
+
 ## Running costs
 
 | Service | Cost |
