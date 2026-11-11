@@ -153,3 +153,33 @@ describe('leads and sign-ups', () => {
     expect(signup[0].eventId).toBe('signup-77777777-7777-4777-8777-777777777777');
   });
 });
+
+describe('a first visit (nothing given yet)', () => {
+  const vercel = { 'x-vercel-ip-country': 'IN', 'x-vercel-ip-country-region': 'JH', 'x-vercel-ip-city': 'Hazaribag', 'x-vercel-ip-postal-code': '825301' };
+  const view = { name: 'ViewContent', eventId: 'view-1234567890', url: 'https://eldenap.in/books/mathematics-today', custom: { content_ids: ['x'], content_type: 'product' } };
+
+  it('still carries a matching key: the approximate city, state and PIN code of the IP address (hashed)', async () => {
+    expect((await t.call('POST', '/meta/event', { headers: { ...accepted, ...vercel }, body: view })).status).toBe(204);
+    const u = toPayload(meta.sent[0]).user_data;
+    expect(u).toMatchObject({ ct: [sha('hazaribag')], st: [sha('jharkhand')], zp: [sha('825301')], country: [sha('in')], fbp: FBP });
+    expect(u.em).toBeUndefined();
+  });
+
+  it('what the visitor gave us wins over the IP address', async () => {
+    await t.call('POST', '/meta/event', { headers: { ...accepted, ...vercel }, body: { ...view, user: { email: 'a@example.com', city: 'Ranchi', state: '20' } } });
+    const u = toPayload(meta.sent[0]).user_data;
+    expect(u).toMatchObject({ em: [sha('a@example.com')], ct: [sha('ranchi')], st: [sha('jharkhand')], country: [sha('in')] });
+    expect(u.zp).toBeUndefined(); // their own city and state, not the IP's PIN code
+  });
+
+  it('abroad: city and country, no Indian state', () => {
+    const u = userData({ geo: { city: 'Dubai', state: null, pincode: null, country: 'AE' } });
+    expect(u).toMatchObject({ ct: [sha('dubai')], country: [sha('ae')] });
+    expect(u.st).toBeUndefined();
+  });
+
+  it('nothing is sent without ad consent', async () => {
+    await t.call('POST', '/meta/event', { headers: vercel, body: view });
+    expect(meta.sent).toEqual([]);
+  });
+});
