@@ -137,8 +137,12 @@ admin.put('/settings', requireRole('owner'), async (c) => {
     downloadExpiryDays: z.number().int().min(0).max(3650),
     newsletterDailyLimit: z.number().int().min(1).max(10_000).optional(),
     codEnabled: z.boolean().optional(),
-    /** Advance paid online for cash-on-delivery orders (paise). */
+    /** Advance paid online for cash-on-delivery orders: a flat amount (paise), or a percentage of the order total. */
     codAdvance: z.number().int().min(100).max(10_000_000).optional(),
+    codAdvanceType: z.enum(['flat', 'percent']).optional(),
+    /** Basis points: 1000 = 10%. Between 1% and 100%. */
+    codAdvanceBps: z.number().int().min(100, 'The percentage must be at least 1%').max(10_000, 'The percentage can be at most 100%').optional(),
+    codAdvanceMin: z.number().int().min(0).max(10_000_000).optional(),
   }).refine((v) => !v.gstin || v.gstin.startsWith(v.stateCode), { message: 'The GSTIN’s first two digits should match the business state code', path: ['gstin'] }));
   const [row] = await db.update(settings).set({ ...input, updatedAt: sql`now()` }).where(eq(settings.id, 1)).returning();
   await audit(c, 'settings.update', 'settings', 1, input);

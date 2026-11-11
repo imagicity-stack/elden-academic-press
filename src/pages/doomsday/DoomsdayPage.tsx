@@ -4,6 +4,7 @@
 // story brief (the comic's title) only to approved teams, from the server. Banner, artwork,
 // sponsors, notices and results come from the admin.
 import { useEffect, useState, type ReactNode } from 'react';
+import { trackStep } from '../../competitionTrack';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../store/api';
 import { authApi, useAccount } from '../../store/account';
@@ -57,6 +58,7 @@ export function DoomsdayPage({ c }: { c: TeamComp }) {
   const account = useAccount();
   const signedIn = account.state.status === 'ready';
   useEffect(() => { document.title = `${c.title}: Comic Creating Challenge — Elden Academic Press`; }, [c.title]);
+  useEffect(() => { trackStep(c.slug, 'view'); }, [c.slug]);
   const deadline = info?.dates.submissionDeadline ?? c.team.submissionDeadline;
   const results = info?.dates.resultsOn ?? c.team.resultsOn;
   const sponsors = (info?.sponsorUrls ?? []).filter((x): x is string => Boolean(x));

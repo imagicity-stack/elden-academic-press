@@ -1,5 +1,6 @@
 // Shapes returned by the store API (/api).
 import type { LevelKey } from '../data';
+import type { CodRule } from '../shared/cod';
 
 export type Kind = 'print' | 'digital' | 'bundle';
 
@@ -48,7 +49,8 @@ export interface StoreConfig {
   states: { code: string; name: string }[];
   supportEmail: string;
   /** Cash on delivery for printed books: the advance paid online (paise), or null when off. */
-  cod: { advance: number } | null;
+  /** Cash on delivery: how the advance paid online is worked out (src/shared/cod.ts). */
+  cod: CodRule | null;
   /** Students are sent to Meta only from this age (META_MIN_AGE on the server). */
   metaMinAge?: number;
 }

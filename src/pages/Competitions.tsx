@@ -2,6 +2,7 @@
 // /competitions/<slug>: its page, with registration (one person or a group) after signing
 // in with Google and completing the profile once. No approval from anyone.
 import { useEffect, useState, type FormEvent } from 'react';
+import { trackStep } from '../competitionTrack';
 import { Link, useParams } from 'react-router-dom';
 import { authApi, useAccount, type Profile } from '../store/account';
 import { errorMessage, ApiError } from '../store/api';
@@ -73,6 +74,7 @@ export function CompetitionPage() {
   const { slug = '' } = useParams();
   const c = findCompetition(slug);
   useEffect(() => { if (c) document.title = `${c.title} — Elden Academic Press`; }, [c]);
+  useEffect(() => { if (c) trackStep(c.slug, 'view'); }, [c]);
   if (!c) return <NotFound />;
   if (c.team) return <DoomsdayPage c={c as Competition & { team: NonNullable<Competition['team']> }} />;
   const phase = phaseOf(c);
@@ -119,6 +121,7 @@ function Register({ c, phase }: { c: Competition; phase: Phase }) {
   const [adding, setAdding] = useState(false);
   const signedIn = state.status === 'ready';
   useEffect(() => { if (state.status === 'ready') setProfile(state.data.profile); }, [state]);
+  useEffect(() => { if (signedIn && phase === 'open') trackStep(c.slug, 'signin'); }, [signedIn, phase, c.slug]);
   useEffect(() => {
     if (!signedIn) return;
     authApi<{ items: Mine[] }>(`/competitions/${c.slug}/mine`).then((r) => setMine(r.items), () => setMine([]));
@@ -200,7 +203,7 @@ function SignupForm({ c, onDone, onCancel }: { c: Competition; onDone: (m: Mine)
     }
   };
   return (
-    <form className="comp-form" onSubmit={submit}>
+    <form className="comp-form" onSubmit={submit} onFocusCapture={() => trackStep(c.slug, 'start')}>
       {modes.length > 1 && (
         <div className="comp-modes" role="radiogroup" aria-label="Register as">
           {modes.map((m) => (

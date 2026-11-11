@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type InputHTMLAttributes } from 'react';
+import { codAdvanceFor } from '../shared/cod';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, api, inr } from '../store/api';
 import { formatLabel, useCatalog, useStoreConfig } from '../store/catalog';
@@ -127,7 +128,8 @@ export function Checkout() {
   const needsAddress = Boolean(quote?.requiresShipping);
 
   // Why cash on delivery isn't possible for this cart (the server checks the same).
-  const codAdvance = cfg?.cod?.advance ?? 0;
+  // The advance: a flat amount, or a share of this order's total (as the server works it out).
+  const codAdvance = cfg?.cod && quote ? codAdvanceFor(quote.total, cfg.cod) : 0;
   const codWhy = !cfg?.cod ? 'off'
     : !quote ? 'Loading…'
     : quote.lines.some((l) => l.isDigital) ? 'E-books can only be paid for online.'

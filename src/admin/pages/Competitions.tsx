@@ -1,6 +1,7 @@
 // Admin → Competitions: each competition built on request appears here by itself, with
 // everyone who registered (one person or a group) and a CSV export.
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
+import { CompetitionAnalytics } from './CompetitionAnalytics';
 import { downloadFile, fmtDate, useAdmin } from '../api';
 import { Badge, Btn, Card, Empty, ErrorBox, Loading, Page, type Tone, useAction } from '../ui';
 import { findCompetition, istDateTime, PHASE_LABEL, type Phase } from '../../shared/competitions';
@@ -8,7 +9,7 @@ import { TeamApplication, TeamCompetition } from './TeamCompetition';
 
 interface Row {
   slug: string; title: string; tagline: string; opensAt: string; closesAt: string; phase: Phase; unlisted: boolean; modes: string[]; registrations: number; groups: number; people: number;
-  team: boolean; applications: number; pending: number; approved: number;
+  team: boolean; applications: number; pending: number; approved: number; visits: number; started: number;
 }
 const TONE: Record<Phase, Tone> = { open: 'green', upcoming: 'amber', closed: 'grey' };
 
@@ -17,6 +18,17 @@ export default function Competitions() {
   if (!slug) return <List />;
   if (findCompetition(slug)?.team) return id ? <TeamApplication slug={slug} id={id} /> : <TeamCompetition slug={slug} />;
   return <Registrations slug={slug} />;
+}
+
+/** Registrations | Analytics, for individual and group competitions. */
+function SimpleTabs({ slug }: { slug: string }) {
+  const { tab = '' } = useParams();
+  return (
+    <nav className="ad-tabs ad-tt-tabs">
+      <NavLink to={`/admin/competitions/${slug}`} end className={() => 'ad-tab' + (tab !== 'analytics' ? ' is-on' : '')}>Registrations</NavLink>
+      <NavLink to={`/admin/competitions/${slug}/analytics`} className={() => 'ad-tab' + (tab === 'analytics' ? ' is-on' : '')}>Analytics</NavLink>
+    </nav>
+  );
 }
 
 function List() {
@@ -30,13 +42,14 @@ function List() {
         <Card flush>
           <div className="ad-table-wrap">
             <table className="ad-table ad-table--click">
-              <thead><tr><th>Competition</th><th>Status</th><th>Registration</th><th className="ad-num">Registrations</th><th className="ad-num">People</th></tr></thead>
+              <thead><tr><th>Competition</th><th>Status</th><th>Registration</th><th className="ad-num">Page visits</th><th className="ad-num">Registrations</th><th className="ad-num">People</th></tr></thead>
               <tbody>
                 {data.items.map((c) => (
                   <tr key={c.slug} onClick={() => navigate(`/admin/competitions/${c.slug}`)}>
                     <td><Link to={`/admin/competitions/${c.slug}`} className="ad-strong" onClick={(e) => e.stopPropagation()}>{c.title}</Link><div className="ad-muted">{c.tagline}{c.unlisted && ' · not listed on the website'}</div></td>
                     <td><Badge tone={TONE[c.phase]}>{PHASE_LABEL[c.phase]}</Badge></td>
                     <td className="ad-muted">{istDateTime(c.opensAt)}<br />to {istDateTime(c.closesAt)}</td>
+                    <td className="ad-num">{c.visits}{c.visits > 0 && <div className="ad-muted">{Math.round(((c.team ? c.applications : c.registrations) / c.visits) * 1000) / 10}% registered</div>}</td>
                     {c.team ? (
                       <>
                         <td className="ad-num">{c.applications} teams{c.pending > 0 && <div><Badge tone="amber">{c.pending} to check</Badge></div>}</td>
@@ -71,6 +84,7 @@ interface Detail {
 }
 
 function Registrations({ slug }: { slug: string }) {
+  const { tab = '' } = useParams();
   const { data, error, reload } = useAdmin<Detail>(`/competitions/${slug}`);
   const { busy, run } = useAction();
   const c = data?.competition;
@@ -78,6 +92,9 @@ function Registrations({ slug }: { slug: string }) {
     <Page title={c?.title ?? 'Competition'} back={{ to: '/admin/competitions', label: 'Competitions' }}
       subtitle={c ? <><Badge tone={TONE[c.phase]}>{PHASE_LABEL[c.phase]}</Badge> {istDateTime(c.opensAt)} to {istDateTime(c.closesAt)} · <a href={`/competitions/${c.slug}`} target="_blank" rel="noreferrer">View on the website ↗</a></> : undefined}
       actions={data && data.items.length > 0 && <Btn busy={busy === 'csv'} onClick={() => run('csv', () => downloadFile(`/competitions/${slug}/export.csv`, `${slug}-registrations.csv`))}>Export CSV</Btn>}>
+      <SimpleTabs slug={slug} />
+      {tab === 'analytics' ? <CompetitionAnalytics slug={slug} /> : (
+        <>
       {error ? <ErrorBox error={error} retry={reload} /> : !data ? <Loading /> : data.items.length === 0 ? (
         <Card><Empty title="No registrations yet." /></Card>
       ) : (
@@ -112,6 +129,8 @@ function Registrations({ slug }: { slug: string }) {
             </table>
           </div>
         </Card>
+      )}
+        </>
       )}
     </Page>
   );

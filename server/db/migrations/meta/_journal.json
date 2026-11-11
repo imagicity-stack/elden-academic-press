@@ -134,6 +134,20 @@
       "when": 1794335003607,
       "tag": "0018_audience_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794337425917,
+      "tag": "0019_competition_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794355136757,
+      "tag": "0020_cod_advance_percent",
+      "breakpoints": true
     }
   ]
 }

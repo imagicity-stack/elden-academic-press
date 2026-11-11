@@ -362,6 +362,12 @@ export const settings = pgTable('settings', {
   /** Cash on delivery for printed-book orders, with an advance paid online (paise). */
   codEnabled: boolean('cod_enabled').notNull().default(true),
   codAdvance: integer('cod_advance').notNull().default(6000),
+  /** How the advance is worked out: 'flat' (cod_advance) or 'percent' of the order total. */
+  codAdvanceType: text('cod_advance_type').$type<'flat' | 'percent'>().notNull().default('flat'),
+  /** Percentage, in basis points (1000 = 10%). */
+  codAdvanceBps: integer('cod_advance_bps').notNull().default(1000),
+  /** Percentage only: the smallest advance (paise; 0 = none). */
+  codAdvanceMin: integer('cod_advance_min').notNull().default(0),
   updatedAt: timestamps.updatedAt,
 }, (t) => [check('settings_singleton', sql`${t.id} = 1`)]);
 
@@ -1120,3 +1126,17 @@ export const whatsappSettings = pgTable('whatsapp_settings', {
   updatedBy: text('updated_by').notNull().default(''),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/* ---------------- Competition analytics ---------------- */
+
+/** How many browsers reached each step of a competition's registration, per day and channel (no personal data). */
+export const competitionStats = pgTable('competition_stats', {
+  competitionSlug: text('competition_slug').notNull(),
+  /** India date. */
+  day: date('day', { mode: 'string' }).notNull(),
+  /** view | signin | start | members | review (src/shared/competitionFunnel.ts) */
+  step: text('step').notNull(),
+  /** The visit's channel (meta_ads, search, direct…). */
+  channel: text('channel').notNull(),
+  n: integer('n').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.competitionSlug, t.day, t.step, t.channel] })]);

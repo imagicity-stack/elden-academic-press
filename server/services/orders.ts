@@ -1,4 +1,5 @@
 import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { codAdvanceFor, type CodRule } from '../../src/shared/cod.js';
 import type { Deps } from '../deps.js';
 import type { Q, Tx } from '../db/client.js';
 import {
@@ -107,11 +108,15 @@ export interface CheckoutInput {
 export const onlineAmount = (o: Pick<Order, 'total' | 'codAmount'>) => o.total - o.codAmount;
 
 /** Why cash on delivery isn't possible for this cart, or null when it is. */
-export function codUnavailable(q: Pick<Quote, 'lines' | 'total' | 'requiresShipping'>, s: Pick<Settings, 'codEnabled' | 'codAdvance'>): string | null {
+/** The store's advance rule, from its settings. */
+export const codRule = (s: Pick<Settings, 'codAdvance' | 'codAdvanceType' | 'codAdvanceBps' | 'codAdvanceMin'>): CodRule =>
+  ({ type: s.codAdvanceType === 'percent' ? 'percent' : 'flat', advance: s.codAdvance, bps: s.codAdvanceBps, min: s.codAdvanceMin });
+
+export function codUnavailable(q: Pick<Quote, 'lines' | 'total' | 'requiresShipping'>, s: Pick<Settings, 'codEnabled' | 'codAdvance' | 'codAdvanceType' | 'codAdvanceBps' | 'codAdvanceMin'>): string | null {
   if (!s.codEnabled) return 'Cash on delivery isn’t available right now.';
   if (q.lines.some((l) => l.isDigital)) return 'E-books can only be paid for online, so cash on delivery isn’t available for this cart.';
   if (!q.requiresShipping) return 'Cash on delivery is only for printed books.';
-  if (q.total <= s.codAdvance) return 'This order is small enough to pay online in full.';
+  if (q.total <= codAdvanceFor(q.total, codRule(s))) return 'This order is small enough to pay online in full.';
   return null;
 }
 
@@ -165,7 +170,7 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
       customerNote: input.note ?? '',
       newsletterOptIn: input.newsletter ?? false,
       paymentMode: cod ? 'cod' : 'online',
-      codAmount: cod ? q.total - s.codAdvance : 0,
+      codAmount: cod ? q.total - codAdvanceFor(q.total, codRule(s)) : 0,
       ...(input.tracking?.consent ? { adConsent: true, fbp: input.tracking.fbp, fbc: input.tracking.fbc, userAgent: input.tracking.userAgent } : {}),
       channel: orderChannel(input.source).channel,
       source: input.source && (input.source.first || input.source.last) ? input.source : null,

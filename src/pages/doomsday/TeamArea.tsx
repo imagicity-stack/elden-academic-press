@@ -2,6 +2,7 @@
 // what's missing), register a team in four steps, then follow it: status, the organiser's
 // notes and notices, and, once approved, the uploads with a countdown to the deadline.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { trackStep } from '../../competitionTrack';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { accountApi, authApi, useAccount, type Profile } from '../../store/account';
@@ -66,6 +67,7 @@ export function TeamArea({ c, account }: { c: TeamComp; account: ReturnType<type
   const signedIn = state.status === 'ready';
   const load = useCallback(() => authApi<TeamData>(`/competitions/${c.slug}/team`).then((d) => { setData(d); setErr(null); }, (e) => setErr(errorMessage(e))), [c.slug]);
   useEffect(() => { if (signedIn) load(); }, [signedIn, load]);
+  useEffect(() => { if (signedIn) trackStep(c.slug, 'signin'); }, [signedIn, c.slug]);
   useEffect(() => { if (state.status === 'ready' && shouldOnboard(state.data.newAccount, state.data.profile)) setOnboard(true); }, [state]);
   useEffect(() => { if (data && location.hash === '#team') document.getElementById('team')?.scrollIntoView({ behavior: 'smooth' }); }, [data]);
 
@@ -326,6 +328,7 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
     return { teamName: '', ...inst, city: p?.city ?? '', state: p?.state ?? '', members: [first, emptyMember()], acceptRules: false, confirmTrue: false };
   });
   const [step, setStep] = useState<Step>(0);
+  useEffect(() => { if (!edit) trackStep(c.slug, 'start'); }, [edit, c.slug]);
   const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
   const [serverErrs, setServerErrs] = useState<string[]>([]);
@@ -338,7 +341,12 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
   const inst = cfg.institutionTypes.find((x) => x.key === team.institutionType);
   const setT = (o: Partial<TeamInput>) => { setTeam({ ...team, ...o }); setServerErrs([]); };
   const setM = (i: number, o: Partial<MemberInput>) => setT({ members: team.members.map((m, k) => (k === i ? { ...m, ...o } : m)) });
-  const go = (to: Step) => { setStep(to); setShowErrors(false); top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const go = (to: Step) => {
+    setStep(to); setShowErrors(false); top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Analytics: how far new registrations get (not edits).
+    if (!edit && to === 1) trackStep(c.slug, 'members');
+    if (!edit && to === 3) trackStep(c.slug, 'review');
+  };
   const next = () => {
     if (stepErrors.length) { setShowErrors(true); return; }
     go(steps[steps.indexOf(step) + 1]);

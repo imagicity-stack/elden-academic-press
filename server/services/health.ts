@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { eq, sql } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
-import { accounts, adminUsers, calls, competitionSignups, orders, popups, products, productVariants, settings, subscribers, teamApplications, whatsappMessages } from '../db/schema.js';
+import { accounts, adminUsers, calls, competitionSignups, orders, popups, products, productVariants, settings, subscribers, teamApplications, whatsappMessages, competitionStats } from '../db/schema.js';
 
 type Check = 'ok' | 'missing' | 'error';
 export interface Health {
@@ -125,6 +125,8 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
         await db.select({ v: accounts.channel }).from(accounts).limit(1);
         await db.select({ v: subscribers.channel }).from(subscribers).limit(1);
       }],
+      ['0019_competition_stats', () => db.select({ v: competitionStats.n }).from(competitionStats).limit(1)],
+      ['0020_cod_advance_percent', () => db.select({ v: settings.codAdvanceType }).from(settings).limit(1)],
     ];
     checks.database = 'ok';
     for (const [file, probe] of updates) {
