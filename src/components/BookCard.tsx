@@ -4,6 +4,7 @@ import { formatsLabel, fromPrice } from '../store/catalog';
 import { useCart } from '../store/cart';
 import type { Product } from '../store/types';
 import { BookCover } from './BookCover';
+import { trackAddToCart } from '../trackCart';
 
 /**
  * Cover + details. The title link is stretched over the whole card, so the
@@ -36,7 +37,7 @@ export function BookCard({ book, variant = 'new' }: { book: Product; variant?: '
           </div>
           {variant !== 'related' && quickKind && (
             <button type="button" className="book-card__add" aria-label={`Add ${book.title} to cart`}
-              onClick={() => { add({ productId: book.id, kind: quickKind, quantity: 1 }); openDrawer(); }}>
+              onClick={() => { add({ productId: book.id, kind: quickKind, quantity: 1 }); trackAddToCart(book, quickKind, 1); openDrawer(); }}>
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
             </button>
           )}

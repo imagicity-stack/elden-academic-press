@@ -18,6 +18,7 @@ import { NotFound } from './NotFound';
 import { formatName, track } from '../meta';
 import { ga, gaItem } from '../ga';
 import { BookSchema } from '../components/BookSchema';
+import { trackAddToCart } from '../trackCart';
 import { dropPrerender } from '../prerender';
 
 const TABS = ['Overview', 'Contents'] as const;
@@ -75,8 +76,7 @@ function BookView({ book }: { book: Product }) {
     if (!available) return;
     const quantity = kind === 'print' ? qty : 1;
     cart.add({ productId: book.id, kind, quantity });
-    track('AddToCart', { content_ids: [book.id], content_name: book.title, content_type: 'product', contents: [{ id: book.id, quantity }], value: total / 100, currency: 'INR', format: formatName(kind) });
-    if (chosen) ga('add_to_cart', { currency: 'INR', value: total / 100, items: [gaItem(book.id, book.title, kind, chosen.price, quantity, book.category?.name)] });
+    trackAddToCart(book, kind, quantity);
     if (go) navigate('/checkout');
     else { setAdded(true); cart.openDrawer(); }
   };
