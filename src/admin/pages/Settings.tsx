@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { codAdvanceFor, type CodAdvanceType, type CodRule } from '../../shared/cod';
 import { NavLink, useParams } from 'react-router-dom';
 import { inr } from '../../store/api';
 import { adminApi, ApiError, fmtDate, rupees, toPaise, useAdmin } from '../api';
@@ -25,7 +26,7 @@ export default function Settings() {
 interface S {
   storeName: string; legalName: string; gstin: string; address: string; stateCode: string; supportEmail: string; supportPhone: string;
   shippingFlat: number; freeShippingAbove: number; orderExpiryMinutes: number; invoicePrefix: string; notifyEmails: string[]; requireMfa: boolean;
-  lowStockThreshold: number; maxDownloads: number; downloadExpiryDays: number; newsletterDailyLimit: number; codEnabled: boolean; codAdvance: number; updatedAt: string;
+  lowStockThreshold: number; maxDownloads: number; downloadExpiryDays: number; newsletterDailyLimit: number; codEnabled: boolean; codAdvance: number; codAdvanceType: CodAdvanceType; codAdvanceBps: number; codAdvanceMin: number; updatedAt: string;
 }
 
 function StoreSettings() {
@@ -39,7 +40,7 @@ function StoreSettings() {
     if (data) setF({
       ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])) as Record<string, string | boolean>,
       shippingFlat: rupees(data.shippingFlat), freeShippingAbove: rupees(data.freeShippingAbove), notifyEmails: data.notifyEmails.join(', '),
-      codAdvance: rupees(data.codAdvance),
+      codAdvance: rupees(data.codAdvance), codAdvancePercent: String(data.codAdvanceBps / 100), codAdvanceMin: rupees(data.codAdvanceMin),
     });
   }, [data]);
   if (error) return <ErrorBox error={error} retry={reload} />;
@@ -60,6 +61,8 @@ function StoreSettings() {
             lowStockThreshold: Number(s('lowStockThreshold')), maxDownloads: Number(s('maxDownloads')), downloadExpiryDays: Number(s('downloadExpiryDays')),
             newsletterDailyLimit: Number(s('newsletterDailyLimit')),
             codEnabled: Boolean(f.codEnabled), codAdvance: toPaise(s('codAdvance') || '0'),
+            codAdvanceType: s('codAdvanceType') === 'percent' ? 'percent' : 'flat',
+            codAdvanceBps: Math.round(Number(s('codAdvancePercent') || '0') * 100), codAdvanceMin: toPaise(s('codAdvanceMin') || '0'),
           },
         });
       } catch (e) { if (e instanceof ApiError) setErr(e); throw e; }
@@ -97,11 +100,40 @@ function StoreSettings() {
       <Card title="Cash on delivery">
         <Check label="Offer cash on delivery for printed books" hint="Buyers pay an advance online and the rest in cash when the books arrive. Not offered when the cart has an e-book. The free e-book with a printed copy unlocks once you mark the order Delivered."
           checked={Boolean(f.codEnabled)} onChange={(v) => set('codEnabled', v)} />
-        {Boolean(f.codEnabled) && (
-          <div className="ad-form-grid">
-            <MoneyField label="Advance paid online" value={s('codAdvance')} onChange={(e) => set('codAdvance', e.target.value)} error={fe('codAdvance')} hint="Covers shipping if the parcel is refused." />
-          </div>
-        )}
+        {Boolean(f.codEnabled) && (() => {
+          const rule: CodRule = {
+            type: s('codAdvanceType') === 'percent' ? 'percent' : 'flat', advance: toPaise(s('codAdvance') || '0'),
+            bps: Math.round(Number(s('codAdvancePercent') || '0') * 100), min: toPaise(s('codAdvanceMin') || '0'),
+          };
+          return (
+            <>
+              <div className="ad-field ad-mt">
+                <span className="ad-label">Advance paid online</span>
+                <div className="au-seg" role="radiogroup" aria-label="How the advance is worked out">
+                  {([['flat', 'Flat amount'], ['percent', 'Percentage of the order']] as const).map(([k, l]) => (
+                    <button key={k} type="button" role="radio" aria-checked={rule.type === k} className={rule.type === k ? 'is-on' : ''} onClick={() => set('codAdvanceType', k)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="ad-form-grid">
+                {rule.type === 'flat' ? (
+                  <MoneyField label="Advance per order" value={s('codAdvance')} onChange={(e) => set('codAdvance', e.target.value)} error={fe('codAdvance')} hint="The same amount on every cash-on-delivery order. Covers shipping if the parcel is refused." />
+                ) : (
+                  <>
+                    <TextField label="Percentage of the order total" type="number" min={1} max={100} step={0.5} value={s('codAdvancePercent')} onChange={(e) => set('codAdvancePercent', e.target.value)} error={fe('codAdvanceBps')} hint="Rounded up to a whole rupee." />
+                    <MoneyField label="But at least (optional)" value={s('codAdvanceMin')} onChange={(e) => set('codAdvanceMin', e.target.value)} error={fe('codAdvanceMin')} hint="So small orders still cover shipping if the parcel is refused. 0 = no minimum." />
+                  </>
+                )}
+              </div>
+              <p className="ad-muted">
+                {[30000, 80000, 200000].map((total) => {
+                  const adv = codAdvanceFor(total, rule);
+                  return adv >= total ? `${inr(total)} order: paid online in full` : `${inr(total)} order: ${inr(adv)} now, ${inr(total - adv)} in cash`;
+                }).join(' · ')}
+              </p>
+            </>
+          );
+        })()}
       </Card>
       <Card title="Checkout & e-books">
         <div className="ad-form-grid">

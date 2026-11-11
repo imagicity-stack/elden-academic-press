@@ -126,6 +126,7 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
         await db.select({ v: subscribers.channel }).from(subscribers).limit(1);
       }],
       ['0019_competition_stats', () => db.select({ v: competitionStats.n }).from(competitionStats).limit(1)],
+      ['0020_cod_advance_percent', () => db.select({ v: settings.codAdvanceType }).from(settings).limit(1)],
     ];
     checks.database = 'ok';
     for (const [file, probe] of updates) {

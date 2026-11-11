@@ -9,7 +9,7 @@ import { MAX_QTY } from '../lib/pricing.js';
 import { STATES, isStateCode } from '../lib/states.js';
 import { getSettings, loadCatalog } from '../services/catalog.js';
 import { tagCatalog } from '../lib/cdn.js';
-import { confirmRazorpayPayment, createOrder, logEvent, orderToken, quote } from '../services/orders.js';
+import { codRule, confirmRazorpayPayment, createOrder, logEvent, orderToken, quote } from '../services/orders.js';
 import { visitOf } from '../services/tracking.js';
 
 const zState = z.string().refine(isStateCode, 'Choose a state');
@@ -33,7 +33,7 @@ store.get('/config', async (c) => {
     shipping: { flat: s.shippingFlat, freeAbove: s.freeShippingAbove },
     states: STATES,
     supportEmail: s.supportEmail,
-    cod: s.codEnabled ? { advance: s.codAdvance } : null,
+    cod: s.codEnabled ? codRule(s) : null,
     // The privacy policy states it (students are sent to Meta only from this age).
     metaMinAge: env.META_MIN_AGE,
   });

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { orders, products, productVariants, settings } from '../server/db/schema.js';
+import { codAdvanceFor } from '../src/shared/cod.js';
 import { address, contact, setup, supabaseToken } from './helpers.js';
 
 let t: Awaited<ReturnType<typeof setup>>;
@@ -20,7 +21,7 @@ const checkout = (items: { productId: string; kind: string; quantity: number }[]
 describe('cash on delivery', () => {
   it('takes the advance online, then unlocks the free e-book on delivery', async () => {
     const p = await book();
-    expect((await t.call('GET', '/config')).json.cod).toEqual({ advance: 6000 });
+    expect((await t.call('GET', '/config')).json.cod).toEqual({ type: 'flat', advance: 6000, bps: 1000, min: 0 });
     const r = await checkout([{ productId: p.id, kind: 'print', quantity: 2 }], 'cod');
     expect(r.status).toBe(201);
     expect(r.json.razorpay.amount).toBe(6000);
@@ -81,6 +82,31 @@ describe('cash on delivery', () => {
     await t.db.update(settings).set({ codEnabled: false });
     expect((await t.call('GET', '/config')).json.cod).toBeNull();
     expect((await checkout([{ productId: p.id, kind: 'print', quantity: 1 }], 'cod')).status).toBe(400);
+  });
+
+  it('can take a percentage of the order instead, with a minimum', async () => {
+    const p = await book();
+    const h = await admin();
+    const { updatedAt: _u, id: _i, ...rest } = (await t.call('GET', '/admin/settings', { headers: h })).json;
+    // 10% of the order, at least ₹50.
+    expect((await t.call('PUT', '/admin/settings', { headers: h, body: { ...rest, codAdvanceType: 'percent', codAdvanceBps: 1000, codAdvanceMin: 5000 } })).status).toBe(200);
+    expect((await t.call('GET', '/config')).json.cod).toEqual({ type: 'percent', advance: 6000, bps: 1000, min: 5000 });
+    const big = await checkout([{ productId: p.id, kind: 'print', quantity: 4 }], 'cod');
+    const total = big.json.total as number;
+    const expected = Math.max(Math.ceil(total / 10 / 100) * 100, 5000);
+    expect(big.json.razorpay.amount).toBe(expected);
+    const [o] = await t.db.select().from(orders).where(eq(orders.id, big.json.orderId));
+    expect(o.codAmount).toBe(total - expected);
+    // Out-of-range percentages are refused.
+    expect((await t.call('PUT', '/admin/settings', { headers: h, body: { ...rest, codAdvanceType: 'percent', codAdvanceBps: 15000 } })).status).toBe(400);
+  });
+
+  it('works the advance out the same way everywhere', () => {
+    const r = { type: 'percent' as const, advance: 6000, bps: 1250, min: 0 };
+    expect(codAdvanceFor(79900, r)).toBe(10000); // 12.5% of ₹799 = ₹99.88, rounded up to ₹100
+    expect(codAdvanceFor(20000, { ...r, min: 5000 })).toBe(5000); // the minimum
+    expect(codAdvanceFor(3000, { ...r, min: 5000 })).toBe(3000); // never more than the order
+    expect(codAdvanceFor(79900, { ...r, type: 'flat' })).toBe(6000);
   });
 
   it('refunds only the advance through Razorpay', async () => {

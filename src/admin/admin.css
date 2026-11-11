@@ -513,7 +513,7 @@ a.ad-stat:hover { border-color: var(--ad-navy); }
 .wa-tpl__button { margin-top: 4px; background: #fff; border-radius: 8px; padding: 8px; text-align: center; color: #027EB5; font-weight: 600; font-size: 13.5px; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
 
 /* Admin → Audience */
-.au-seg { display: inline-flex; border: 1px solid var(--ad-line); border-radius: 8px; overflow: hidden; background: var(--ad-card); }
+.au-seg { display: inline-flex; align-self: flex-start; border: 1px solid var(--ad-line); border-radius: 8px; overflow: hidden; background: var(--ad-card); }
 .au-seg button { border: 0; background: none; padding: 6px 12px; font: 600 12.5px Montserrat, sans-serif; color: var(--ad-muted); cursor: pointer; }
 .au-seg button + button { border-left: 1px solid var(--ad-line); }
 .au-seg button.is-on { background: var(--ad-navy); color: #fff; }

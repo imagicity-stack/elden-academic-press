@@ -362,6 +362,12 @@ export const settings = pgTable('settings', {
   /** Cash on delivery for printed-book orders, with an advance paid online (paise). */
   codEnabled: boolean('cod_enabled').notNull().default(true),
   codAdvance: integer('cod_advance').notNull().default(6000),
+  /** How the advance is worked out: 'flat' (cod_advance) or 'percent' of the order total. */
+  codAdvanceType: text('cod_advance_type').$type<'flat' | 'percent'>().notNull().default('flat'),
+  /** Percentage, in basis points (1000 = 10%). */
+  codAdvanceBps: integer('cod_advance_bps').notNull().default(1000),
+  /** Percentage only: the smallest advance (paise; 0 = none). */
+  codAdvanceMin: integer('cod_advance_min').notNull().default(0),
   updatedAt: timestamps.updatedAt,
 }, (t) => [check('settings_singleton', sql`${t.id} = 1`)]);
 
