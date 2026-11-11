@@ -1,11 +1,27 @@
-// Phone calls by the AI voice agents (Sarvam): cart recovery and order feedback. Shared by the
-// server (who to call, when, and what happened) and the admin (Admin → Calls).
+// Phone calls by the AI voice agents (Sarvam): cart recovery, cash-on-delivery order confirmation
+// and order feedback. Shared by the server (who to call, when, and what happened) and the admin
+// (Admin → Calls).
 
-export type CallKind = 'cart' | 'feedback';
+export type CallKind = 'cart' | 'cod_confirm' | 'feedback';
 export const CALL_KINDS: { key: CallKind; label: string; help: string }[] = [
   { key: 'cart', label: 'Cart recovery', help: 'Calls people who left checkout without paying.' },
+  { key: 'cod_confirm', label: 'COD confirmation', help: 'Calls cash-on-delivery buyers to confirm the order before it is shipped (the cart agent makes this call).' },
   { key: 'feedback', label: 'Order feedback', help: 'Calls buyers a few days after their order to ask how it went, and mentions new titles.' },
 ];
+
+/**
+ * Where a cash-on-delivery order stands with its confirmation ('' for online orders):
+ * pending: waiting for the call (or for the team); confirmed: the customer said yes on the call, or
+ * the team confirmed it by hand (the call is then stopped); cancel_requested: the customer said
+ * they don't want it (the team cancels it by hand); unreachable: nobody answered after every try;
+ * unclear: they talked, but didn't clearly say yes or no.
+ */
+export type CodConfirmation = '' | 'pending' | 'confirmed' | 'cancel_requested' | 'unreachable' | 'unclear';
+export const COD_CONFIRMATION_LABEL: Record<Exclude<CodConfirmation, ''>, string> = {
+  pending: 'Awaiting confirmation', confirmed: 'Confirmed', cancel_requested: 'Customer said no', unreachable: 'Not reachable', unclear: 'Not confirmed',
+};
+/** Who confirmed: the agent on the call, or the team member's email. */
+export const CONFIRMED_BY_CALL = 'call';
 
 /**
  * queued: waiting for its time (or the calling hours); dialling: handed to the voice agent;
@@ -22,7 +38,7 @@ export const CALL_STATUS_LABEL: Record<CallStatus, string> = {
 export const OUTCOME_LABEL: Record<string, string> = {
   will_order: 'Will order', callback: 'Call back', not_interested: 'Not interested', do_not_call: 'Do not call',
   wrong_person: 'Wrong person', transferred: 'Transferred to team', feedback_given: 'Feedback given', declined: 'Declined',
-  enquiry: 'Question answered',
+  enquiry: 'Question answered', order_confirmed: 'Order confirmed', cancel_requested: 'Wants to cancel', not_confirmed: 'Not confirmed',
 };
 
 /** Calls the customer made to our numbers are stored with this createdBy. */
@@ -42,6 +58,12 @@ export interface CallSettings {
     discountCode: string;
     /** How the agent describes it, e.g. "10 percent off the whole order". */
     discountOffer: string;
+  };
+  /** Cash on delivery: call to confirm each order before it's shipped (by the cart agent). */
+  cod_confirm: {
+    enabled: boolean;
+    /** Minutes after the order is placed before calling (inside the calling hours). */
+    delayMinutes: number;
   };
   feedback: {
     enabled: boolean;
@@ -65,6 +87,7 @@ export interface CallSettings {
 export const DEFAULT_CALL_SETTINGS: CallSettings = {
   enabled: false,
   cart: { enabled: true, delayMinutes: 60, discountCode: '', discountOffer: '' },
+  cod_confirm: { enabled: true, delayMinutes: 10 },
   feedback: { enabled: true, daysAfter: 3, newBookIds: [], allBuyers: false, lookbackDays: 30 },
   hours: { start: '10:00', end: '19:00', days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
   maxRetries: 2,

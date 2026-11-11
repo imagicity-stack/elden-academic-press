@@ -4,7 +4,7 @@ import { Hono } from 'hono';
 import { and, count, desc, eq, gte, ilike, inArray, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
-import { calls, checkoutLeads, doNotCall, products } from '../db/schema.js';
+import { calls, checkoutLeads, doNotCall, orders, products } from '../db/schema.js';
 import { safeEqual } from '../lib/crypto.js';
 import { body, HttpError, notFound, rateLimit } from '../lib/http.js';
 import { audit } from './admin/auth.js';
@@ -65,6 +65,7 @@ const zSettings = z.object({
     enabled: z.boolean(), delayMinutes: z.number().int().min(15).max(4320),
     discountCode: z.string().trim().toUpperCase().max(40), discountOffer: z.string().trim().max(120),
   }).partial(),
+  cod_confirm: z.object({ enabled: z.boolean(), delayMinutes: z.number().int().min(0).max(1440) }).partial(),
   feedback: z.object({
     enabled: z.boolean(), daysAfter: z.number().int().min(1).max(30), newBookIds: z.array(z.string().uuid()).max(5),
     allBuyers: z.boolean(), lookbackDays: z.number().int().min(7).max(90),
@@ -93,7 +94,7 @@ adminCalls.put('/settings', async (c) => {
   const cur = await getCallSettings(db);
   const next: CallSettings = {
     ...cur, ...input,
-    cart: { ...cur.cart, ...input.cart }, feedback: { ...cur.feedback, ...input.feedback }, hours: { ...cur.hours, ...input.hours },
+    cart: { ...cur.cart, ...input.cart }, cod_confirm: { ...cur.cod_confirm, ...input.cod_confirm }, feedback: { ...cur.feedback, ...input.feedback }, hours: { ...cur.hours, ...input.hours },
   };
   if (next.cart.discountCode && !next.cart.discountOffer) throw new HttpError(400, 'Say what the coupon gives (for example, 10 percent off the whole order).');
   await saveCallSettings(db, next, c.get('admin').email);
@@ -117,7 +118,7 @@ adminCalls.get('/', async (c) => {
   const { db } = c.get('deps');
   const q = c.req.query();
   const where: SQL[] = [];
-  if (q.kind === 'cart' || q.kind === 'feedback') where.push(eq(calls.kind, q.kind));
+  if (q.kind === 'cart' || q.kind === 'cod_confirm' || q.kind === 'feedback') where.push(eq(calls.kind, q.kind));
   if (q.status) where.push(inArray(calls.status, q.status.split(',') as (typeof calls.status._.data)[]));
   if (q.outcome) where.push(eq(calls.outcome, q.outcome));
   if (q.issues === '1') where.push(eq(calls.issueOpen, true));
@@ -138,7 +139,11 @@ adminCalls.get('/:id{[0-9a-f-]{36}}', async (c) => {
   const [lead] = call.leadId ? await db.select().from(checkoutLeads).where(eq(checkoutLeads.id, call.leadId)) : [];
   const history = await db.select(LIST_FIELDS).from(calls).where(and(eq(calls.phone, call.phone), sql`${calls.id} <> ${call.id}`)).orderBy(desc(calls.createdAt)).limit(10);
   const [dnc] = await db.select().from(doNotCall).where(eq(doNotCall.phone, call.phone));
-  return c.json({ call, lead: lead ? { email: lead.email, items: lead.items, total: lead.total, orderId: lead.orderId, createdAt: lead.createdAt } : null, history, doNotCall: Boolean(dnc) });
+  const [order] = call.orderId ? await db.select({
+    id: orders.id, number: orders.number, total: orders.total, codAmount: orders.codAmount, paymentMode: orders.paymentMode,
+    codConfirmation: orders.codConfirmation, cancelledAt: orders.cancelledAt,
+  }).from(orders).where(eq(orders.id, call.orderId)) : [];
+  return c.json({ call, lead: lead ? { email: lead.email, items: lead.items, total: lead.total, orderId: lead.orderId, createdAt: lead.createdAt } : null, order: order ?? null, history, doNotCall: Boolean(dnc) });
 });
 
 /** Call now (dial it in the next run, hours permitting), skip it, or mark an issue handled. */

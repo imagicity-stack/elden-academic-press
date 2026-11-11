@@ -162,6 +162,13 @@
       "when": 1794370335880,
       "tag": "0022_ebook_email",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794378240780,
+      "tag": "0023_cod_confirmation",
+      "breakpoints": true
     }
   ]
 }

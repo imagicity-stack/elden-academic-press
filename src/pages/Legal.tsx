@@ -62,7 +62,7 @@ function Terms() {
       <Section title="3. Orders and payment">
         <p>After you pay you receive a confirmation email with your order number and a private link to your order. Your order is accepted once the payment is confirmed.</p>
         <p>Payments are processed by Razorpay (UPI, cards, net banking and wallets). We never see or store your card or UPI details. An order that is not paid within the time shown at checkout lapses and nothing is charged.</p>
-        <p>Printed books can also be paid by cash on delivery, where offered: you pay a small advance online (shown at checkout) and the rest in cash when the books arrive. Cash on delivery is not available for e-books or for orders that include an e-book.</p>
+        <p>Printed books can also be paid by cash on delivery, where offered: you pay a small advance online (shown at checkout) and the rest in cash when the books arrive. Cash on delivery is not available for e-books or for orders that include an e-book. We call to confirm each cash-on-delivery order before it is dispatched. The advance is non-refundable if you cancel the order (including by telling us on that call that you no longer want it) or refuse the parcel; see our <Doc doc="refunds">refund policy</Doc>.</p>
         <p>We may cancel an order, with a full refund, if an item is unavailable, we cannot deliver to the address given, or we suspect fraud. School and bulk orders agreed by quotation follow the terms of that quotation.</p>
       </Section>
 
@@ -193,6 +193,7 @@ function Refunds() {
         <ul>
           <li><strong>Printed books:</strong> you can cancel any time before your order is dispatched, for a full refund including delivery charges. Once dispatched, it can no longer be cancelled.</li>
           <li><strong>E-books:</strong> you can cancel within {P.ebookCancelDays} days of purchase for a full refund, as long as the e-book has not been downloaded. Once downloaded, an e-book cannot be cancelled or refunded, except as described in section 3.</li>
+          <li><strong>Cash on delivery:</strong> the advance you pay online confirms your order and <strong>is non-refundable</strong> if you cancel it, whether by email or by telling us on the confirmation call that you no longer want it, or if you refuse the parcel on delivery. Nothing else is charged: the cash due on delivery is simply not collected. If we cancel the order ourselves (for example, a book is unavailable), the advance is refunded in full.</li>
           <li><strong>Printed books with a free e-book:</strong> the printed book follows the rule above; if it is cancelled or returned, access to the free e-book ends with it. On cash-on-delivery orders the free e-book becomes available once the books are delivered.</li>
         </ul>
         <p>To cancel, email <Mail /> with your order number.</p>
@@ -208,12 +209,12 @@ function Refunds() {
       </Section>
 
       <Section title="4. How refunds are paid">
-        <p>Refunds go back to the original payment method through Razorpay. We start the refund within two working days of approving it and email you when it is issued. Your bank or card provider usually takes {P.refundTime} to show it. On cash-on-delivery orders, the advance is refunded through Razorpay and any cash you paid is refunded to your bank account or UPI ID.</p>
+        <p>Refunds go back to the original payment method through Razorpay. We start the refund within two working days of approving it and email you when it is issued. Your bank or card provider usually takes {P.refundTime} to show it. When a refund is due on a cash-on-delivery order (for example, a damaged or wrong book, or an order we cancel), the advance is refunded through Razorpay and any cash you paid is refunded to your bank account or UPI ID.</p>
         <p>If money left your account but you did not receive an order confirmation, please do not pay again. The payment is normally matched to your order automatically; you can check it with <Page to="/track">Track an order</Page>. If the order still does not appear, email us with the payment reference. Unmatched payments are returned by your bank or Razorpay, usually within {P.refundTime}.</p>
       </Section>
 
       <Section title="5. Undelivered parcels">
-        <p>If a parcel comes back to us because the address was incomplete or nobody accepted it, we will contact you to send it again (delivery charged again) or refund the price of the books. Original delivery charges are not refunded in this case.</p>
+        <p>If a parcel comes back to us because the address was incomplete or nobody accepted it, we will contact you to send it again (delivery charged again) or refund the price of the books. Original delivery charges are not refunded in this case. A cash-on-delivery parcel that is refused or cannot be delivered is cancelled, and its advance is not refunded.</p>
       </Section>
 
       <Section title="6. School and bulk orders">

@@ -3,6 +3,11 @@
 // - Cart recovery: someone typed a phone number at checkout and ticked "you may call or WhatsApp
 //   me about this order" (a checkout lead), then didn't pay. After the delay in the settings, a
 //   call is queued; if they pay first, it's skipped.
+// - Cash-on-delivery confirmation: every COD order, a few minutes after the advance is paid. The
+//   cart agent asks whether they want the order: yes confirms it; no flags it and emails the owner
+//   (MAIL_TO) to cancel it by hand, the advance being non-refundable; no answer after every try,
+//   or no clear answer, flags it and emails too. The team can confirm it by hand at any time,
+//   which stops the call.
 // - Order feedback: a paid order whose checkout had that consent, the set number of days later.
 //
 // Calls go out only inside the calling hours, only while the master switch and that kind are on,
@@ -15,14 +20,16 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-
 import type { Deps } from '../deps.js';
 import type { Q } from '../db/client.js';
 import { callSettings, calls, checkoutLeads, doNotCall, orderItems, orders, products, productVariants, subscribers } from '../db/schema.js';
+import { HttpError } from '../lib/http.js';
 import { esc, inr } from '../lib/format.js';
 import { addressList, sendSafely } from '../lib/mail.js';
 import { callResultFrom, type CallResult } from '../lib/callProvider.js';
 import {
-  callableNumber, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime, INBOUND, OUTCOME_LABEL, type CallKind, type CallSettings,
+  callableNumber, CONFIRMED_BY_CALL, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime, INBOUND, OUTCOME_LABEL, type CallKind, type CallSettings,
 } from '../../src/shared/calls.js';
 import { getSettings } from './catalog.js';
-import { button, layout, p, section } from './emails.js';
+import { button, layout, p, section, sendCodConfirmationAlert, type CodAlertDetails } from './emails.js';
+import { logEvent, type Order } from './orders.js';
 import { callWhatsApp } from './whatsapp.js';
 
 export type Call = typeof calls.$inferSelect;
@@ -36,6 +43,7 @@ export async function getCallSettings(db: Q): Promise<CallSettings> {
   return {
     ...DEFAULT_CALL_SETTINGS, ...d,
     cart: { ...DEFAULT_CALL_SETTINGS.cart, ...d.cart },
+    cod_confirm: { ...DEFAULT_CALL_SETTINGS.cod_confirm, ...d.cod_confirm },
     feedback: { ...DEFAULT_CALL_SETTINGS.feedback, ...d.feedback },
     hours: { ...DEFAULT_CALL_SETTINGS.hours, ...d.hours },
   };
@@ -161,6 +169,7 @@ export async function planCalls(deps: Deps, s: CallSettings) {
       const res = await db.insert(calls).values({
         kind: 'cart', phone: lead.phone, name: lead.name, leadId: lead.id, dueAt: nextCallingTime(s, t),
         variables: {
+          call_purpose: 'cart_recovery',
           customer_name: firstName(lead.name),
           cart_items: joinSpoken(lead.items.map((i) => `${i.title} (${formatWord(i.kind)}${i.quantity > 1 ? `, ${i.quantity} copies` : ''})`)),
           cart_total: spokenRupees(lead.total),
@@ -171,6 +180,16 @@ export async function planCalls(deps: Deps, s: CallSettings) {
       }).onConflictDoNothing().returning({ id: calls.id });
       queued += res.length;
     }
+  }
+
+  if (s.cod_confirm.enabled) {
+    // COD orders still waiting for their confirmation call (e.g. placed while this was off), up to three days old.
+    const waiting = await db.select().from(orders).where(and(
+      eq(orders.paymentMode, 'cod'), eq(orders.codConfirmation, 'pending'), isNull(orders.cancelledAt),
+      inArray(orders.paymentStatus, ['paid', 'partially_refunded']), gte(orders.paidAt, new Date(t.getTime() - 3 * 86_400_000)),
+      sql`not exists (select 1 from ${calls} where ${calls.orderId} = ${orders.id} and ${calls.kind} = 'cod_confirm')`,
+    )).limit(100);
+    for (const o of waiting) if (await queueCodConfirmation(deps, o, s)) queued++;
   }
 
   if (s.feedback.enabled) {
@@ -227,7 +246,7 @@ export async function dialDueCalls(deps: Deps, s: CallSettings, limit = 10) {
   for (const c of stale) await notAnswered(deps, s, c, 'No result from the provider');
 
   if (!s.enabled || !deps.calls || !inCallingHours(s, t)) return 0;
-  const kinds = (['cart', 'feedback'] as CallKind[]).filter((k) => s[k].enabled);
+  const kinds = (['cart', 'cod_confirm', 'feedback'] as CallKind[]).filter((k) => s[k].enabled);
   if (!kinds.length) return 0;
   const due = await db.select().from(calls).where(and(eq(calls.status, 'queued'), lte(calls.dueAt, t), inArray(calls.kind, kinds)))
     .orderBy(asc(calls.dueAt)).limit(limit);
@@ -238,6 +257,13 @@ export async function dialDueCalls(deps: Deps, s: CallSettings, limit = 10) {
       const [lead] = await db.select({ orderId: checkoutLeads.orderId, consent: checkoutLeads.consent }).from(checkoutLeads).where(eq(checkoutLeads.id, c.leadId));
       if (lead?.orderId) { await db.update(calls).set({ status: 'skipped', note: 'Paid before the call', updatedAt: t }).where(eq(calls.id, c.id)); continue; }
       if (lead && !lead.consent) { await db.update(calls).set({ status: 'cancelled', note: 'Consent withdrawn', updatedAt: t }).where(eq(calls.id, c.id)); continue; }
+    }
+    if (c.kind === 'cod_confirm') {
+      // Confirmed by the team, or cancelled, since it was queued: nothing to ask.
+      const [o] = c.orderId ? await db.select({ codConfirmation: orders.codConfirmation, cancelledAt: orders.cancelledAt, by: orders.codConfirmedBy }).from(orders).where(eq(orders.id, c.orderId)) : [];
+      const why = !o ? 'The order no longer exists' : o.cancelledAt ? 'The order was cancelled' : o.codConfirmation === 'confirmed' ? `Already confirmed${o.by && o.by !== CONFIRMED_BY_CALL ? ` by ${o.by}` : ''}`
+        : o.codConfirmation === 'cancel_requested' ? 'The customer already said no' : '';
+      if (why) { await db.update(calls).set({ status: 'skipped', note: why, updatedAt: t }).where(eq(calls.id, c.id)); continue; }
     }
     // Claim it first, so two runs never dial the same call.
     const [claimed] = await db.update(calls).set({ status: 'dialling', attempts: sql`${calls.attempts} + 1`, startedAt: t, updatedAt: t })
@@ -262,6 +288,11 @@ async function notAnswered(deps: Deps, s: CallSettings, c: Call, note: string, f
   await db.update(calls).set(retry
     ? { status: 'queued', dueAt: nextCallingTime(s, new Date(now().getTime() + s.retryAfterMinutes * 60_000)), note, updatedAt: now() }
     : { status: finalStatus, endedAt: now(), note, updatedAt: now() }).where(eq(calls.id, c.id));
+  // The last try of a confirmation call: the order is flagged and the owner emailed.
+  if (!retry && c.kind === 'cod_confirm' && c.orderId) {
+    await codNotConfirmed(deps, c.orderId, 'unreachable', { kind: 'unreachable', note: `${c.attempts} ${c.attempts === 1 ? 'try' : 'tries'}: ${note}`, callId: c.id })
+      .catch((e) => console.error('[calls] COD unreachable', (e as Error).message));
+  }
 }
 
 /** The cron job: queue what's due, then dial what's due. */
@@ -297,12 +328,13 @@ export async function recordCallResult(deps: Deps, raw: unknown): Promise<Call |
     return after;
   }
   const v = r.variables;
-  const outcome = String(v.call_outcome ?? '').trim();
+  const outcome = c.kind === 'cod_confirm' ? codOutcome(v) : String(v.call_outcome ?? '').trim();
   const issue = c.kind === 'feedback' && truthy(v.issue_reported);
   const [updated] = await db.update(calls).set({
     status: 'done', endedAt: now(), durationSeconds: r.durationSeconds, outcome: outcome in OUTCOME_LABEL ? outcome : outcome.slice(0, 40),
     result: v, transcript: r.transcript, recordingUrl: r.recordingUrl, issueOpen: issue, note: '', updatedAt: now(),
   }).where(eq(calls.id, c.id)).returning();
+  if (c.kind === 'cod_confirm') await codCallResult(deps, updated, v).catch((e) => console.error('[calls] COD result', (e as Error).message));
   await act(deps, s, updated, v, issue);
   return updated;
 }
@@ -388,6 +420,170 @@ async function sendIssueAlert(deps: Deps, c: Call, v: Record<string, unknown>) {
   });
 }
 
+/* ---------------- Cash on delivery: the confirmation call ---------------- */
+
+/** Attention reasons set here start with this, so confirming by hand can clear them. */
+const COD_ATTENTION = 'COD confirmation:';
+
+const str = (v: unknown) => (v == null ? '' : String(v).trim());
+
+/**
+ * A cash-on-delivery order was paid (its advance): it waits for confirmation, and the cart agent
+ * calls a few minutes later (inside the calling hours). Returns whether a call was queued.
+ */
+export async function queueCodConfirmation(deps: Deps, o: Order, settings?: CallSettings): Promise<boolean> {
+  const { db, now } = deps;
+  if (o.paymentMode !== 'cod' || o.cancelledAt) return false;
+  if (!o.codConfirmation) {
+    await db.update(orders).set({ codConfirmation: 'pending', updatedAt: now() }).where(and(eq(orders.id, o.id), eq(orders.codConfirmation, '')));
+    o = { ...o, codConfirmation: 'pending' };
+  }
+  if (o.codConfirmation !== 'pending') return false;
+  const s = settings ?? await getCallSettings(db);
+  if (!s.cod_confirm.enabled) return false; // the team confirms by hand
+  const phone = callableNumber(o.phone);
+  const blocked = !phone ? 'The phone number isn’t an Indian mobile number.' : await isDoNotCall(db, phone) ? 'The number is on the do-not-call list.' : '';
+  if (blocked) {
+    // Recorded once, so the owner is emailed once.
+    const [row] = await db.insert(calls).values({
+      kind: 'cod_confirm', status: 'skipped', phone: (phone ?? o.phone).slice(0, 20), name: o.name, orderId: o.id, dueAt: now(), note: blocked,
+    }).onConflictDoNothing().returning({ id: calls.id });
+    if (row) await codNotConfirmed(deps, o.id, 'pending', { kind: 'not_callable', note: blocked, callId: row.id });
+    return false;
+  }
+  const items = await db.select({ title: orderItems.title, kind: orderItems.variantKind, quantity: orderItems.quantity }).from(orderItems).where(eq(orderItems.orderId, o.id));
+  const res = await db.insert(calls).values({
+    kind: 'cod_confirm', phone: phone!, name: o.name, orderId: o.id,
+    dueAt: nextCallingTime(s, new Date(now().getTime() + s.cod_confirm.delayMinutes * 60_000)),
+    variables: {
+      call_purpose: 'cod_confirmation',
+      customer_name: firstName(o.name),
+      order_number: String(o.number),
+      order_items: joinSpoken(items.map((i) => `${i.title}${i.kind === 'digital' ? ' (e-book)' : ''}${i.quantity > 1 ? `, ${i.quantity} copies` : ''}`)),
+      order_total: spokenRupees(o.total),
+      advance_paid: spokenRupees(o.total - o.codAmount),
+      cash_due: spokenRupees(o.codAmount),
+      // The cart-recovery variables, empty: the same agent makes both calls.
+      cart_items: '', cart_total: '', cod_available: 'yes', discount_code: '', discount_offer: '',
+    },
+  }).onConflictDoNothing().returning({ id: calls.id });
+  return res.length > 0;
+}
+
+/** The call's outcome for the log: what they said about the order, or why it ended without an answer. */
+function codOutcome(v: Record<string, unknown>) {
+  const answer = str(v.order_confirmation).toLowerCase();
+  if (answer === 'confirmed') return 'order_confirmed';
+  if (answer === 'cancel_requested') return 'cancel_requested';
+  const said = str(v.call_outcome);
+  return ['callback', 'do_not_call', 'wrong_person'].includes(said) ? said : 'not_confirmed';
+}
+
+/** A confirmation call ended with someone on the line: act on their answer. */
+async function codCallResult(deps: Deps, c: Call, v: Record<string, unknown>) {
+  const { db, now } = deps;
+  if (!c.orderId) return;
+  const [o] = await db.select().from(orders).where(eq(orders.id, c.orderId));
+  if (!o || o.cancelledAt) return;
+  const detail = { transcript: c.transcript, recordingUrl: c.recordingUrl, callId: c.id };
+  const change = str(v.change_request);
+  if (c.outcome === 'order_confirmed') {
+    // Already confirmed by the team: their confirmation stands.
+    if (o.codConfirmation !== 'confirmed') {
+      await db.update(orders).set({
+        codConfirmation: 'confirmed', codConfirmedAt: now(), codConfirmedBy: CONFIRMED_BY_CALL,
+        ...(o.needsAttention && o.attentionReason?.startsWith(COD_ATTENTION) ? { needsAttention: false } : {}), updatedAt: now(),
+      }).where(eq(orders.id, o.id));
+      await logEvent(db, o.id, 'cod_confirmed', 'Confirmed by the customer on the confirmation call', 'call', { callId: c.id });
+    }
+    if (change) {
+      const reason = `${COD_ATTENTION} confirmed on the call, but asked for a change: ${change}`.slice(0, 500);
+      await db.update(orders).set({ needsAttention: true, attentionReason: reason, updatedAt: now() }).where(eq(orders.id, o.id));
+      await logEvent(db, o.id, 'attention', reason, 'call');
+      await sendCodConfirmationAlert(deps, o, { kind: 'change', changeRequest: change, ...detail }, await getSettings(db));
+    }
+    return;
+  }
+  if (c.outcome === 'cancel_requested') {
+    const reason = str(v.cancel_reason);
+    const told = v.advance_refund_told === undefined || v.advance_refund_told === '' ? null : truthy(v.advance_refund_told);
+    const attention = `${COD_ATTENTION} customer said no on the call${reason ? ` (${reason})` : ''}. Cancel it by hand; the advance isn’t refunded.`.slice(0, 500);
+    await db.update(orders).set({ codConfirmation: 'cancel_requested', codConfirmedAt: null, codConfirmedBy: null, needsAttention: true, attentionReason: attention, updatedAt: now() }).where(eq(orders.id, o.id));
+    await logEvent(db, o.id, 'cod_declined', `Customer said no on the confirmation call${reason ? `: ${reason}` : ''}`, 'call', { callId: c.id, refundTold: told });
+    await sendCodConfirmationAlert(deps, o, { kind: 'said_no', reason, refundTold: told, changeRequest: change, ...detail }, await getSettings(db));
+    return;
+  }
+  // They asked to be called back: the call is queued again (act), and the order keeps waiting.
+  if (c.outcome === 'callback') return;
+  // Already confirmed by the team: a muddled call changes nothing.
+  if (o.codConfirmation === 'confirmed') return;
+  const note = c.outcome === 'do_not_call' ? 'They asked not to be called.' : c.outcome === 'wrong_person' ? 'The person who answered said it was the wrong number.' : '';
+  await codNotConfirmed(deps, o.id, 'unclear', { kind: 'unclear', note, changeRequest: change, ...detail });
+}
+
+/** Not confirmed (no answer, no clear answer, or can't be called): flag the order and email the owner, once per state. */
+async function codNotConfirmed(deps: Deps, orderId: string, state: 'unreachable' | 'unclear' | 'pending', a: CodAlertDetails) {
+  const { db, now } = deps;
+  const [o] = await db.select().from(orders).where(eq(orders.id, orderId));
+  if (!o || o.cancelledAt || o.codConfirmation === 'confirmed' || o.codConfirmation === 'cancel_requested') return;
+  const what = { unreachable: 'no answer after every try', unclear: 'the call didn’t confirm it', not_callable: a.note ?? 'it can’t be called', said_no: '', change: '' }[a.kind];
+  const reason = `${COD_ATTENTION} not confirmed (${what}). Confirm or cancel it by hand.`.slice(0, 500);
+  await db.update(orders).set({ codConfirmation: state, needsAttention: true, attentionReason: reason, updatedAt: now() }).where(eq(orders.id, o.id));
+  await logEvent(db, o.id, 'attention', reason, 'call', a.callId ? { callId: a.callId } : undefined);
+  await sendCodConfirmationAlert(deps, o, a, await getSettings(db));
+}
+
+/** The team confirms a COD order by hand: any waiting confirmation call stops. */
+export async function confirmCodByStaff(deps: Deps, orderId: string, actor: string, how = 'Confirmed by hand') {
+  const { db, now } = deps;
+  const [o] = await db.select().from(orders).where(eq(orders.id, orderId));
+  if (!o) throw new HttpError(404, 'Order not found');
+  if (o.paymentMode !== 'cod') throw new HttpError(409, 'Only cash-on-delivery orders are confirmed.');
+  if (o.cancelledAt) throw new HttpError(409, 'This order is cancelled.');
+  if (o.codConfirmation === 'confirmed') return o;
+  const [u] = await db.update(orders).set({
+    codConfirmation: 'confirmed', codConfirmedAt: now(), codConfirmedBy: actor,
+    ...(o.needsAttention && o.attentionReason?.startsWith(COD_ATTENTION) ? { needsAttention: false } : {}), updatedAt: now(),
+  }).where(eq(orders.id, o.id)).returning();
+  const stopped = await db.update(calls).set({ status: 'cancelled', note: `Order confirmed by ${actor}`, updatedAt: now() })
+    .where(and(eq(calls.orderId, o.id), eq(calls.kind, 'cod_confirm'), eq(calls.status, 'queued'))).returning({ id: calls.id });
+  await logEvent(db, o.id, 'cod_confirmed', `${how}${stopped.length ? '; the confirmation call was stopped' : ''}`, actor);
+  return u;
+}
+
+/** Have the agent call again to confirm (after no answer or an unclear call), as soon as the hours allow. */
+export async function recallCodConfirmation(deps: Deps, orderId: string, actor: string) {
+  const { db, now } = deps;
+  const [o] = await db.select().from(orders).where(eq(orders.id, orderId));
+  if (!o) throw new HttpError(404, 'Order not found');
+  if (o.paymentMode !== 'cod' || o.cancelledAt) throw new HttpError(409, 'Only active cash-on-delivery orders are confirmed by a call.');
+  if (o.codConfirmation === 'confirmed') throw new HttpError(409, 'This order is already confirmed.');
+  const phone = callableNumber(o.phone);
+  if (!phone) throw new HttpError(409, 'The phone number isn’t an Indian mobile number.');
+  if (await isDoNotCall(db, phone)) throw new HttpError(409, 'The number is on the do-not-call list.');
+  const s = await getCallSettings(db);
+  const [existing] = await db.select().from(calls).where(and(eq(calls.orderId, o.id), eq(calls.kind, 'cod_confirm')));
+  if (existing?.status === 'dialling') throw new HttpError(409, 'The agent is on the call right now.');
+  const reason = o.attentionReason?.startsWith(COD_ATTENTION) ? { needsAttention: false } : {};
+  await db.update(orders).set({ codConfirmation: 'pending', ...reason, updatedAt: now() }).where(eq(orders.id, o.id));
+  if (existing) {
+    await db.update(calls).set({ status: 'queued', phone, attempts: 0, endedAt: null, dueAt: nextCallingTime(s, now()), note: `Queued again by ${actor}`, updatedAt: now() }).where(eq(calls.id, existing.id));
+  } else {
+    await queueCodConfirmation(deps, { ...o, codConfirmation: 'pending' }, { ...s, cod_confirm: { ...s.cod_confirm, enabled: true, delayMinutes: 0 } });
+  }
+  await logEvent(db, o.id, 'note', 'The agent will call again to confirm the order', actor);
+  // Straight away when it can go out now.
+  await dialDueCalls(deps, s, 1).catch((e) => console.error('[calls] dial', (e as Error).message));
+  const [after] = await db.select().from(calls).where(and(eq(calls.orderId, o.id), eq(calls.kind, 'cod_confirm')));
+  return after;
+}
+
+/** The order was cancelled: a waiting confirmation call stops. */
+export async function stopCodConfirmation(deps: Deps, orderId: string, why: string) {
+  await deps.db.update(calls).set({ status: 'cancelled', note: why, updatedAt: deps.now() })
+    .where(and(eq(calls.orderId, orderId), eq(calls.kind, 'cod_confirm'), eq(calls.status, 'queued')));
+}
+
 /* ---------------- Numbers for the admin ---------------- */
 
 export async function callStats(db: Q, since: Date) {
@@ -424,11 +620,15 @@ export async function callStats(db: Q, since: Date) {
   }).from(calls).where(gte(calls.createdAt, since)).groupBy(sql`1`).orderBy(sql`1`);
   const [leads] = await db.select({ n: sql<number>`count(*)::int`, paid: sql<number>`count(${checkoutLeads.orderId})::int` })
     .from(checkoutLeads).where(and(eq(checkoutLeads.consent, true), gte(checkoutLeads.createdAt, since)));
+  // Cash-on-delivery orders placed in the period, by where their confirmation stands.
+  const codOrders = await db.select({ state: orders.codConfirmation, n: sql<number>`count(*)::int` }).from(orders)
+    .where(and(eq(orders.paymentMode, 'cod'), sql`${orders.codConfirmation} <> ''`, gte(orders.createdAt, since))).groupBy(orders.codConfirmation);
   const [callable] = await db.select({ n: sql<number>`count(*)::int` }).from(subscribers)
     .where(and(eq(subscribers.status, 'subscribed'), eq(subscribers.callConsent, true)));
   return {
     subscribersCallable: callable?.n ?? 0,
-    cart: byKind('cart'), feedback: byKind('feedback'),
+    cart: byKind('cart'), cod: byKind('cod_confirm'), feedback: byKind('feedback'),
+    codOrders: Object.fromEntries(codOrders.map((r) => [r.state, r.n])) as Record<string, number>,
     recovered: { orders: recovered?.n ?? 0, revenue: recovered?.revenue ?? 0 },
     couponsGiven: coupon?.n ?? 0,
     rating: { average: rating?.avg ?? null, count: rating?.n ?? 0 },

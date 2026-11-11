@@ -2,15 +2,16 @@ import { Hono, type Context } from 'hono';
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../../app.js';
-import { customers, orderEvents, orderItems, orders, payments, refunds } from '../../db/schema.js';
+import { calls, customers, orderEvents, orderItems, orders, payments, refunds } from '../../db/schema.js';
 import { toCsv } from '../../lib/csv.js';
 import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
 import { stateName } from '../../lib/states.js';
 import { getSettings } from '../../services/catalog.js';
-import { sendEbookUnlocked, sendOrderConfirmation, sendRefundNotice, sendShipped } from '../../services/emails.js';
+import { sendCodCancelled, sendEbookUnlocked, sendOrderConfirmation, sendRefundNotice, sendShipped } from '../../services/emails.js';
 import { renderPackingSlip } from '../../services/invoice.js';
 import { invoiceFileName, renderInvoicePdf } from '../../services/invoicePdf.js';
-import { cancelUnpaid, logEvent, orderLink, refundOrder } from '../../services/orders.js';
+import { cancelCodOrder, cancelUnpaid, logEvent, orderLink, refundOrder } from '../../services/orders.js';
+import { confirmCodByStaff, recallCodConfirmation, stopCodConfirmation } from '../../services/calls.js';
 import { orderWhatsApp } from '../../services/whatsapp.js';
 import { orderStatusLabel } from '../orders.js';
 import { CHANNELS, channelLabel, classify, orderChannel, type Channel, type Touch } from '../../../src/shared/attribution.js';
@@ -64,7 +65,8 @@ adminOrders.get('/', async (c) => {
       id: orders.id, number: orders.number, createdAt: orders.createdAt, name: orders.name, email: orders.email, phone: orders.phone,
       total: orders.total, paymentStatus: orders.paymentStatus, fulfillmentStatus: orders.fulfillmentStatus, cancelledAt: orders.cancelledAt,
       requiresShipping: orders.requiresShipping, needsAttention: orders.needsAttention, items: itemCount.n, shipState: orders.shipState,
-      paymentMode: orders.paymentMode, codAmount: orders.codAmount, codCollectedAt: orders.codCollectedAt, channel: orders.channel, source: orders.source,
+      paymentMode: orders.paymentMode, codAmount: orders.codAmount, codCollectedAt: orders.codCollectedAt, codConfirmation: orders.codConfirmation,
+      channel: orders.channel, source: orders.source,
     }).from(orders).leftJoin(itemCount, eq(itemCount.orderId, orders.id)).where(where)
       .orderBy(desc(orders.createdAt)).limit(f.limit).offset((f.page - 1) * f.limit),
     db.select({ total: count() }).from(orders).where(where),
@@ -130,12 +132,16 @@ async function loadOrder(c: Context<AppEnv>) {
 adminOrders.get('/:id{[0-9a-f-]{36}}', async (c) => {
   const { db } = c.get('deps');
   const o = await loadOrder(c);
-  const [items, events, pays, refs, cust] = await Promise.all([
+  const [items, events, pays, refs, cust, codCalls] = await Promise.all([
     db.select().from(orderItems).where(eq(orderItems.orderId, o.id)),
     db.select().from(orderEvents).where(eq(orderEvents.orderId, o.id)).orderBy(asc(orderEvents.createdAt)),
     db.select().from(payments).where(eq(payments.orderId, o.id)).orderBy(asc(payments.createdAt)),
     db.select().from(refunds).where(eq(refunds.orderId, o.id)).orderBy(asc(refunds.createdAt)),
     o.customerId ? db.select().from(customers).where(eq(customers.id, o.customerId)) : Promise.resolve([]),
+    o.paymentMode === 'cod' ? db.select({
+      id: calls.id, status: calls.status, outcome: calls.outcome, dueAt: calls.dueAt, attempts: calls.attempts, endedAt: calls.endedAt,
+      note: calls.note, result: calls.result, transcript: calls.transcript, recordingUrl: calls.recordingUrl,
+    }).from(calls).where(and(eq(calls.orderId, o.id), eq(calls.kind, 'cod_confirm'))) : Promise.resolve([]),
   ]);
   const visit = (t?: Touch) => t && { ...t, ...classify(t), label: channelLabel(classify(t).channel) };
   return c.json({
@@ -143,6 +149,7 @@ adminOrders.get('/:id{[0-9a-f-]{36}}', async (c) => {
     source: { channel: o.channel, label: channelLabel(o.channel), detail: o.source ? orderChannel(o.source).detail : '', first: visit(o.source?.first), last: visit(o.source?.last) },
     items, events, payments: pays.map(({ raw: _raw, ...p }) => p), refunds: refs, customer: cust[0] ?? null,
     customerLink: orderLink(c.get('deps'), o),
+    codCall: codCalls[0] ?? null,
   });
 });
 
@@ -161,6 +168,10 @@ adminOrders.post('/:id/fulfillment', async (c) => {
   if (!['paid', 'partially_refunded'].includes(o.paymentStatus) || o.cancelledAt) throw new HttpError(409, 'Only paid, active orders can be fulfilled.');
   if (!o.requiresShipping) throw new HttpError(409, 'This order has nothing to ship.');
   if (input.status === 'shipped' && !input.trackingNumber && !o.trackingNumber) throw new HttpError(400, 'Add the tracking number before marking as shipped.');
+  // Cash on delivery: packing or shipping an order that wasn't confirmed confirms it (and stops the call).
+  if (o.paymentMode === 'cod' && input.status !== 'unfulfilled' && o.codConfirmation && o.codConfirmation !== 'confirmed') {
+    await confirmCodByStaff(deps, o.id, c.get('admin').email, `Confirmed by marking it ${input.status}`);
+  }
   const now = deps.now();
   const [u] = await deps.db.update(orders).set({
     fulfillmentStatus: input.status,
@@ -201,6 +212,7 @@ adminOrders.post('/:id/refund', requireRole('manager'), async (c) => {
     cancel: z.boolean().default(false), notify: z.boolean().default(true),
   }));
   const u = await refundOrder(deps, o.id, input, c.get('admin').email);
+  if (input.cancel) await stopCodConfirmation(deps, o.id, 'The order was cancelled').catch(() => undefined);
   await audit(c, 'order.refund', 'order', o.number, input);
   if (input.notify) await sendRefundNotice(deps, u, input.amount, await getSettings(deps.db));
   return c.json({ order: u });
@@ -211,6 +223,30 @@ adminOrders.post('/:id/cancel', async (c) => {
   const input = await body(c, z.object({ reason: zText(300).default('Cancelled by store') }));
   const u = await cancelUnpaid(c.get('deps'), o.id, input.reason, c.get('admin').email);
   await audit(c, 'order.cancel', 'order', o.number, input);
+  return c.json({ order: u });
+});
+
+/** Cash on delivery: confirm the order by hand (the agent's call stops), or have the agent call again. */
+adminOrders.post('/:id/cod-confirmation', async (c) => {
+  const deps = c.get('deps');
+  const o = await loadOrder(c);
+  const input = await body(c, z.object({ action: z.enum(['confirm', 'call']) }));
+  const by = c.get('admin').email;
+  if (input.action === 'confirm') await confirmCodByStaff(deps, o.id, by);
+  else await recallCodConfirmation(deps, o.id, by);
+  await audit(c, `order.cod_${input.action}`, 'order', o.number);
+  const [u] = await deps.db.select().from(orders).where(eq(orders.id, o.id));
+  return c.json({ order: u });
+});
+
+/** Cash on delivery: cancel an order that won't be delivered, keeping the (non-refundable) advance. */
+adminOrders.post('/:id/cancel-cod', async (c) => {
+  const deps = c.get('deps');
+  const o = await loadOrder(c);
+  const input = await body(c, z.object({ reason: zText(300).min(3, 'Give the reason'), restock: z.boolean().default(true), notify: z.boolean().default(true) }));
+  const u = await cancelCodOrder(deps, o.id, { reason: input.reason, restock: input.restock }, c.get('admin').email);
+  await audit(c, 'order.cancel_cod', 'order', o.number, input);
+  if (input.notify) await sendCodCancelled(deps, u, await getSettings(deps.db));
   return c.json({ order: u });
 });
 

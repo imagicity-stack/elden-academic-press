@@ -1283,6 +1283,12 @@ CREATE TABLE "consent_stats" (
 
 ALTER TABLE "orders" ADD COLUMN "ebook_email" text;
 
+-- ===== 0023_cod_confirmation =====
+
+ALTER TABLE "orders" ADD COLUMN "cod_confirmation" text DEFAULT '' NOT NULL;--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "cod_confirmed_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "orders" ADD COLUMN "cod_confirmed_by" text;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -1310,7 +1316,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('f7171c94bb2cab04f493ae425ad30b664e454756c8a19c4b8ecae89989ad5b86', 1794337425917),
   ('c7da677b10a38be073b8e2663665bcbda8dd06941f6c8b2ca132b4cddb3bfea8', 1794355136757),
   ('21f9eeca6ca245d29d4e2616dc430e674f7bc63a000af91ecf857aae1faebe42', 1794369510754),
-  ('f510d7b0f559376bc9957abf13a7be917f3cabe1cc97dc9ef6239b884754cd6c', 1794370335880);
+  ('f510d7b0f559376bc9957abf13a7be917f3cabe1cc97dc9ef6239b884754cd6c', 1794370335880),
+  ('aecd14d3fb0df0a1d5c94f442d53256dec814ffbd2492209fb178030c1f08b6e', 1794378240780);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

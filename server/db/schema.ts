@@ -2,7 +2,7 @@
 import { sql } from 'drizzle-orm';
 import type { OrderSource } from '../../src/shared/attribution.js';
 import type { PopupAudience, PopupContent, PopupDesign, PopupFrequency, PopupTrigger } from '../../src/shared/popups.js';
-import type { CallKind, CallSettings, CallStatus } from '../../src/shared/calls.js';
+import type { CallKind, CallSettings, CallStatus, CodConfirmation } from '../../src/shared/calls.js';
 import type { WaKind, WaStatus, WhatsAppSettings } from '../../src/shared/whatsapp.js';
 import {
   boolean, check, date, index, integer, jsonb, pgEnum, pgSequence, pgTable, primaryKey, serial, smallint, text, timestamp, uniqueIndex, uuid,
@@ -210,6 +210,11 @@ export const orders = pgTable('orders', {
   /** Cash on delivery: the balance to collect when the books are delivered (0 for online orders). */
   codAmount: integer('cod_amount').notNull().default(0),
   codCollectedAt: timestamp('cod_collected_at', { withTimezone: true }),
+  /** Cash on delivery: the confirmation call (src/shared/calls.ts CodConfirmation; '' for online orders). */
+  codConfirmation: text('cod_confirmation').$type<CodConfirmation>().notNull().default(''),
+  codConfirmedAt: timestamp('cod_confirmed_at', { withTimezone: true }),
+  /** 'call' (the agent) or the email of the team member who confirmed it. */
+  codConfirmedBy: text('cod_confirmed_by'),
   /** Accepted ad cookies when ordering: the purchase may be reported to Meta, with these browser details. */
   adConsent: boolean('ad_consent').notNull().default(false),
   fbp: text('fbp'),
