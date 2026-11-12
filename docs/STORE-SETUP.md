@@ -180,6 +180,15 @@ Email your subscribers about new books and offers from **Admin → Newsletter**,
 
 The site reports visits, add-to-carts, checkouts, enquiries, sign-ups and purchases to Meta, from the browser (Pixel) **and** from the server (Conversions API). Each event has one id on both sides, so Meta counts it once, and purchases still count when the buyer used an ad blocker or closed the tab. Only for visitors who press **Accept all** on the cookie banner; the admin and staff (anyone signed in to `/admin` in that browser) are never tracked.
 
+**Cookie banner switch (until May 2027):** Admin → Settings → **Cookies & tracking** has a one-click switch (owner only), saved the moment you click it.
+- **ON:** no cookie banner. Every visitor counts as having pressed *Accept all*: Meta Pixel, Meta's Conversions API and Google Analytics run for everyone.
+  - Never for staff signed in to the admin, never sent to Meta for students under Meta's minimum age, and no Google Analytics for any signed-in student.
+  - A visitor who chooses *Only essential* from *Cookie settings* in the footer keeps that choice.
+  - The privacy policy's wording follows the switch.
+- **OFF:** the banner asks again. Each page checks the switch with the server before tracking anything, so after switching OFF no visitor is tracked until they accept, not even on their next first page.
+- Switch it OFF before India's DPDP consent rules apply (May 2027). Every change is in Settings → Activity.
+- **One-time:** run [`0025_consent_auto.sql`](supabase-updates/0025_consent_auto.sql) in Supabase → SQL Editor before this version goes live.
+
 1. **Events Manager** → your dataset (e.g. *EAP Website Data*) → copy the **ID** under its name.
 2. Dataset → **Settings** → **Conversions API** → **Generate access token** → copy it (secret: only into Vercel).
 3. **Business settings → Brand safety → Domains → Add** `eldenap.in` → verify with the DNS TXT record at your registrar.

@@ -17,7 +17,11 @@ beforeEach(async () => {
 const sha = (v: string) => createHash('sha256').update(v).digest('hex');
 const FBP = 'fb.1.1793500000000.1234567890';
 const FBC = 'fb.1.1793500000000.IwAR0abc_DEF-123';
-const accepted = { Cookie: `elden_consent=all; _fbp=${FBP}; _fbc=${FBC}`, 'User-Agent': 'Mozilla/5.0 Test' };
+/** Accepted ad cookies, with no location (Vercel adds the location to real requests: see VERCEL). */
+const acceptedNoGeo = { Cookie: `elden_consent=all; _fbp=${FBP}; _fbc=${FBC}`, 'User-Agent': 'Mozilla/5.0 Test' };
+/** Vercel's IP location headers, as on every request to the live site. */
+const VERCEL = { 'x-vercel-ip-country': 'IN', 'x-vercel-ip-country-region': 'JH', 'x-vercel-ip-city': 'Hazaribag', 'x-vercel-ip-postal-code': '825301' };
+const accepted = { ...acceptedNoGeo, ...VERCEL };
 
 async function order(headers: Record<string, string>) {
   const [p] = await t.db.select().from(products).where(eq(products.slug, 'mathematics-today'));
@@ -176,6 +180,20 @@ describe('a first visit (nothing given yet)', () => {
     const u = userData({ geo: { city: 'Dubai', state: null, pincode: null, country: 'AE' } });
     expect(u).toMatchObject({ ct: [sha('dubai')], country: [sha('ae')] });
     expect(u.st).toBeUndefined();
+  });
+
+  it('abroad: the region code is the state, so a visitor without a city still matches', async () => {
+    const abroad = { ...acceptedNoGeo, 'x-vercel-ip-country': 'AE', 'x-vercel-ip-country-region': 'DU' };
+    expect((await t.call('POST', '/meta/event', { headers: abroad, body: view })).status).toBe(204);
+    expect(toPayload(meta.sent[0]).user_data).toMatchObject({ st: [sha('du')], country: [sha('ae')] });
+  });
+
+  it('an event with nothing Meta can match on (no contact details, no location) is not sent from the server', async () => {
+    expect((await t.call('POST', '/meta/event', { headers: acceptedNoGeo, body: view })).status).toBe(204);
+    expect((await t.call('POST', '/meta/event', { headers: { ...acceptedNoGeo, 'x-vercel-ip-country': 'IN' }, body: view })).status).toBe(204);
+    expect(meta.sent).toEqual([]); // country alone isn't a matching key
+    await t.call('POST', '/meta/event', { headers: acceptedNoGeo, body: { ...view, user: { phone: '98765 43210' } } });
+    expect(meta.sent).toHaveLength(1);
   });
 
   it('nothing is sent without ad consent', async () => {

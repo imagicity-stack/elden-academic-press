@@ -275,6 +275,22 @@ describe('settings, coupons, staff', () => {
     expect(ok.json.shippingFlat).toBe(5000);
   });
 
+  it('the cookie banner switch: one click, owner only, and the site reads it from /config', async () => {
+    expect((await t.call('GET', '/config')).json.consentAuto).toBe(false);
+    expect((await t.call('PUT', '/admin/settings/consent', { headers: await as(STAFF), body: { auto: true } })).status).toBe(403);
+    const h = await as(OWNER);
+    const on = await t.call('PUT', '/admin/settings/consent', { headers: h, body: { auto: true } });
+    expect(on.json).toEqual({ consentAuto: true });
+    expect((await t.call('GET', '/config')).json.consentAuto).toBe(true);
+    expect((await t.call('GET', '/admin/settings', { headers: h })).json.consentAuto).toBe(true);
+    // Saving the other settings leaves it alone.
+    const s = (await t.call('GET', '/admin/settings', { headers: h })).json;
+    await t.call('PUT', '/admin/settings', { headers: h, body: { ...s, shippingFlat: 4000 } });
+    expect((await t.call('GET', '/config')).json.consentAuto).toBe(true);
+    await t.call('PUT', '/admin/settings/consent', { headers: h, body: { auto: false } });
+    expect((await t.call('GET', '/config')).json.consentAuto).toBe(false);
+  });
+
   it('manages coupon codes', async () => {
     const h = await as(OWNER);
     const r = await t.call('POST', '/admin/coupons', { headers: h, body: { code: 'diwali15', type: 'percent', value: 15 } });

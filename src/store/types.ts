@@ -53,6 +53,8 @@ export interface StoreConfig {
   cod: CodRule | null;
   /** Students are sent to Meta only from this age (META_MIN_AGE on the server). */
   metaMinAge?: number;
+  /** Cookie banner off: every visitor counts as having accepted cookies (Admin → Settings). */
+  consentAuto?: boolean;
 }
 
 export type LineIssue = { code: 'unavailable' } | { code: 'out_of_stock' } | { code: 'insufficient_stock'; available: number };

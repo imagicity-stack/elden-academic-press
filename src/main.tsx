@@ -7,6 +7,8 @@ import { metaTestMode } from './consent';
 import { WithIntro } from './components/Intro';
 import { legalDocFor } from './legal';
 import { recordVisit } from './attribution';
+import { applySiteConsentMode } from './consent';
+import { loadStoreConfig } from './store/catalog';
 import { ComingSoon } from './pages/ComingSoon';
 import './styles.css';
 
@@ -41,6 +43,9 @@ const isAdmin = window.location.pathname === '/admin' || window.location.pathnam
 
 // How this visitor reached the site, kept for their order (not for the admin's own visits).
 if (!isAdmin) recordVisit();
+
+// The cookie switch (Admin → Settings → Cookies & tracking), confirmed on every page load.
+if (!isAdmin) loadStoreConfig().then((c) => applySiteConsentMode(Boolean(c.consentAuto)), () => {});
 
 // Before launch, staff signed in to /admin in this browser see the full site,
 // to check it and place test orders. Signing out of the admin ends the preview.

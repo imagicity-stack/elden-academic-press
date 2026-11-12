@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 import { getCookie } from 'hono/cookie';
 import type { AppEnv } from '../app.js';
 import type { Deps } from '../deps.js';
-import type { MetaEvent } from '../lib/meta.js';
+import { canMatch, type MetaEvent } from '../lib/meta.js';
 import { isoStateName } from '../lib/states.js';
 import type { Order, OrderItem } from './orders.js';
 import { registrationEventId, registrationParams } from '../../src/shared/metaEvents.js';
@@ -40,7 +40,8 @@ function geoOf(c: Context<AppEnv>): Visit['geo'] {
   return {
     country,
     city: city && city.length <= 80 ? city : null,
-    state: country === 'IN' ? isoStateName(region) : null,
+    // Indian states by name; elsewhere the region's own code (Meta accepts either for "st").
+    state: country === 'IN' ? isoStateName(region) : region && /^[A-Za-z0-9]{1,3}$/.test(region) ? region : null,
     pincode: pin && /^[\w -]{3,10}$/.test(pin) ? pin : null,
   };
 }
@@ -68,6 +69,9 @@ export const eventIdHeader = (c: Context<AppEnv>) => {
 /** Send one event to Meta in the background. Never throws, never delays the response. */
 export function report(deps: Deps, consent: boolean, event: MetaEvent): Promise<void> | undefined {
   if (!deps.meta || !consent) return;
+  // Nothing Meta can match on (no contact details, and no city, state or PIN from the IP address):
+  // the browser's Pixel copy still counts it, and a server copy would only be flagged by Meta.
+  if (!canMatch(event.user)) return;
   const run = deps.meta.send([event]).catch((e) => console.error('[meta]', (e as Error).message));
   if (deps.defer) deps.defer(run); else return run;
 }

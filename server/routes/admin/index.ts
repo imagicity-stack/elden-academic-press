@@ -160,6 +160,20 @@ admin.put('/settings', requireRole('owner'), async (c) => {
   return c.json(row);
 });
 
+/**
+ * The cookie banner switch, one click (owner only): ON = no banner, every visitor counts as having
+ * accepted cookies (except staff and students under Meta's minimum age; an explicit "Only
+ * essential" stands). OFF = the banner asks again. Meant until India's DPDP consent rules apply (May 2027).
+ */
+admin.put('/settings/consent', requireRole('owner'), async (c) => {
+  const { db } = c.get('deps');
+  const { auto } = await body(c, z.object({ auto: z.boolean() }));
+  const [row] = await db.update(settings).set({ consentAuto: auto, updatedAt: sql`now()` }).where(eq(settings.id, 1)).returning();
+  await audit(c, auto ? 'consent.banner_off' : 'consent.banner_on', 'settings', 1);
+  await clearCatalogCache(); // the site's /api/config carries it
+  return c.json({ consentAuto: row.consentAuto });
+});
+
 /* ---------------- Staff ---------------- */
 
 admin.get('/staff', requireRole('owner'), async (c) => {
