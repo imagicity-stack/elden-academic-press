@@ -198,6 +198,23 @@ describe('call results', () => {
     expect(list.json.items).toMatchObject([{ phone: '+919876543210', source: 'customer' }]);
   });
 
+  it("Sarvam's documented campaign payload is matched and recorded", async () => {
+    const c = await dialled();
+    const r = await webhook({
+      app_id: 'Elden-Acade-e49b18a7-09b3', app_version: 3, experiment: null, attempt_id: '019d392a-4f5a-7db3-904a-6ecebb9aac96',
+      campaign_id: 'Elden---Car-4ab29de8-5933', cohort_id: `cart-${c.id}`, completion_status: 'completed', connectivity_status: 'connected',
+      next_action_status: null, failure_reason: null, user_identifier: c.id, user_phone_number: '+919876543210', agent_phone_number: '+917965860108',
+      duration: 42.5, interaction_id: '20261112/a1b2c3d4-10:30:00-e5f6a7b8', retry_attempt: 0, executed_at: '2026-11-10T12:06:00+05:30',
+      start_datetime: '2026-11-10T06:36:00Z', end_datetime: '2026-11-10T06:36:43Z',
+      initial_agent_variables: { customer_name: 'Asha' }, final_agent_variables: { call_outcome: 'will_order' }, output_agent_variables: { call_outcome: 'will_order', wants_link: 'true' },
+      interaction_transcript: [{ role: 'agent', en_text: 'Namaste Asha ji' }, { role: 'user', en_text: 'Haan, bataiye' }],
+      metadata: { purpose: 'cart_recovery_call_end' },
+    });
+    expect(r.json).toEqual({ ok: true, matched: true });
+    const [row] = await allCalls();
+    expect(row).toMatchObject({ status: 'done', outcome: 'will_order', durationSeconds: 43, providerCallId: 'test-1', transcript: 'agent: Namaste Asha ji\nuser: Haan, bataiye' });
+  });
+
   it('refuses a webhook without the secret, and ignores unknown calls', async () => {
     expect((await webhook({ status: 'completed' }, 'wrong')).status).toBe(401);
     expect((await webhook({ metadata: { call_id: '00000000-0000-4000-8000-000000000000' }, status: 'completed' })).json).toEqual({ ok: true, matched: false });
