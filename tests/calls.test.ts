@@ -217,9 +217,15 @@ describe('call results', () => {
     await lead();
     at('2026-11-10T12:05:00+05:30');
     await runCalls(t.deps);
-    const [row] = await allCalls();
+    let [row] = await allCalls();
     expect(row).toMatchObject({ status: 'queued', attempts: 1 });
-    expect(row.note).toContain('provider down');
+    expect(row.note).toBe("Couldn't start the call (Tue, 10 Nov, 12:05 pm): provider down");
+    // Fixed: the next try goes through and the old error is cleared.
+    provider.fail = false;
+    at('2026-11-10T14:10:00+05:30');
+    await runCalls(t.deps);
+    [row] = await allCalls();
+    expect(row).toMatchObject({ status: 'dialling', attempts: 2, note: '' });
   });
 });
 

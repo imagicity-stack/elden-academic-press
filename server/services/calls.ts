@@ -272,10 +272,11 @@ export async function dialDueCalls(deps: Deps, s: CallSettings, limit = 10, only
     if (!claimed) continue;
     try {
       const r = await deps.calls.start({ callId: c.id, kind: c.kind, phone: c.phone, variables: c.variables });
-      await db.update(calls).set({ providerCallId: r.providerCallId, updatedAt: now() }).where(eq(calls.id, c.id));
+      // Handed to Sarvam: an error from an earlier try no longer applies.
+      await db.update(calls).set({ providerCallId: r.providerCallId, note: '', updatedAt: now() }).where(eq(calls.id, c.id));
       dialled++;
     } catch (e) {
-      await notAnswered(deps, s, claimed, `Couldn't start the call: ${(e as Error).message}`.slice(0, 300), 'failed');
+      await notAnswered(deps, s, claimed, `Couldn't start the call (${istTime(now())}): ${(e as Error).message}`.slice(0, 300), 'failed');
     }
   }
   return dialled;
