@@ -452,25 +452,24 @@ function ConnectionTest() {
       <Btn busy={busy === 'conn'} onClick={() => run('conn', () => adminApi<ConnTest>('/calls/connection-test')).then((x) => x && setR(x))}>Test Sarvam connection</Btn>
       <span className="ad-muted"> Checks the key and both campaigns with Sarvam. Nobody is called.</span>
       {r && (
-        <dl className="ad-dl ad-mt">
-          <dt>API key in use</dt>
-          <dd>{r.key ? <><code>{r.key.start}…{r.key.end}</code> ({r.key.length} characters). Compare with the key in apps.sarvam.ai → Settings → API Key.</> : <Badge tone="red">SARVAM_API_KEY not set</Badge>}</dd>
-          <dt>Org / workspace</dt><dd><code>{r.ids.org || '(not set)'}</code> / <code>{r.ids.workspace || '(not set)'}</code></dd>
-          {!r.connected && <><dt>Result</dt><dd><Badge tone="red">Not connected</Badge> one of the five SARVAM_ settings is missing in Vercel.</dd></>}
+        <ul className="ad-conn">
+          <li><span className="ad-muted">API key in use</span>
+            <div>{r.key ? <><code>{r.key.start}…{r.key.end}</code> ({r.key.length} characters). Compare with the key in apps.sarvam.ai → Settings → API Key.</> : <Badge tone="red">SARVAM_API_KEY not set</Badge>}</div></li>
+          <li><span className="ad-muted">Org / workspace</span>
+            <div><code>{r.ids.org || '(not set)'}</code><br /><code>{r.ids.workspace || '(not set)'}</code></div></li>
+          {!r.connected && <li><span className="ad-muted">Result</span><div><Badge tone="red">Not connected</Badge> One of the five SARVAM_ settings is missing in Vercel.</div></li>}
           {r.campaigns.map((c) => (
-            <div key={c.kind}>
-              <dt>{c.kind === 'cart' ? 'Cart campaign' : 'Feedback campaign'}</dt>
-              <dd><code>{c.campaignId}</code>{' '}
+            <li key={c.kind}><span className="ad-muted">{c.kind === 'cart' ? 'Cart campaign' : 'Feedback campaign'}</span>
+              <div><code>{c.campaignId}</code>{' '}
                 {c.ok ? <Badge tone="green">OK: {c.status}{c.agentVersion != null ? `, agent version ${c.agentVersion}` : ''}</Badge>
                   : c.error ? <><Badge tone="red">Refused</Badge> <span className="ad-neg">{c.error}</span>
-                    {/Sarvam 40[13]/.test(c.error) && <div className="ad-muted">Sarvam doesn’t accept this key for this org and workspace. If the key above isn’t the one in apps.sarvam.ai, the new key hasn’t reached the live site: save it for Production and redeploy. If it is the same key, it belongs to another workspace.</div>}
+                    {/Sarvam 40[13]/.test(c.error) && <div className="ad-muted">Sarvam doesn’t accept this key for this org and workspace. Use a key made in apps.sarvam.ai (Voice Agents) → Settings → API Key, inside this workspace; a key from dashboard.sarvam.ai (speech APIs) is refused. If the key above isn’t your new one, save it for Production and redeploy.</div>}
                     {/Sarvam 404/.test(c.error) && <div className="ad-muted">The key works, but Sarvam can’t find this campaign in this org and workspace: check the ids.</div>}</>
                     : <Badge tone="amber">{c.status}: resume it in Sarvam</Badge>}
                 {c.endsAt && <span className="ad-muted"> · ends {new Date(c.endsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}</span>}
-              </dd>
-            </div>
+              </div></li>
           ))}
-        </dl>
+        </ul>
       )}
     </div>
   );
