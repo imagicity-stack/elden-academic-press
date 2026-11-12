@@ -66,11 +66,15 @@ A self-hosted store and back office, run as one Vercel function (`api/index.ts`)
 
 ## Claude connector (MCP)
 
-The store is also a remote MCP server at **`https://eldenap.in/api/mcp`**, so Claude can work in it: read sales, orders, products, customers, enquiries, competitions and where buyers came from (to compare with the Meta Ads connector), and add or edit books, prices, stock and discount codes, mark orders packed/shipped, and add notes.
+The store is also a remote MCP server at **`https://eldenap.in/api/mcp`**, so Claude can work in the whole back office.
 
+- **Reads everything:** sales and sales by source/UTM campaign (to compare with the Meta Ads connector), orders with refunds and cancellations, products, stock, customers, coupons, enquiries, WhatsApp (inbox, conversations, send log, templates, opt-outs), voice-agent calls (stats, transcripts, abandoned-checkout leads, do-not-call), newsletter (subscribers, accounts, campaigns), audience, popups, cookie consent, Study Hub, competitions (registrations, teams, notices, dates), store settings, staff and the activity log.
+- **Acts on:** products (create, edit, publish, stock), categories, coupons, order fulfilment and notes, enquiries, WhatsApp replies and new-book sends, newsletter campaigns (draft, test, schedule, send, stop), voice-agent calls (call now, skip, resolve, fetch result, do-not-call), popup status, Study Hub publishing, customer notes.
+- **Never tools:** refunds, cancellations, competition decisions (review, results, notices), settings, staff, deleting. Their data is readable.
+- **Privacy:** children's dates of birth, guardians' and students' contact details, and competition ID documents are left out of what Claude sees.
 - **Connect:** in Claude, Settings → Connectors → Add custom connector → paste the address above → Connect. Claude registers itself and opens `/admin/connect`, where a signed-in team member (with two-step verification) chooses **Allow**. The steps are also under Admin → Settings → Claude, with the list of connections and a Disconnect button.
 - **Sign-in:** OAuth 2.1 with PKCE and dynamic client registration (`server/routes/mcp/oauth.ts`, `server/services/mcpAuth.ts`). Codes only go back to Claude's own callback (claude.ai / claude.com) or localhost. Access tokens last an hour, refresh tokens 30 days and change on each use; only their hashes are stored.
-- **Permissions:** a connection acts as the person who approved it, with their current role, and stops when they lose admin access. Tools (`server/routes/mcp/tools.ts`) call the admin's own endpoints, so the same validation and role checks apply, and changes show in the activity log as "you (via Claude)". Refunds, cancellations, deleting, settings, staff and bulk newsletter/WhatsApp sends are deliberately not tools.
+- **Permissions:** a connection acts as the person who approved it, with their current role, and stops when they lose admin access. Tools (`server/routes/mcp/tools.ts`, `backend.ts`) call the admin's own endpoints, so the same validation and role checks apply, and changes show in the activity log as "you (via Claude)".
 - **Database:** needs `docs/supabase-updates/0024_mcp_connector.sql` (the setup check at `/api/health` says so until it's run).
 
 ## Pages

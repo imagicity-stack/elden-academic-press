@@ -10,24 +10,25 @@ import { Btn, Loading } from '../ui';
 
 const CAN: Record<Me['role'], string[]> = {
   owner: [
-    'See sales, money received, orders, customers, enquiries, stock and where buyers came from',
-    'See competitions and the activity log',
-    'Add and edit books, publish them, change prices and stock',
-    'Create and switch off discount codes',
+    'See everything in the admin: sales, orders and refunds, customers, stock, WhatsApp, calls, abandoned checkouts, newsletter, audience, popups, competitions, settings and the activity log',
+    'Add and edit books, publish them, change prices and stock, and create discount codes',
+    'Reply on WhatsApp, send new-book WhatsApp messages and newsletter campaigns (it asks you first)',
+    'Start, skip or follow up voice-agent calls',
     'Mark orders packed, shipped or delivered, and add notes',
   ],
   manager: [
-    'See sales, money received, orders, customers, enquiries, stock and where buyers came from',
-    'Add and edit books, publish them, change prices and stock',
-    'Create and switch off discount codes',
+    'See sales, orders and refunds, customers, stock, WhatsApp, calls, abandoned checkouts, newsletter, audience, popups and settings',
+    'Add and edit books, publish them, change prices and stock, and create discount codes',
+    'Reply on WhatsApp, send new-book WhatsApp messages and newsletter campaigns (it asks you first)',
+    'Start, skip or follow up voice-agent calls',
     'Mark orders packed, shipped or delivered, and add notes',
   ],
   staff: [
-    'See sales, orders, customers, enquiries, stock and where buyers came from',
+    'See sales, orders, customers, enquiries, stock, newsletter and audience',
     'Change stock, mark orders packed, shipped or delivered, and add notes',
   ],
 };
-const CANT = 'It can’t refund or cancel orders, delete anything, change store settings or staff, or send newsletters and WhatsApp messages.';
+const CANT = 'It can’t refund or cancel orders, approve or reject competition teams, change store settings or staff, or delete anything: those stay with you in the admin.';
 
 export default function ConnectClaude({ me }: { me: Me }) {
   const params = Object.fromEntries(new URLSearchParams(window.location.search));
