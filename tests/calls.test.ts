@@ -373,6 +373,56 @@ describe('Admin → Calls', () => {
     expect(detail.lead).toMatchObject({ email: 'asha@example.com' });
     expect((await t.call('GET', '/admin/calls?kind=cart', { headers: h })).json.items).toHaveLength(1);
   });
+
+  it('"Call now" says why it can\'t dial: paused, not connected, outside hours', async () => {
+    const h = await admin();
+    await lead();
+    at('2026-11-10T12:05:00+05:30');
+    await runCalls(t.deps); // queued, not dialled: all calls are paused
+    const [c] = await allCalls();
+    expect(c.status).toBe('queued');
+    let r = await t.call('POST', `/admin/calls/${c.id}/call-now`, { headers: h });
+    expect(r.status).toBe(409);
+    expect(r.json.error).toContain('All calls are paused');
+    let st = (await t.call('GET', '/admin/calls/settings', { headers: h })).json.status;
+    expect(st.blockers.join(' ')).toContain('All calls are paused');
+
+    await settings({ enabled: true });
+    t.deps.calls = null;
+    r = await t.call('POST', `/admin/calls/${c.id}/call-now`, { headers: h });
+    expect(r.status).toBe(409);
+    expect(r.json.error).toContain('SARVAM_API_KEY, SARVAM_ORG_ID, SARVAM_WORKSPACE_ID, SARVAM_CART_CAMPAIGN_ID, SARVAM_FEEDBACK_CAMPAIGN_ID are missing in Vercel');
+
+    t.deps.calls = provider;
+    at('2026-11-10T20:00:00+05:30');
+    r = await t.call('POST', `/admin/calls/${c.id}/call-now`, { headers: h });
+    expect(r.status).toBe(409);
+    expect(r.json.error).toContain('outside the calling hours');
+    expect((await allCalls())[0].status).toBe('queued');
+    expect(provider.started).toHaveLength(0);
+    // Back in hours: it goes.
+    at('2026-11-11T10:30:00+05:30');
+    r = await t.call('POST', `/admin/calls/${c.id}/call-now`, { headers: h });
+    expect(r.json.call.status).toBe('dialling');
+    st = (await t.call('GET', '/admin/calls/settings', { headers: h })).json.status;
+    expect(st.blockers).toEqual([]);
+  });
+
+  it('"Call now" dials the call clicked, not an older one waiting', async () => {
+    const h = await admin();
+    await lead();
+    await lead({ clientKey: 'browser-key-0000000002', phone: '98765 00000', email: 'b@example.com' });
+    at('2026-11-10T12:05:00+05:30');
+    await runCalls(t.deps); // both queued (paused)
+    await settings({ enabled: true });
+    const all = await allCalls();
+    const newer = all.find((x) => x.phone === '+919876500000')!;
+    await t.db.update(calls).set({ dueAt: new Date('2026-11-10T11:00:00+05:30') }).where(eq(calls.id, all.find((x) => x.id !== newer.id)!.id));
+    const r = await t.call('POST', `/admin/calls/${newer.id}/call-now`, { headers: h });
+    expect(r.status).toBe(200);
+    expect(r.json.call).toMatchObject({ id: newer.id, status: 'dialling' });
+    expect(provider.started.map((x) => x.phone)).toEqual(['+919876500000']);
+  });
 });
 
 vi.setConfig({ testTimeout: 60_000 });
