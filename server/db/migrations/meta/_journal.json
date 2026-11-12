@@ -169,6 +169,13 @@
       "when": 1794378240780,
       "tag": "0023_cod_confirmation",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794487700281,
+      "tag": "0024_mcp_connector",
+      "breakpoints": true
     }
   ]
 }

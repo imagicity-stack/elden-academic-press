@@ -64,6 +64,15 @@ A self-hosted store and back office, run as one Vercel function (`api/index.ts`)
 
 **Security:** card and UPI details never touch this server — Razorpay handles them; payments are confirmed by verified signatures and webhooks. All store tables are locked against Supabase's public API keys; the server alone talks to the database. Staff sign in with an authenticator app. E-book files are private and served through short-lived links with a download limit. Checkout and lookups are rate-limited, and every admin change is logged.
 
+## Claude connector (MCP)
+
+The store is also a remote MCP server at **`https://eldenap.in/api/mcp`**, so Claude can work in it: read sales, orders, products, customers, enquiries, competitions and where buyers came from (to compare with the Meta Ads connector), and add or edit books, prices, stock and discount codes, mark orders packed/shipped, and add notes.
+
+- **Connect:** in Claude, Settings → Connectors → Add custom connector → paste the address above → Connect. Claude registers itself and opens `/admin/connect`, where a signed-in team member (with two-step verification) chooses **Allow**. The steps are also under Admin → Settings → Claude, with the list of connections and a Disconnect button.
+- **Sign-in:** OAuth 2.1 with PKCE and dynamic client registration (`server/routes/mcp/oauth.ts`, `server/services/mcpAuth.ts`). Codes only go back to Claude's own callback (claude.ai / claude.com) or localhost. Access tokens last an hour, refresh tokens 30 days and change on each use; only their hashes are stored.
+- **Permissions:** a connection acts as the person who approved it, with their current role, and stops when they lose admin access. Tools (`server/routes/mcp/tools.ts`) call the admin's own endpoints, so the same validation and role checks apply, and changes show in the activity log as "you (via Claude)". Refunds, cancellations, deleting, settings, staff and bulk newsletter/WhatsApp sends are deliberately not tools.
+- **Database:** needs `docs/supabase-updates/0024_mcp_connector.sql` (the setup check at `/api/health` says so until it's run).
+
 ## Pages
 
 | Route | Page |
@@ -92,7 +101,7 @@ Sample, school/bulk, teacher-access and distributor enquiry forms (`src/componen
   - `data.ts` — cover palettes, level names, distributors, and the sample catalogue used for local/demo data
   - `interior.css` — the website’s design (fonts in `fonts.ts`, animation helpers in `components/motion.tsx`); `styles.css` holds the base shared with the coming-soon page
 - `api/index.ts` — Vercel entry for the API
-- `server/` — the API (Hono)
+- `server/` — the API (Hono); `routes/mcp/` is the Claude connector
   - `app.ts` — routes, error handling; `env.ts`, `deps.ts` — configuration and services
   - `db/` — schema (Drizzle), SQL migrations, seed data
   - `routes/` — store, orders, webhooks, enquiries/cron, `admin/`

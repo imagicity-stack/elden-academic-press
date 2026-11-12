@@ -9,7 +9,21 @@ import { HttpError } from '../../lib/http.js';
 import { getSettings } from '../../services/catalog.js';
 
 export type Role = 'owner' | 'manager' | 'staff';
-export interface AdminSession { userId: string; email: string; name: string; role: Role; aal: string; mfaRequired: boolean }
+export interface AdminSession {
+  userId: string; email: string; name: string; role: Role; aal: string; mfaRequired: boolean;
+  /** Set when an app acts for this person (the Claude connector): shown in the activity log. */
+  via?: string;
+}
+
+/**
+ * Requests the Claude connector (server/routes/mcp) makes inside this server for a team member it has
+ * already signed in, with that person's role. Only code here can add a request: nothing from outside can.
+ */
+const onBehalf = new WeakMap<Request, AdminSession>();
+export function actAs(req: Request, session: AdminSession): Request {
+  onBehalf.set(req, session);
+  return req;
+}
 
 export const DEV_ADMIN_TOKEN = 'dev-owner';
 const DEV_ADMIN: AdminSession = { userId: '00000000-0000-0000-0000-000000000000', email: 'dev@localhost', name: 'Developer', role: 'owner', aal: 'aal2', mfaRequired: false };
@@ -32,6 +46,8 @@ export async function verifySupabaseToken(token: string, supabaseUrl: string, le
 }
 
 async function authenticate(c: Context<AppEnv>): Promise<AdminSession> {
+  const viaApp = onBehalf.get(c.req.raw);
+  if (viaApp) return viaApp;
   const { env, db } = c.get('deps');
   const token = /^Bearer (.+)$/.exec(c.req.header('authorization') ?? '')?.[1];
   if (!token) throw new HttpError(401, 'Please sign in.', 'unauthenticated');
@@ -88,8 +104,11 @@ export function requireRole(min: Role): MiddlewareHandler<AppEnv> {
 
 export const can = (role: Role, min: Role) => RANK[role] >= RANK[min];
 
+/** Who did it, for the activity log: "name@x (via Claude)" when the connector acted. */
+export const actorOf = (s: AdminSession) => (s.via ? `${s.email} (via ${s.via})` : s.email);
+
 export async function audit(c: Context<AppEnv>, action: string, entity: string, entityId?: string | number | null, details?: unknown) {
   await c.get('deps').db.insert(auditLog).values({
-    actor: c.get('admin').email, action, entity, entityId: entityId == null ? null : String(entityId), details: details ?? null, ip: c.get('ip'),
+    actor: actorOf(c.get('admin')), action, entity, entityId: entityId == null ? null : String(entityId), details: details ?? null, ip: c.get('ip'),
   });
 }
