@@ -19,7 +19,7 @@ import { randomBytes } from 'node:crypto';
 import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
 import type { Q } from '../db/client.js';
-import { callSettings, calls, checkoutLeads, doNotCall, orderItems, orders, products, productVariants, subscribers } from '../db/schema.js';
+import { callSettings, calls, checkoutLeads, doNotCall, orderItems, orders, products, productVariants, rateLimits, subscribers } from '../db/schema.js';
 import { HttpError } from '../lib/http.js';
 import { esc, inr } from '../lib/format.js';
 import { addressList, sendSafely } from '../lib/mail.js';
@@ -321,12 +321,48 @@ export function callBlockers(deps: Deps, s: CallSettings, kind?: CallKind): stri
   return out;
 }
 
-/** The cron job: queue what's due, then dial what's due. */
+/** A call still "Calling" this long after it started is looked up at the provider (its webhook may not have arrived). */
+const LOOKUP_AFTER_MS = 3 * 60_000;
+
+/**
+ * Ask the provider for the result of one call (when its call-end webhook didn't arrive) and record
+ * it. Returns the call as recorded, or null while the provider has no final result yet.
+ */
+export async function fetchCallResult(deps: Deps, c: Call): Promise<Call | null> {
+  if (!deps.calls?.lookup) return null;
+  const payload = await deps.calls.lookup({ callId: c.id, kind: c.kind, since: c.startedAt ?? c.createdAt });
+  return payload ? recordCallResult(deps, payload) : null;
+}
+
+/** Calls still "Calling" a few minutes after they started: fetch their results from the provider. */
+export async function syncCallResults(deps: Deps, limit = 10) {
+  if (!deps.calls?.lookup) return 0;
+  const { db, now } = deps;
+  const stuck = await db.select().from(calls).where(and(eq(calls.status, 'dialling'), sql`${calls.createdBy} <> ${INBOUND}`,
+    lte(calls.startedAt, new Date(now().getTime() - LOOKUP_AFTER_MS)))).orderBy(asc(calls.startedAt)).limit(limit);
+  let n = 0;
+  for (const c of stuck) {
+    try { if (await fetchCallResult(deps, c)) n++; } catch (e) { console.error('[calls] lookup', c.id, (e as Error).message); }
+  }
+  return n;
+}
+
+/** When the 10-minute job last ran, kept as a row in rate_limits (no table of its own needed). */
+const CRON_HEARTBEAT = 'heartbeat:cron-calls';
+export async function lastCronRun(db: Q): Promise<Date | null> {
+  const [row] = await db.select({ at: rateLimits.windowStart }).from(rateLimits).where(eq(rateLimits.key, CRON_HEARTBEAT));
+  return row?.at ?? null;
+}
+
+/** The cron job: fetch results that didn't arrive, queue what's due, then dial what's due. */
 export async function runCalls(deps: Deps) {
+  await deps.db.insert(rateLimits).values({ key: CRON_HEARTBEAT, windowStart: deps.now(), count: 0 })
+    .onConflictDoUpdate({ target: rateLimits.key, set: { windowStart: deps.now() } });
   const s = await getCallSettings(deps.db);
+  const fetched = await syncCallResults(deps);
   const queued = await planCalls(deps, s);
   const dialled = await dialDueCalls(deps, s);
-  return { queued, dialled, connected: Boolean(deps.calls), inHours: inCallingHours(s, deps.now()), enabled: s.enabled };
+  return { fetched, queued, dialled, connected: Boolean(deps.calls), inHours: inCallingHours(s, deps.now()), enabled: s.enabled };
 }
 
 /* ---------------- Results ---------------- */
@@ -344,6 +380,9 @@ export async function recordCallResult(deps: Deps, raw: unknown): Promise<Call |
   if (!c && r.direction === 'inbound') c = await inboundCall(deps, r);
   if (!c) return null;
   const s = await getCallSettings(db);
+  // A "not answered" report for a call that isn't being dialled any more was already counted
+  // (the same result from the webhook and from a lookup).
+  if (r.status !== 'answered' && c.status !== 'dialling' && c.createdBy !== INBOUND) return c;
   if (r.status !== 'answered') {
     await notAnswered(deps, s, c, r.status === 'failed' ? 'The call failed' : 'No answer');
     const [after] = await db.select().from(calls).where(eq(calls.id, c.id));

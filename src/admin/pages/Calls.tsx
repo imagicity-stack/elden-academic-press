@@ -15,7 +15,7 @@ const OUTCOME_TONE: Record<string, Tone> = { enquiry: 'blue', will_order: 'green
 interface SettingsData {
   settings: CallSettings;
   books: { id: string; title: string }[];
-  status: { connected: boolean; provider: string | null; webhook: boolean; inHours: boolean; nextWindow: string; blockers: string[]; overdue: { count: number; oldest: string | null } };
+  status: { connected: boolean; provider: string | null; webhook: boolean; inHours: boolean; nextWindow: string; blockers: string[]; overdue: { count: number; oldest: string | null }; lastCronRun: string | null };
 }
 interface Row {
   id: string; kind: CallKind; status: CallStatus; phone: string; name: string; outcome: string; dueAt: string; attempts: number;
@@ -70,6 +70,17 @@ function Overview() {
             <span className="ad-muted">Queued calls wait and are dialled once this is fixed.</span></div>
         </div>
       )}
+      {(() => {
+        const ago = st.lastCronRun ? (Date.now() - new Date(st.lastCronRun).getTime()) / 60_000 : null;
+        const ok = ago !== null && ago < 25;
+        return (
+          <div className={`ad-alert ${ok ? 'ad-alert--green' : 'ad-alert--red'}`}>
+            <div><b>Scheduled job (every 10 minutes): {ago === null ? 'has never run' : `last ran ${when(st.lastCronRun)}`}.</b>{' '}
+              {ok ? 'It queues checkouts once their delay has passed and dials the queue.'
+                : 'Without it, left checkouts never reach the queue and queued calls are never dialled (only “Call now” works). In Vercel → the project → Settings → Cron Jobs, check /api/cron/calls is listed and enabled, and that CRON_SECRET is set for Production, then redeploy.'}</div>
+          </div>
+        );
+      })()}
       {st.overdue.count > 0 && st.blockers.every((b) => b.startsWith('It’s outside')) && st.inHours && (
         <div className="ad-alert ad-alert--amber">
           <div><b>{st.overdue.count} queued call{st.overdue.count === 1 ? ' is' : 's are'} overdue</b> (the oldest was due {when(st.overdue.oldest)}). The job that dials them every 10 minutes isn’t running: in Vercel → the project → Settings → Cron Jobs, check that <code>/api/cron/calls</code> runs, and that CRON_SECRET is set (then redeploy). “Call now” still works meanwhile.</div>
@@ -259,6 +270,7 @@ function CallDetail({ id }: { id: string }) {
         {c.issueOpen && <Btn kind="primary" busy={busy === 'resolve'} onClick={() => act('resolve', 'Marked as handled')}>Problem handled</Btn>}
         {['queued', 'no_answer', 'failed', 'skipped'].includes(c.status) && <Btn busy={busy === 'call-now'} onClick={() => act('call-now', 'Dialling now')}>Call now</Btn>}
         {c.status === 'queued' && <Btn busy={busy === 'skip'} onClick={() => act('skip', 'Skipped')}>Skip</Btn>}
+        {c.status === 'dialling' && c.createdBy !== INBOUND && <Btn busy={busy === 'fetch-result'} onClick={() => act('fetch-result', 'Result fetched from Sarvam')}>Fetch result from Sarvam</Btn>}
       </>}>
       <div className="ad-grid-2 ad-grid-2--wide">
         <div className="ad-stack">
@@ -313,17 +325,20 @@ function CallDetail({ id }: { id: string }) {
 /* ---------------- Checkouts, do-not-call ---------------- */
 
 function Leads() {
-  const { data, error, reload } = useAdmin<{ items: { id: string; name: string; phone: string; email: string; total: number; items: { title: string }[]; paid: boolean; updatedAt: string }[] }>('/calls/leads');
+  const { data, error, reload } = useAdmin<{ delayMinutes: number; items: { id: string; name: string; phone: string; email: string; total: number; items: { title: string }[]; paid: boolean; consent: boolean; updatedAt: string; call: { status: CallStatus; dueAt: string } | null; callDueAt: string | null }[] }>('/calls/leads');
   if (error) return <ErrorBox error={error} retry={reload} />;
   if (!data) return <Loading />;
   return (
     <Card flush title="Checkouts saved in the last 30 days" actions={<span className="ad-muted">Only people who ticked “you may call or WhatsApp me” are saved.</span>}>
       {!data.items.length ? <Empty title="No saved checkouts yet." /> : (
         <div className="ad-table-wrap"><table className="ad-table">
-          <thead><tr><th>Last change</th><th>Customer</th><th>Books</th><th>Total</th><th>Paid?</th></tr></thead>
+          <thead><tr><th>Last change</th><th>Customer</th><th>Books</th><th>Total</th><th>Paid?</th><th>Cart call</th></tr></thead>
           <tbody>{data.items.map((l) => (
             <tr key={l.id}><td>{when(l.updatedAt)}</td><td><b>{l.name || '—'}</b><br /><span className="ad-muted">{l.phone} · {l.email || 'no email'}</span></td>
-              <td>{l.items.map((i) => i.title).join(', ')}</td><td className="ad-num">{inr(l.total)}</td><td>{l.paid ? <Badge tone="green">Paid</Badge> : <Badge tone="amber">Not yet</Badge>}</td></tr>
+              <td>{l.items.map((i) => i.title).join(', ')}</td><td className="ad-num">{inr(l.total)}</td><td>{l.paid ? <Badge tone="green">Paid</Badge> : <Badge tone="amber">Not yet</Badge>}</td>
+                <td>{l.call ? <><Status s={l.call.status} />{l.call.status === 'queued' && <><br /><small className="ad-muted">{when(l.call.dueAt)}</small></>}</>
+                  : l.callDueAt ? <small className="ad-muted">Joins the queue {when(l.callDueAt)}</small>
+                    : <span className="ad-muted">{l.paid ? 'Not needed' : l.consent ? '—' : 'Unticked the box'}</span>}</td></tr>
           ))}</tbody>
         </table></div>
       )}

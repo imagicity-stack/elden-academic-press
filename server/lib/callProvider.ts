@@ -23,6 +23,11 @@ export interface CallProvider {
   start(call: StartCall): Promise<{ providerCallId: string }>;
   /** Check the connection without calling anyone: is the key accepted, and is each campaign there and running? */
   check?(): Promise<ConnectionCheck[]>;
+  /**
+   * Ask the provider how a call went, for when its call-end webhook didn't arrive. Returns a
+   * payload in the webhook's shape (for recordCallResult), or null while there's no final result yet.
+   */
+  lookup?(call: { callId: string; kind: CallKind; since: Date }): Promise<Record<string, unknown> | null>;
 }
 
 export interface ConnectionCheck { kind: 'cart' | 'feedback'; campaignId: string; ok: boolean; status?: string; agentVersion?: number | null; endsAt?: string; error?: string }
@@ -140,8 +145,52 @@ export function sarvamCalls(cfg: SarvamCallsConfig): CallProvider {
   const base = (cfg.baseUrl ?? 'https://apps.sarvam.ai').replace(/\/+$/, '');
   const e = encodeURIComponent;
   const campaignUrl = (id: string) => `${base}/api/scheduling/v1/orgs/${e(cfg.orgId)}/workspaces/${e(cfg.workspaceId)}/campaigns/${e(id)}`;
+  async function getJson(url: string) {
+    const res = await fetchImpl(url, { headers: { 'X-API-Key': cfg.apiKey, Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+    const text = await res.text();
+    if (!res.ok) throw new Error(sarvamError(res.status, text));
+    try { return obj(JSON.parse(text)); } catch { return {}; }
+  }
+  // The agent behind each campaign (the analytics API is per agent), asked once.
+  const agentOf = new Map<string, string>();
+  async function agentId(campaignId: string) {
+    if (!agentOf.has(campaignId)) agentOf.set(campaignId, str((await getJson(campaignUrl(campaignId))).app_id));
+    return agentOf.get(campaignId)!;
+  }
+  const iso = (d: Date) => d.toISOString().replace(/\.\d+Z$/, '+00:00');
   return {
     name: 'sarvam',
+    async lookup({ callId, kind, since }) {
+      const campaignId = kind === 'feedback' ? cfg.feedbackCampaignId : cfg.cartCampaignId;
+      const app = await agentId(campaignId);
+      if (!app) return null;
+      const analytics = `${base}/api/analytics/v1/${e(cfg.orgId)}/${e(cfg.workspaceId)}/${e(app)}`;
+      const range = { start_datetime: iso(new Date(since.getTime() - 15 * 60_000)), end_datetime: iso(new Date()) };
+      const byId = (field: string, value: string) => JSON.stringify([{ field, operator: 'equals', value }]);
+      const attempts = await getJson(`${analytics}/attempts?${new URLSearchParams({ ...range, sort_by: 'attempted_at', sort_order: 'desc', limit: '5', filter_conditions: byId('user_identifier', callId) })}`);
+      const a = obj((Array.isArray(attempts.items) ? attempts.items : [])[0]);
+      if (!Object.keys(a).length) return null; // not dialled yet
+      const status = str(a.connectivity_status).toLowerCase();
+      const base_ = { user_identifier: callId, campaign_id: a.campaign_id ?? campaignId, cohort_id: a.cohort_id, attempt_id: a.attempt_id, connectivity_status: status, failure_reason: a.failure_reason, source: 'sarvam_lookup' };
+      if (status !== 'connected') {
+        // Not connected: final unless Sarvam itself will try again.
+        return status && str(a.next_action_status).toLowerCase() !== 'retry' ? base_ : null;
+      }
+      const interactionId = str(a.interaction_id);
+      if (!interactionId) return null;
+      const list = await getJson(`${analytics}/interactions?${new URLSearchParams({ ...range, limit: '1', include_transcript: 'true', filter_conditions: byId('interaction_id', interactionId) })}`);
+      const it = obj((Array.isArray(list.items) ? list.items : [])[0]);
+      // The conversation's record can lag the attempt by a minute: try again on the next run.
+      if (!Object.keys(it).length) return null;
+      const turns = (Array.isArray(it.translate_transcript) && it.translate_transcript.length ? it.translate_transcript : Array.isArray(it.original_transcript) ? it.original_transcript : []) as unknown[];
+      return {
+        ...base_, interaction_id: interactionId,
+        duration: it.duration_in_seconds ?? a.duration_in_seconds,
+        recording_url: it.audio_url ?? a.audio_url ?? '',
+        final_agent_variables: obj(it.agent_variables),
+        interaction_transcript: turns.map((t) => { const x = obj(t); return { role: str(x.role), en_text: str(pick(x, 'content', 'text', 'en_text')) }; }),
+      };
+    },
     async check() {
       const out: ConnectionCheck[] = [];
       for (const [kind, campaignId] of [['cart', cfg.cartCampaignId], ['feedback', cfg.feedbackCampaignId]] as const) {

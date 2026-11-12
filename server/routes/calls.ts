@@ -10,7 +10,7 @@ import { safeEqual } from '../lib/crypto.js';
 import { body, HttpError, notFound, rateLimit } from '../lib/http.js';
 import { audit } from './admin/auth.js';
 import {
-  addDoNotCall, callBlockers, callStats, dialDueCalls, getCallSettings, leadByToken, recordCallResult, saveCallSettings, saveLead,
+  addDoNotCall, callBlockers, callStats, dialDueCalls, fetchCallResult, lastCronRun, getCallSettings, leadByToken, recordCallResult, saveCallSettings, saveLead,
 } from '../services/calls.js';
 import { callableNumber, DAYS, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime, type CallSettings } from '../../src/shared/calls.js';
 
@@ -88,6 +88,8 @@ adminCalls.get('/settings', async (c) => {
       blockers: callBlockers(deps, s),
       // Queued calls whose time has passed by more than two cron runs: the scheduled job isn't dialling them.
       overdue: await overdueCalls(deps),
+      // The 10-minute job: it queues due checkouts and dials the queue (Call now doesn't need it).
+      lastCronRun: await lastCronRun(deps.db),
     },
   });
 });
@@ -171,12 +173,21 @@ async function overdueCalls(deps: Deps) {
 }
 
 /** Call now (dial it in the next run, hours permitting), skip it, or mark an issue handled. */
-adminCalls.post('/:id{[0-9a-f-]{36}}/:action{call-now|skip|resolve}', async (c) => {
+adminCalls.post('/:id{[0-9a-f-]{36}}/:action{call-now|skip|resolve|fetch-result}', async (c) => {
   const deps = c.get('deps');
   const id = c.req.param('id');
   const action = c.req.param('action');
   const [call] = await deps.db.select().from(calls).where(eq(calls.id, id));
   if (!call) throw notFound('Call not found');
+  if (action === 'fetch-result') {
+    if (call.status !== 'dialling') throw new HttpError(409, 'This call already has its result.');
+    if (!deps.calls?.lookup) throw new HttpError(409, 'Outgoing calls aren’t connected to Sarvam.');
+    let after;
+    try { after = await fetchCallResult(deps, call); } catch (e) { throw new HttpError(502, `Sarvam: ${(e as Error).message}`); }
+    if (!after) throw new HttpError(409, 'Sarvam has no final result for this call yet (it may still be ringing or in progress). Try again in a minute.');
+    await audit(c, 'calls.fetch_result', 'call', id);
+    return c.json({ call: after });
+  }
   if (action === 'resolve') {
     await deps.db.update(calls).set({ issueOpen: false, updatedAt: deps.now() }).where(eq(calls.id, id));
   } else if (action === 'skip') {
@@ -232,5 +243,15 @@ adminCalls.get('/leads', async (c) => {
     items: checkoutLeads.items, paid: isNotNull(checkoutLeads.orderId), consent: checkoutLeads.consent, updatedAt: checkoutLeads.updatedAt,
   }).from(checkoutLeads).where(gte(checkoutLeads.updatedAt, new Date(c.get('deps').now().getTime() - 30 * 86_400_000)))
     .orderBy(desc(checkoutLeads.updatedAt)).limit(200);
-  return c.json({ items: rows });
+  // When each one's cart call is due: the delay after they left checkout, then the calling hours.
+  const s = await getCallSettings(db);
+  const leadCalls = rows.length ? await db.select({ leadId: calls.leadId, status: calls.status, dueAt: calls.dueAt }).from(calls)
+    .where(and(eq(calls.kind, 'cart'), inArray(calls.leadId, rows.map((r) => r.id)))) : [];
+  return c.json({
+    items: rows.map((r) => {
+      const call = leadCalls.find((x) => x.leadId === r.id);
+      return { ...r, call: call ? { status: call.status, dueAt: call.dueAt } : null, callDueAt: !call && !r.paid && r.consent && r.updatedAt.getTime() > c.get('deps').now().getTime() - 3 * 86_400_000 ? nextCallingTime(s, new Date(r.updatedAt.getTime() + s.cart.delayMinutes * 60_000)) : null };
+    }),
+    delayMinutes: s.cart.delayMinutes,
+  });
 });
