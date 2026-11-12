@@ -36,6 +36,8 @@ store.get('/config', async (c) => {
     cod: s.codEnabled ? codRule(s) : null,
     // The privacy policy states it (students are sent to Meta only from this age).
     metaMinAge: env.META_MIN_AGE,
+    // Cookie banner off (Admin → Settings): every visitor counts as having accepted cookies.
+    consentAuto: s.consentAuto,
   });
 });
 

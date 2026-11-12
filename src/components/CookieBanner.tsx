@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { getConsent, setConsent, type Consent } from '../consent';
+import { applySiteConsentMode, getConsent, setConsent, type Consent } from '../consent';
+import { useStoreConfig } from '../store/catalog';
 import { bannerShown, choiceMade } from '../consentTrack';
 import { EASE } from './motion';
 
 /** The cookie choice: shown until the visitor picks, and again from "Cookie settings" in the footer. */
 export function CookieBanner() {
-  const [open, setOpen] = useState(() => getConsent() === null);
+  const cfg = useStoreConfig();
+  // Shown only once the site's cookie switch is known (Admin → Settings), so it never flashes
+  // for a visitor who won't be asked.
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!cfg) return;
+    applySiteConsentMode(Boolean(cfg.consentAuto));
+    setOpen((o) => o || getConsent() === null);
+  }, [cfg]);
   useEffect(() => {
     const show = () => setOpen(true);
     window.addEventListener('elden:consent-open', show);
@@ -34,3 +43,4 @@ export function CookieBanner() {
     </AnimatePresence>
   );
 }
+

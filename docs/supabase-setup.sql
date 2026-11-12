@@ -1345,6 +1345,10 @@ BEGIN
   END LOOP;
 END $$;
 
+-- ===== 0025_consent_auto =====
+
+ALTER TABLE "settings" ADD COLUMN "consent_auto" boolean DEFAULT false NOT NULL;
+
 -- ===== Migration history =====
 
 CREATE SCHEMA IF NOT EXISTS drizzle;
@@ -1374,7 +1378,8 @@ INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('21f9eeca6ca245d29d4e2616dc430e674f7bc63a000af91ecf857aae1faebe42', 1794369510754),
   ('f510d7b0f559376bc9957abf13a7be917f3cabe1cc97dc9ef6239b884754cd6c', 1794370335880),
   ('aecd14d3fb0df0a1d5c94f442d53256dec814ffbd2492209fb178030c1f08b6e', 1794378240780),
-  ('a5a11198bd91b96dd84d82414248ccd37a16460ef2ff7ee6f0a7bdcb5d52969f', 1794487700281);
+  ('a5a11198bd91b96dd84d82414248ccd37a16460ef2ff7ee6f0a7bdcb5d52969f', 1794487700281),
+  ('350965713f05cd88fde387173f789d414f15e3a7872b2da9174f41be0d6e62ac', 1794493282937);
 
 -- ===== Standard categories (rename or add more in the admin) =====
 

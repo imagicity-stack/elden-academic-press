@@ -57,12 +57,14 @@ export function useResources(): { items: Resource[]; status: 'loading' | 'ready'
 }
 
 let configPromise: Promise<StoreConfig> | undefined;
+/** The store's public settings, fetched once per page. */
+export function loadStoreConfig(): Promise<StoreConfig> {
+  configPromise ??= api<StoreConfig>('/config').catch((e) => { configPromise = undefined; throw e; });
+  return configPromise;
+}
 export function useStoreConfig(): StoreConfig | null {
   const [cfg, setCfg] = useState<StoreConfig | null>(null);
-  useEffect(() => {
-    configPromise ??= api<StoreConfig>('/config').catch((e) => { configPromise = undefined; throw e; });
-    configPromise.then(setCfg, () => {});
-  }, []);
+  useEffect(() => { loadStoreConfig().then(setCfg, () => {}); }, []);
   return cfg;
 }
 

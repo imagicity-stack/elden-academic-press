@@ -376,6 +376,12 @@ export const settings = pgTable('settings', {
   codAdvanceBps: integer('cod_advance_bps').notNull().default(1000),
   /** Percentage only: the smallest advance (paise; 0 = none). */
   codAdvanceMin: integer('cod_advance_min').notNull().default(0),
+  /**
+   * Cookie banner off: every visitor is treated as having accepted cookies (analytics and ads),
+   * except staff, the admin, and students under Meta's minimum age; a visitor can still turn
+   * them off from "Cookie settings". Meant until India's DPDP consent rules apply (May 2027).
+   */
+  consentAuto: boolean('consent_auto').notNull().default(false),
   updatedAt: timestamps.updatedAt,
 }, (t) => [check('settings_singleton', sql`${t.id} = 1`)]);
 

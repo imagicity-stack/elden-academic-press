@@ -10,13 +10,46 @@ declare global {
 
 const KEY = 'elden-consent';
 
-export function getConsent(): Consent | null {
+/**
+ * The site's cookie switch (Admin → Settings → Cookies & tracking), as confirmed by /api/config
+ * on this page (never remembered from an earlier visit, so switching it off takes effect before
+ * anything is sent). While on, a visitor who hasn't chosen counts as "all"; anyone who chose
+ * "Only essential" keeps their choice.
+ */
+let siteAuto: boolean | null = null;
+export const isAutoConsent = () => siteAuto === true;
+
+/** The visitor's own choice, if they made one. */
+function chosen(): Consent | null {
   try {
     const v = localStorage.getItem(KEY);
     return v === 'all' || v === 'essential' ? v : null;
   } catch {
     return null;
   }
+}
+
+/** What applies: their choice, else "all" while the cookie banner is switched off, else none yet. */
+export function getConsent(): Consent | null {
+  return chosen() ?? (siteAuto ? 'all' : null);
+}
+
+/** Has this visitor chosen themselves (as opposed to the banner being switched off)? */
+export const hasChosen = () => chosen() !== null;
+
+/**
+ * The site's switch, once /api/config answers. Switched off, the banner turns every visitor who
+ * hasn't chosen into "accepted": the cookie the server reads, Google's consent and the Meta Pixel
+ * follow at once (and the page they're on is counted).
+ */
+export function applySiteConsentMode(auto: boolean) {
+  if (siteAuto === auto) return;
+  siteAuto = auto;
+  if (hasChosen()) return; // their own choice stands either way
+  writeCookie(getConsent());
+  if (!auto) return;
+  window.gtag?.('consent', 'update', { ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted', analytics_storage: 'granted' });
+  window.dispatchEvent(new CustomEvent<Consent>('elden:consent', { detail: 'all' }));
 }
 
 // Meta test mode: open any page with ?meta-test and, for this tab, a status panel shows

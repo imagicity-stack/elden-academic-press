@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "consent_auto" boolean DEFAULT false NOT NULL;

@@ -119,8 +119,15 @@ function relay(name: Relayed, eventId: string, custom: Record<string, unknown>) 
  * Track an event. Relayed events are also sent through our server; for the others
  * (Purchase, Lead, sign-up) the server sends its own copy, so pass its event id.
  */
+let lastPageView = '';
 export function track(name: EventName, custom: Record<string, unknown> = {}, opts: { eventId?: string } = {}) {
   if (!active()) return;
+  // One PageView per page: the route change and the consent arriving can both ask for the same one.
+  if (name === 'PageView') {
+    const here = location.pathname + location.search;
+    if (here === lastPageView) return;
+    lastPageView = here;
+  }
   load();
   const eventId = opts.eventId ?? newEventId();
   window.fbq!('track', name, custom, { eventID: eventId });
@@ -173,6 +180,7 @@ window.addEventListener('elden:consent', (e) => {
     if (loaded) window.fbq?.('consent', 'grant'); // changed their mind back
     track('PageView'); // the page they're on
   } else if (loaded) {
+    lastPageView = '';
     window.fbq?.('consent', 'revoke');
     forgetUser();
     for (const name of ['_fbp', '_fbc']) {
