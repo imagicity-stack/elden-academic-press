@@ -285,6 +285,10 @@
 .ad-gate__card .ad-form { margin-top: 6px; }
 .ad-gate__card .ad-btn--primary { min-height: 44px; }
 .ad-gate__card .ad-link { align-self: center; font-weight: 500; color: var(--ad-muted); }
+.ad-connect { max-width: 460px; }
+.ad-connect__list { margin: 0; padding-left: 18px; color: #45423C; font-size: 13.5px; display: grid; gap: 4px; }
+.ad-steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.ad-steps code { word-break: break-all; }
 .ad-qr { width: 180px; height: 180px; align-self: center; background: #fff; padding: 8px; border-radius: 8px; border: 1px solid var(--ad-line); }
 
 /* Narrow screens */

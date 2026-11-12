@@ -23,6 +23,8 @@ import { store } from './routes/store.js';
 import { productFeedXml } from './routes/feeds.js';
 import { sitemapXml } from './routes/sitemap.js';
 import { webhooks } from './routes/webhooks.js';
+import { authorizationServer, oauth, origin, protectedResource } from './routes/mcp/oauth.js';
+import { mcpServer } from './routes/mcp/server.js';
 import { tagCatalog } from './lib/cdn.js';
 import { connectionLost, healthCheck, pgCode, type Health } from './services/health.js';
 
@@ -73,6 +75,15 @@ export function createApp(getDeps: () => Promise<Deps>) {
     await tagCatalog();
     return c.body(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' });
   });
+
+  // Discovery for the Claude connector (vercel.json rewrites /.well-known/oauth-* here): where to sign in.
+  const discovery = { 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' };
+  for (const p of ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/*']) {
+    root.get(p, (c) => c.json(protectedResource(origin(c)), 200, discovery));
+  }
+  for (const p of ['/.well-known/oauth-authorization-server', '/.well-known/oauth-authorization-server/*', '/.well-known/openid-configuration']) {
+    root.get(p, (c) => c.json(authorizationServer(origin(c)), 200, discovery));
+  }
 
   // Before the middleware below, so it can report settings that stop the rest from starting.
   let health: { at: number; result: Promise<Health> } | undefined;
@@ -125,6 +136,9 @@ export function createApp(getDeps: () => Promise<Deps>) {
   app.route('/orders', customerOrders);
   app.route('/webhooks', webhooks);
   app.route('/admin', admin);
+  // The Claude connector: its sign-in, and the MCP server, whose tools call the admin routes above as the signed-in team member.
+  app.route('/mcp/oauth', oauth);
+  app.route('/mcp', mcpServer(async (req) => app.fetch(req)));
   app.route('/account', account);
   app.route('/competitions', teams);
   app.route('/competitions', competitions);

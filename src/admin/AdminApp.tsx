@@ -28,6 +28,7 @@ const WhatsAppAdmin = lazy(() => import('./pages/WhatsApp'));
 const Audience = lazy(() => import('./pages/Audience'));
 const CookieConsent = lazy(() => import('./pages/CookieConsent'));
 const CompetitionsAdmin = lazy(() => import('./pages/Competitions'));
+const ConnectClaude = lazy(() => import('./pages/ConnectClaude'));
 
 export interface Me { userId: string; email: string; name: string; role: 'owner' | 'manager' | 'staff'; aal: string; mfaRequired: boolean; mfaSatisfied: boolean }
 interface Counts { toFulfil: number; attention: number; newEnquiries: number }
@@ -88,7 +89,9 @@ export default function AdminApp() {
           <Btn onClick={() => { setGate({ state: 'checking' }); check(); }}>Try again</Btn>
         </GateCard>
       )}
-      {gate.state === 'ready' && <Shell me={gate.me} />}
+      {gate.state === 'ready' && (window.location.pathname === '/admin/connect'
+        ? <Suspense fallback={<div className="ad-gate"><Loading /></div>}><ConnectClaude me={gate.me} /></Suspense>
+        : <Shell me={gate.me} />)}
     </ToastProvider>
   );
 }
