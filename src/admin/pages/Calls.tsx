@@ -15,7 +15,7 @@ const OUTCOME_TONE: Record<string, Tone> = { enquiry: 'blue', will_order: 'green
 interface SettingsData {
   settings: CallSettings;
   books: { id: string; title: string }[];
-  status: { connected: boolean; provider: string | null; webhook: boolean; inHours: boolean; nextWindow: string };
+  status: { connected: boolean; provider: string | null; webhook: boolean; inHours: boolean; nextWindow: string; blockers: string[]; overdue: { count: number; oldest: string | null } };
 }
 interface Row {
   id: string; kind: CallKind; status: CallStatus; phone: string; name: string; outcome: string; dueAt: string; attempts: number;
@@ -63,6 +63,18 @@ function Overview() {
   const st = cfg.data.status;
   return (
     <div className="ad-stack">
+      {st.blockers.length > 0 && (
+        <div className="ad-alert ad-alert--red">
+          <div><b>Calls can’t go out right now:</b>
+            <ul style={{ margin: '6px 0', paddingLeft: 18 }}>{st.blockers.map((b) => <li key={b}>{b}</li>)}</ul>
+            <span className="ad-muted">Queued calls wait and are dialled once this is fixed.</span></div>
+        </div>
+      )}
+      {st.overdue.count > 0 && st.blockers.every((b) => b.startsWith('It’s outside')) && st.inHours && (
+        <div className="ad-alert ad-alert--amber">
+          <div><b>{st.overdue.count} queued call{st.overdue.count === 1 ? ' is' : 's are'} overdue</b> (the oldest was due {when(st.overdue.oldest)}). The job that dials them every 10 minutes isn’t running: in Vercel → the project → Settings → Cron Jobs, check that <code>/api/cron/calls</code> runs, and that CRON_SECRET is set (then redeploy). “Call now” still works meanwhile.</div>
+        </div>
+      )}
       {!st.connected && (
         <div className="ad-warn">
           <b>Outgoing calls aren't connected yet.</b> Customers who ring our numbers already reach the agents{st.webhook ? ' and show up here' : ''}. Checkouts are being saved and our calls queued, but the website can't place them until the Sarvam calling connection is added (Settings tab has the details).
@@ -174,7 +186,7 @@ function CallList({ queue = false }: { queue?: boolean }) {
   const { data, error, reload } = useAdmin<{ items: Row[]; total: number }>(`/calls?${q}`);
   const { busy, run } = useAction();
   const set = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); n.delete('page'); setSp(n); };
-  const act = (id: string, action: 'call-now' | 'skip') => run(id, () => adminApi(`/calls/${id}/${action}`, { method: 'POST' }), action === 'skip' ? 'Skipped' : 'Queued to call now').then((r) => r && reload());
+  const act = (id: string, action: 'call-now' | 'skip') => run(id, () => adminApi(`/calls/${id}/${action}`, { method: 'POST' }), action === 'skip' ? 'Skipped' : 'Dialling now').then((r) => r && reload());
   return (
     <Card flush>
       <div className="ad-toolbar ad-pad">
@@ -245,7 +257,7 @@ function CallDetail({ id }: { id: string }) {
       actions={<>
         <Link className="ad-btn ad-btn--ghost" to={`/admin/whatsapp?phone=${encodeURIComponent(c.phone)}`}>WhatsApp chat</Link>
         {c.issueOpen && <Btn kind="primary" busy={busy === 'resolve'} onClick={() => act('resolve', 'Marked as handled')}>Problem handled</Btn>}
-        {['queued', 'no_answer', 'failed', 'skipped'].includes(c.status) && <Btn busy={busy === 'call-now'} onClick={() => act('call-now', 'Queued to call now')}>Call now</Btn>}
+        {['queued', 'no_answer', 'failed', 'skipped'].includes(c.status) && <Btn busy={busy === 'call-now'} onClick={() => act('call-now', 'Dialling now')}>Call now</Btn>}
         {c.status === 'queued' && <Btn busy={busy === 'skip'} onClick={() => act('skip', 'Skipped')}>Skip</Btn>}
       </>}>
       <div className="ad-grid-2 ad-grid-2--wide">

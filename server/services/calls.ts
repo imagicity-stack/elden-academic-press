@@ -25,7 +25,7 @@ import { esc, inr } from '../lib/format.js';
 import { addressList, sendSafely } from '../lib/mail.js';
 import { callResultFrom, type CallResult } from '../lib/callProvider.js';
 import {
-  callableNumber, CONFIRMED_BY_CALL, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime, INBOUND, OUTCOME_LABEL, type CallKind, type CallSettings,
+  CALL_KINDS, callableNumber, CONFIRMED_BY_CALL, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime, INBOUND, OUTCOME_LABEL, type CallKind, type CallSettings,
 } from '../../src/shared/calls.js';
 import { getSettings } from './catalog.js';
 import { button, layout, p, section, sendCodConfirmationAlert, type CodAlertDetails } from './emails.js';
@@ -238,7 +238,8 @@ export async function planCalls(deps: Deps, s: CallSettings) {
 /** A call handed to the provider with no result for this long is counted as not answered. */
 const STALE_MS = 60 * 60_000;
 
-export async function dialDueCalls(deps: Deps, s: CallSettings, limit = 10) {
+/** Dial the calls that are due (oldest first), or just the one `only` names ("Call now"). */
+export async function dialDueCalls(deps: Deps, s: CallSettings, limit = 10, only?: string) {
   const { db, now } = deps;
   const t = now();
   // Calls that never reported back.
@@ -248,7 +249,7 @@ export async function dialDueCalls(deps: Deps, s: CallSettings, limit = 10) {
   if (!s.enabled || !deps.calls || !inCallingHours(s, t)) return 0;
   const kinds = (['cart', 'cod_confirm', 'feedback'] as CallKind[]).filter((k) => s[k].enabled);
   if (!kinds.length) return 0;
-  const due = await db.select().from(calls).where(and(eq(calls.status, 'queued'), lte(calls.dueAt, t), inArray(calls.kind, kinds)))
+  const due = await db.select().from(calls).where(and(eq(calls.status, 'queued'), lte(calls.dueAt, t), inArray(calls.kind, kinds), only ? eq(calls.id, only) : undefined))
     .orderBy(asc(calls.dueAt)).limit(limit);
   let dialled = 0;
   for (const c of due) {
@@ -293,6 +294,30 @@ async function notAnswered(deps: Deps, s: CallSettings, c: Call, note: string, f
     await codNotConfirmed(deps, c.orderId, 'unreachable', { kind: 'unreachable', note: `${c.attempts} ${c.attempts === 1 ? 'try' : 'tries'}: ${note}`, callId: c.id })
       .catch((e) => console.error('[calls] COD unreachable', (e as Error).message));
   }
+}
+
+const SARVAM_VARS = ['SARVAM_API_KEY', 'SARVAM_ORG_ID', 'SARVAM_WORKSPACE_ID', 'SARVAM_CART_CAMPAIGN_ID', 'SARVAM_FEEDBACK_CAMPAIGN_ID'] as const;
+const istTime = (d: Date) => d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+
+/**
+ * Why calls aren't going out right now, in words (empty when nothing is stopping them). With a
+ * kind, only what stops that kind. Shown on Calls → Overview and when "Call now" can't dial.
+ */
+export function callBlockers(deps: Deps, s: CallSettings, kind?: CallKind): string[] {
+  const out: string[] = [];
+  if (!s.enabled) out.push('All calls are paused: switch on “All calls” at the top of Calls → Overview.');
+  const label = (k: CallKind) => CALL_KINDS.find((x) => x.key === k)?.label ?? k;
+  for (const k of kind ? [kind] : (['cart', 'cod_confirm', 'feedback'] as CallKind[])) {
+    if (!s[k].enabled) out.push(`${label(k)} calls are switched off in Calls → Overview.`);
+  }
+  if (!deps.calls) {
+    const missing = SARVAM_VARS.filter((v) => !deps.env[v]);
+    out.push(`Outgoing calls aren’t connected to Sarvam: ${missing.length ? `${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} missing in Vercel (Production)` : 'the Sarvam settings in Vercel are incomplete'}. Add ${missing.length === 1 ? 'it' : 'them'}, then redeploy.`);
+  }
+  const t = deps.now();
+  if (!inCallingHours(s, t)) out.push(`It’s outside the calling hours (${s.hours.start}–${s.hours.end}, ${s.hours.days.join(', ')}, India time). Calls go out from ${istTime(nextCallingTime(s, t))}.`);
+  if (!deps.env.CRON_SECRET) out.push('CRON_SECRET isn’t set in Vercel, so the 10-minute job that dials queued calls is refused: only “Call now” dials. Set it (a long random string) and redeploy.');
+  return out;
 }
 
 /** The cron job: queue what's due, then dial what's due. */
@@ -572,8 +597,9 @@ export async function recallCodConfirmation(deps: Deps, orderId: string, actor: 
     await queueCodConfirmation(deps, { ...o, codConfirmation: 'pending' }, { ...s, cod_confirm: { ...s.cod_confirm, enabled: true, delayMinutes: 0 } });
   }
   await logEvent(db, o.id, 'note', 'The agent will call again to confirm the order', actor);
-  // Straight away when it can go out now.
-  await dialDueCalls(deps, s, 1).catch((e) => console.error('[calls] dial', (e as Error).message));
+  // Straight away when it can go out now (this call, not an older one in the queue).
+  const [queued] = await db.select({ id: calls.id }).from(calls).where(and(eq(calls.orderId, o.id), eq(calls.kind, 'cod_confirm')));
+  if (queued) await dialDueCalls(deps, s, 1, queued.id).catch((e) => console.error('[calls] dial', (e as Error).message));
   const [after] = await db.select().from(calls).where(and(eq(calls.orderId, o.id), eq(calls.kind, 'cod_confirm')));
   return after;
 }

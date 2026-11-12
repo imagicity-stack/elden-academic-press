@@ -1,15 +1,16 @@
 // Calls: the public side (saving a checkout someone is filling in, the "finish your order" link,
 // the provider's call-end webhook) and Admin → Calls. The rules are in services/calls.ts.
 import { Hono } from 'hono';
-import { and, count, desc, eq, gte, ilike, inArray, isNotNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gte, ilike, inArray, isNotNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../app.js';
+import type { Deps } from '../deps.js';
 import { calls, checkoutLeads, doNotCall, orders, products } from '../db/schema.js';
 import { safeEqual } from '../lib/crypto.js';
 import { body, HttpError, notFound, rateLimit } from '../lib/http.js';
 import { audit } from './admin/auth.js';
 import {
-  addDoNotCall, callStats, dialDueCalls, getCallSettings, leadByToken, recordCallResult, saveCallSettings, saveLead,
+  addDoNotCall, callBlockers, callStats, dialDueCalls, getCallSettings, leadByToken, recordCallResult, saveCallSettings, saveLead,
 } from '../services/calls.js';
 import { callableNumber, DAYS, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime, type CallSettings } from '../../src/shared/calls.js';
 
@@ -84,6 +85,9 @@ adminCalls.get('/settings', async (c) => {
     status: {
       connected: Boolean(deps.calls), provider: deps.calls?.name ?? null, webhook: Boolean(deps.env.CALLS_WEBHOOK_SECRET),
       inHours: inCallingHours(s, deps.now()), nextWindow: nextCallingTime(s, deps.now()),
+      blockers: callBlockers(deps, s),
+      // Queued calls whose time has passed by more than two cron runs: the scheduled job isn't dialling them.
+      overdue: await overdueCalls(deps),
     },
   });
 });
@@ -146,6 +150,13 @@ adminCalls.get('/:id{[0-9a-f-]{36}}', async (c) => {
   return c.json({ call, lead: lead ? { email: lead.email, items: lead.items, total: lead.total, orderId: lead.orderId, createdAt: lead.createdAt } : null, order: order ?? null, history, doNotCall: Boolean(dnc) });
 });
 
+/** Queued calls more than 25 minutes past their time (the scheduled job runs every 10). */
+async function overdueCalls(deps: Deps) {
+  const [r] = await deps.db.select({ n: count(), oldest: sql<string | null>`min(${calls.dueAt})` }).from(calls)
+    .where(and(eq(calls.status, 'queued'), lte(calls.dueAt, new Date(deps.now().getTime() - 25 * 60_000))));
+  return { count: r?.n ?? 0, oldest: r?.oldest ?? null };
+}
+
 /** Call now (dial it in the next run, hours permitting), skip it, or mark an issue handled. */
 adminCalls.post('/:id{[0-9a-f-]{36}}/:action{call-now|skip|resolve}', async (c) => {
   const deps = c.get('deps');
@@ -161,8 +172,15 @@ adminCalls.post('/:id{[0-9a-f-]{36}}/:action{call-now|skip|resolve}', async (c) 
   } else {
     if (!['queued', 'no_answer', 'failed', 'skipped'].includes(call.status)) throw new HttpError(409, 'This call has already been made.');
     await deps.db.update(calls).set({ status: 'queued', dueAt: deps.now(), note: `Queued by ${c.get('admin').email}`, updatedAt: deps.now() }).where(eq(calls.id, id));
-    // Straight away when it can go out now.
-    await dialDueCalls(deps, await getCallSettings(deps.db), 1);
+    // Straight away when it can go out now; if it can't, say why (it stays queued for when it can).
+    const s = await getCallSettings(deps.db);
+    const blockers = callBlockers(deps, s, call.kind).filter((b) => !b.startsWith('CRON_SECRET'));
+    await audit(c, `calls.${action}`, 'call', id);
+    if (blockers.length) throw new HttpError(409, `Not dialled: ${blockers.join(' ')}`);
+    await dialDueCalls(deps, s, 1, id);
+    const [after] = await deps.db.select().from(calls).where(eq(calls.id, id));
+    if (after.status === 'queued') throw new HttpError(502, `Not dialled: ${after.note || 'the call could not be started'}`);
+    return c.json({ call: after });
   }
   await audit(c, `calls.${action}`, 'call', id);
   const [after] = await deps.db.select().from(calls).where(eq(calls.id, id));
