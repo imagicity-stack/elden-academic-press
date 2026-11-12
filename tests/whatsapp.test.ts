@@ -34,6 +34,14 @@ describe('the Cloud API client', () => {
     });
   });
 
+  it('names the Messaging account (where the templates are) on every send, so Meta never picks another one', async () => {
+    const f = reply(200, { messaging_product: 'whatsapp', messages: [{ id: 'wamid.X' }] });
+    const wa = whatsappHttp({ token: 'tok', phoneNumberId: '1433754003159144', messagingAccountId: '1164579669585316', fetch: f });
+    await wa.sendTemplate('+919876543210', 'elden_order_confirmed', 'en', ['Asha'], 'order/1');
+    await wa.sendText('+919876543210', 'hi');
+    expect(f.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).messaging_account_id)).toEqual(['1164579669585316', '1164579669585316']);
+  });
+
   it("throws Meta's own message", async () => {
     const f = reply(400, { error: { message: 'Template name does not exist in the translation', code: 132001, error_data: { details: 'template name (x) does not exist in en' } } });
     await expect(whatsappHttp({ token: 't', phoneNumberId: '1', fetch: f }).sendText('+919876543210', 'hi'))
