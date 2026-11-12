@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { adminUsers, auditLog, teamMembers } from '../server/db/schema.js';
 import { pdfPageCount } from '../server/lib/fileCheck.js';
 import { findCompetition } from '../src/shared/competitions.js';
-import { ageOn, checkTeam, emptyMember, type MemberInput, type TeamInput } from '../src/shared/teams.js';
+import { ageOn, checkTeam, emptyMember, teamMissing, type MemberInput, type TeamInput } from '../src/shared/teams.js';
 import { setup, supabaseToken } from './helpers.js';
 
 let t: Awaited<ReturnType<typeof setup>>;
@@ -70,11 +70,21 @@ describe('team rules', () => {
     expect(e([{ fullName: 'Ann', dob: '2009-01-01', roles: ['writer'] }, { fullName: 'Ben', dob: '2008-01-01', roles: ['artist'], email: 'b@x.in' }]))
       .toContain('Members under 18 and members aged 18 or above can’t be on the same team.');
     expect(e([{ fullName: 'Ann', dob: '2012-01-01', roles: ['writer', 'artist'] }])).toContain('A team has 2 to 4 members.');
-    expect(e([{ fullName: 'Ann', dob: '2012-01-01', roles: ['writer'] }, { fullName: 'Ben', dob: '2012-01-01', roles: ['letterer'] }])).toContain('Every team needs a Artist.');
+    expect(e([{ fullName: 'Ann', dob: '2012-01-01', roles: ['writer'] }, { fullName: 'Ben', dob: '2012-01-01', roles: ['letterer'] }])).toContain('Every team needs an Artist.');
     expect(e([{ fullName: 'Ann', dob: '2019-01-01', roles: ['writer'] }, { fullName: 'Ben', dob: '2012-01-01', roles: ['artist'] }])[0]).toMatch(/Team captain must be 8 to 24 years old on 6 November 2026 \(they’ll be 7\)/);
     expect(e([{ fullName: 'Ann', dob: '2012-01-01', roles: ['writer'], guardianConsent: false }, { fullName: 'Ben', dob: '2012-01-01', roles: ['artist'] }])).toContain('Team captain: confirm the parent or guardian agrees.');
-    expect(e([{ fullName: 'Ann', dob: '2012-01-01', roles: ['writer'], instagram: '' }, { fullName: 'Ben', dob: '2016-01-01', roles: ['artist'], instagram: '' }]))
-      .toEqual(['Team captain: add their Instagram username (needed from age 13).']);
+    // The Instagram username and the ID document can be added later (before approval): not required, checked when given.
+    expect(e([{ fullName: 'Ann', dob: '2012-01-01', roles: ['writer'], instagram: '' }, { fullName: 'Ben', dob: '2016-01-01', roles: ['artist'], instagram: '' }])).toEqual([]);
+    expect(e([{ fullName: 'Ann', dob: '2012-01-01', roles: ['writer'], instagram: 'not a handle!' }, { fullName: 'Ben', dob: '2016-01-01', roles: ['artist'] }]))
+      .toEqual(['Team captain: the Instagram username isn’t valid.']);
+    expect(e([{ fullName: 'Ann', dob: '2012-01-01', roles: ['writer'], idDocType: '', idDocKey: '' }, { fullName: 'Ben', dob: '2016-01-01', roles: ['artist'], idDocType: '', idDocKey: '' }])).toEqual([]);
+    expect(e([{ fullName: 'Ann', dob: '2012-01-01', roles: ['writer'], idDocType: '', idDocKey: 'k' }, { fullName: 'Ben', dob: '2016-01-01', roles: ['artist'] }]))
+      .toEqual(['Team captain: choose the type of ID document.']);
+    // Each error is also given by its field, for the form to show it there.
+    const c = checkTeam(cfg, base([{ fullName: '', dob: '2012-01-01', roles: [] }, { fullName: 'Ben', dob: '2016-01-01', roles: ['artist', 'writer'], email: 'nope' }]));
+    expect(c.fields).toMatchObject({ 'members.0.fullName': 'Team captain: add their full name.', 'members.0.roles': 'Team captain: choose at least one role.', 'members.1.email': 'Member 2: the email address isn’t valid.' });
+    expect(teamMissing(cfg, [{ fullName: 'Ann', dob: '2012-01-01', instagram: '', idDocKey: null }, { fullName: 'Ben', dob: '2016-01-01', instagram: '', idDocKey: 'k' }]))
+      .toEqual([{ member: 'Ann', what: 'id' }, { member: 'Ann', what: 'instagram' }]);
     expect(e([{ fullName: 'Ann', dob: '2004-01-01', roles: ['writer'] }, { fullName: 'Ben', dob: '2005-01-01', roles: ['artist'], email: 'b@x.in' }]))
       .toEqual(['Team captain: add an email address or phone number.']);
     // "Other" institutions: members name their own (they may differ).
@@ -135,6 +145,35 @@ describe('DoomsDay Diaries registration', () => {
     // Somebody else sees nothing.
     expect((await t.call('GET', `/competitions/${SLUG}/team`, { headers: await as(OTHER) })).json.applications).toEqual([]);
     expect((await t.call('GET', '/account', { headers: h })).json.teams).toMatchObject([{ teamName: 'The Ink Avengers', status: 'pending', code: 'DD-0001' }]);
+  });
+
+  it('accepts a team without ID documents or Instagram usernames yet; the admin sees what is missing; they can be added by changing it', async () => {
+    const h = await signedIn(TEACHER);
+    const body: TeamInput = {
+      teamName: 'Late Inkers', institutionType: 'school', institutionName: 'DAV Public School', city: 'Ranchi', state: '20', acceptRules: true, confirmTrue: true,
+      members: [
+        member({ fullName: 'Riya Sharma', dob: '2013-05-04', roles: ['writer'], idDocType: '', idDocKey: '', instagram: '' }),
+        member({ fullName: 'Aman Gupta', dob: '2012-12-01', roles: ['artist'], idDocType: 'school_id', idDocKey: '', instagram: '' }),
+      ],
+    };
+    const r = await register(h, body);
+    expect(r.status).toBe(201);
+    const admin = await as(OWNER);
+    const list = (await t.call('GET', `/admin/competitions/${SLUG}/teams`, { headers: admin })).json.items;
+    expect(list[0].missing).toEqual([
+      { member: 'Riya Sharma', what: 'id' }, { member: 'Riya Sharma', what: 'instagram' },
+      { member: 'Aman Gupta', what: 'id' }, { member: 'Aman Gupta', what: 'instagram' },
+    ]);
+    const detail = (await t.call('GET', `/admin/competitions/${SLUG}/teams/${r.json.application.id}`, { headers: admin })).json;
+    expect(detail.members.map((m: { idDoc: boolean; idDocType: string }) => [m.idDoc, m.idDocType])).toEqual([[false, ''], [false, '']]);
+    // Added later by changing the application.
+    const key = await uploadId(h);
+    const put = await t.call('PUT', `/competitions/${SLUG}/team/${r.json.application.id}`, { headers: h, body: {
+      ...body, members: [{ ...body.members[0], idDocType: 'school_id', idDocKey: key, instagram: 'riya.draws' }, body.members[1]],
+    } });
+    expect(put.status).toBe(200);
+    const after = (await t.call('GET', `/admin/competitions/${SLUG}/teams`, { headers: admin })).json.items[0].missing;
+    expect(after).toEqual([{ member: 'Aman Gupta', what: 'id' }, { member: 'Aman Gupta', what: 'instagram' }]);
   });
 
   it('refuses an ID upload that isn’t the registrant’s own, and the same person on two teams', async () => {

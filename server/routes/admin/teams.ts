@@ -12,7 +12,7 @@ import { toCsv } from '../../lib/csv.js';
 import { body, HttpError, notFound } from '../../lib/http.js';
 import { stateName } from '../../lib/states.js';
 import { istDateTime } from '../../../src/shared/competitions.js';
-import { ageOn, RESULT_TEXT, STATUS_TEXT } from '../../../src/shared/teams.js';
+import { ageOn, RESULT_TEXT, STATUS_TEXT, teamMissing } from '../../../src/shared/teams.js';
 import {
   allRecipients, code, datesOf, KIT_ATTACH_MAX, kitFileName, loadApplication, mediaUrl, membersOf, noticeReaches, sendNoticeEmail, sendTeamEmail, settingsFor, teamCompetition,
   REGISTERED_STATUSES, type TeamComp, type TeamSettings,
@@ -109,6 +109,8 @@ adminTeams.get('/:slug/teams', async (c) => {
       id: r.id, code: code(comp, r), teamName: r.teamName, institution: r.institutionName, institutionType: instLabel(comp, r.institutionType),
       city: r.city, state: stateName(r.state), category: groupLabel(comp, r.category), status: r.status, statusText: STATUS_TEXT[r.status] ?? r.status,
       result: r.result, members: (mem.get(r.id) ?? []).map((m) => m.fullName), createdAt: r.createdAt, email: r.email, files: files.get(r.id) ?? {},
+      // Not given yet: ID documents and Instagram usernames (asked for before approving).
+      missing: teamMissing(comp.team, mem.get(r.id) ?? []),
     })),
   });
 });
@@ -138,6 +140,7 @@ adminTeams.get(`/:slug/teams/:id{${ID}}`, async (c) => {
     files: x.files.map((f) => ({ id: f.id, kind: f.kind, name: f.originalName, size: f.sizeBytes, pages: f.pages, uploadedAt: f.uploadedAt, uploadedBy: f.uploadedBy, replacedAt: f.replacedAt, available: Boolean(f.storageKey) })),
     notices: notices.filter((n) => !n.audience.public && noticeReaches(n.audience, app)).map((n) => ({ title: n.title, createdAt: n.createdAt })),
     history: history.map((h) => ({ at: h.createdAt, actor: h.actor, action: h.action, details: h.details })),
+    missing: teamMissing(comp.team, x.members),
   });
 });
 
