@@ -485,6 +485,10 @@ a.ad-stat:hover { border-color: var(--ad-navy); }
 .ad-dl dt { color: var(--ad-muted); }
 .ad-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .ad-transcript { white-space: pre-wrap; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 14px 18px; max-height: 420px; overflow: auto; }
+.ad-conn { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 12px; }
+.ad-conn li { display: grid; gap: 3px; min-width: 0; }
+.ad-conn li > span { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.ad-conn code { overflow-wrap: anywhere; }
 
 /* WhatsApp inbox */
 .ad-mb { margin-bottom: 14px; }
