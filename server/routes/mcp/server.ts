@@ -9,19 +9,20 @@ import { HttpError, rateLimit } from '../../lib/http.js';
 import { sessionFor } from '../../services/mcpAuth.js';
 import { actAs } from '../admin/auth.js';
 import { challenge, origin } from './oauth.js';
-import { PROMPTS, ToolError, toolsFor, type Tool, type ToolCtx } from './tools.js';
+import { toolsFor } from './catalog.js';
+import { PROMPTS, ToolError, type Tool, type ToolCtx } from './tools.js';
 
 const VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 const LATEST = '2025-06-18';
 const MAX_TEXT = 120_000;
 
-export const INSTRUCTIONS = `Elden Academic Press (eldenap.in) store back office: sales, orders, products, stock, customers, discount codes, enquiries and competitions.
+export const INSTRUCTIONS = `Elden Academic Press (eldenap.in) back office: sales, orders, products, stock, customers, discount codes, enquiries, WhatsApp, AI voice-agent calls and abandoned checkouts, newsletter and audience, popups, cookie consent, Study Hub, competitions, settings.
 - Money fields ending in _inr are rupees (GST included). Dates are India time (IST).
 - Sales are paid orders minus refunds. Every order is credited to where the buyer came from (channel: meta_ads, google_ads, search, meta_social, social, email, referral, campaign, direct, unknown) and to its UTM campaign, content (ad) and term (ad set).
 - To compare with Meta ads: call get_sales_by_source for the same dates, get spend, purchases and purchase value per campaign from the Meta Ads connector, match Meta campaign names to utm_campaign, and show real ROAS (website revenue ÷ spend) and cost per real order next to what Meta reports.
 - New products are drafts. Covers and e-book files are uploaded in the admin (eldenap.in/admin → Products) before publishing with set_product_status.
-- You act with the role of the team member who connected you, and every change is in the activity log. Refunds, cancellations, deleting, store settings, staff and bulk newsletter/WhatsApp sends are only in the admin: point the user there.
-- Confirm with the user before changes that reach customers (marking orders shipped emails them).`;
+- You act with the role of the team member who connected you, and every change is in the activity log. Refunds, cancellations, competition decisions (approve/reject teams, results, notices), store settings, staff and deleting can be read but only changed in the admin: point the user there.
+- Anything that reaches customers (WhatsApp replies and new-book sends, newsletter sends and schedules, calls, marking orders shipped) needs the user's explicit OK on the exact content first; send a test before any bulk send.`;
 
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, any> };
 const ok = (id: Rpc['id'], result: unknown) => ({ jsonrpc: '2.0', id, result });

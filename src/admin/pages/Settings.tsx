@@ -279,7 +279,7 @@ function ClaudeConnections() {
     <>
       <Card title="Connect Claude to the store">
         <div className="ad-form">
-          <p>Claude can read sales, orders, products and where buyers came from, compare them with your Meta ads, and add or edit books, stock and discount codes for you. It acts as the person who connects it, with their role, and every change shows in the activity log as “via Claude”. It can’t refund or cancel orders, delete anything, or change settings or staff.</p>
+          <p>Claude can read the whole admin (sales, orders, customers, WhatsApp, calls, newsletter, audience, competitions and more), compare sales with your Meta ads, add or edit books, stock and discount codes, and, with your OK each time, reply on WhatsApp, send campaigns and start calls. It acts as the person who connects it, with their role, and every change shows in the activity log as “via Claude”. It can’t refund or cancel orders, decide on competition teams, delete anything, or change settings or staff.</p>
           <ol className="ad-steps">
             <li>In Claude, open <b>Settings → Connectors</b> and choose <b>Add custom connector</b>.</li>
             <li>Name it <b>Elden Academic Press</b> and paste this address: <code className="ad-code">{url}</code> <Btn size="sm" onClick={() => navigator.clipboard?.writeText(url)}>Copy</Btn></li>

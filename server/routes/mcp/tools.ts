@@ -1,7 +1,8 @@
-// What Claude can do in the store. Each tool goes through the admin's own endpoints (server/routes/admin),
-// as the team member who connected Claude, so the same checks, roles and activity log apply.
-// Not here on purpose: refunds, cancellations, deleting, store settings, staff, and bulk
-// newsletter / WhatsApp sends. Those stay in the admin.
+// What Claude can do with the store: sales, orders, products, stock, customers, discount codes,
+// enquiries, competitions (more of the back office is in ./backend.ts; ./catalog.ts lists them all).
+// Each tool goes through the admin's own endpoints (server/routes/admin), as the team member who
+// connected Claude, so the same checks, roles and activity log apply.
+// Never tools, on purpose: refunds, cancellations, competition decisions, settings, staff, deleting.
 import { and, desc, gte, inArray, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Deps } from '../../deps.js';
@@ -36,12 +37,12 @@ export interface Tool {
 /* ---------------- Helpers ---------------- */
 
 /** Paise to rupees. */
-const inr = (p: number | null | undefined) => (p == null ? null : Math.round(p) / 100);
+export const inr = (p: number | null | undefined) => (p == null ? null : Math.round(p) / 100);
 /** Rupees to paise. */
-const paise = (r: number) => Math.round(r * 100);
+export const paise = (r: number) => Math.round(r * 100);
 
 /** Turns the named money fields (paise) into `<name>_inr` (rupees), at any depth. */
-function money<T>(value: T, keys: readonly string[]): T {
+export function money<T>(value: T, keys: readonly string[]): T {
   if (Array.isArray(value)) return value.map((v) => money(v, keys)) as T;
   if (!value || typeof value !== 'object') return value;
   const out: Record<string, unknown> = {};
@@ -51,17 +52,17 @@ function money<T>(value: T, keys: readonly string[]): T {
   }
   return out as T;
 }
-const ORDER_MONEY = ['subtotal', 'discount', 'shipping', 'tax', 'total', 'refundedAmount', 'codAmount', 'unitPrice', 'lineTotal', 'taxableValue', 'taxAmount', 'amount', 'totalSpent'] as const;
+export const ORDER_MONEY = ['subtotal', 'discount', 'shipping', 'tax', 'total', 'refundedAmount', 'codAmount', 'unitPrice', 'lineTotal', 'taxableValue', 'taxAmount', 'amount', 'totalSpent'] as const;
 const PRODUCT_MONEY = ['price', 'compareAtPrice'] as const;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const qs = (o: Record<string, string | number | boolean | undefined | null>) => {
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const qs = (o: Record<string, string | number | boolean | undefined | null>) => {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(o)) if (v !== undefined && v !== null && v !== '' && v !== false) p.set(k, String(v));
   const s = p.toString();
   return s ? `?${s}` : '';
 };
-const istNow = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 16).replace('T', ' ');
+export const istNow = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 16).replace('T', ' ');
 
 /** An order by its number (#100123 or 100123) or id. */
 async function orderId(ctx: ToolCtx, ref: string): Promise<string> {
@@ -75,7 +76,7 @@ async function orderId(ctx: ToolCtx, ref: string): Promise<string> {
 }
 
 /** A product by id, slug or exact title. */
-async function productId(ctx: ToolCtx, ref: string): Promise<string> {
+export async function productId(ctx: ToolCtx, ref: string): Promise<string> {
   const r = ref.trim();
   if (UUID.test(r)) return r;
   const term = r.replace(/-/g, ' ');
@@ -212,7 +213,7 @@ const productOut = (d: Detail & { sold?: number; movements?: unknown[] }) => {
 };
 
 const zChannel = z.enum(CHANNELS.map((c) => c.key) as [Channel, ...Channel[]]);
-const zDate = z.iso.date().describe('YYYY-MM-DD, India time');
+export const zDate = z.iso.date().describe('YYYY-MM-DD, India time');
 const zPage = { page: z.number().int().min(1).max(1000).default(1), limit: z.number().int().min(1).max(100).default(25) };
 
 /* ---------------- Tools ---------------- */
@@ -315,7 +316,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'list_orders',
     title: 'List orders',
-    description: 'Orders, newest first. By default only paid orders; view "abandoned" lists checkouts that were never paid.',
+    description: 'Orders, newest first. By default only paid orders; view "abandoned" lists checkouts that were never paid. Refunded orders: payment_status refunded or partially_refunded (get_order shows each refund); cancelled ones have cancelledAt.',
     readOnly: true,
     input: z.object({
       search: z.string().trim().max(100).optional().describe('Order number, name, email, phone or invoice number'),
@@ -336,7 +337,7 @@ export const TOOLS: Tool[] = [
         total: r.total, page: r.page, limit: r.limit,
         orders: r.items.map((o: Record<string, any>) => money({
           id: o.id, number: o.number, createdAt: o.createdAt, name: o.name, email: o.email, phone: o.phone, total: o.total, items: o.items, status: o.status,
-          paymentStatus: o.paymentStatus, fulfillmentStatus: o.fulfillmentStatus, paymentMode: o.paymentMode, codAmount: o.codAmount, needsAttention: o.needsAttention,
+          paymentStatus: o.paymentStatus, fulfillmentStatus: o.fulfillmentStatus, cancelledAt: o.cancelledAt, paymentMode: o.paymentMode, codAmount: o.codAmount, needsAttention: o.needsAttention,
           shipState: o.shipState, source: o.sourceLabel, sourceDetail: o.sourceDetail,
         }, ORDER_MONEY)),
       };
@@ -669,8 +670,6 @@ export const TOOLS: Tool[] = [
   },
 ];
 
-const RANK: Record<Role, number> = { staff: 1, manager: 2, owner: 3 };
-export const toolsFor = (role: Role) => TOOLS.filter((t) => RANK[role] >= RANK[t.role ?? 'staff']);
 
 /* ---------------- Prompts ---------------- */
 
