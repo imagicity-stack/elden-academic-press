@@ -265,3 +265,9 @@
 .acct-comps__status.is-approved { background: #E8F5EC; color: #1F5532; }
 .acct-comps__status.is-changes_requested { background: #FFF0E8; color: #B03A12; }
 .acct-comps__status.is-rejected, .acct-comps__status.is-withdrawn { background: var(--paper); color: var(--muted); }
+/* Team form: errors under their fields, the restored-draft note */
+.dd-field-err { display: block; margin-top: 6px; }
+.dd-wizard [aria-invalid="true"] { border-color: var(--err); box-shadow: 0 0 0 1px var(--err); }
+.dd-errors__lead { margin: 0 0 6px; font-weight: 600; }
+.dd-draft { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: rgba(255, 216, 77, 0.16); font: 400 14px/1.5 var(--f-text); }
+.dd-draft .text-link { font-weight: 600; }

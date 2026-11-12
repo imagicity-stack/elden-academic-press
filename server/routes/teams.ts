@@ -154,7 +154,8 @@ async function checkIds(c: Context<AppEnv>, slug: string, members: TeamInput['me
   const deps = c.get('deps');
   const me = c.get('customer');
   for (const [i, m] of members.entries()) {
-    if (keep.has(m.idDocKey)) continue;
+    // No ID yet: it can be added before the team is approved.
+    if (!m.idDocKey || keep.has(m.idDocKey)) continue;
     const who = i === 0 ? 'Team captain' : `Member ${i + 1}`;
     if (!m.idDocKey.startsWith(idPrefix(slug, me.userId)) || m.idDocKey.includes('..')) throw new HttpError(400, `${who}: upload their ID document again.`, 'bad_id');
     let bytes: Uint8Array;
@@ -198,7 +199,7 @@ function validate(comp: TeamComp, input: TeamInput) {
 
 const memberRows = (appId: string, input: TeamInput, at: Date) => input.members.map((m, i) => ({
   applicationId: appId, position: i, fullName: m.fullName, dob: m.dob, email: m.email, phone: m.phone, institutionName: m.institutionName,
-  roles: m.roles, instagram: m.instagram, idDocType: m.idDocType, idDocKey: m.idDocKey,
+  roles: m.roles, instagram: m.instagram, idDocType: m.idDocKey ? m.idDocType : '', idDocKey: m.idDocKey || null,
   guardianName: m.guardianName, guardianRelation: m.guardianRelation, guardianPhone: m.guardianPhone, guardianEmail: m.guardianEmail,
   guardianConsentAt: m.guardianConsent && m.guardianName ? at : null,
 }));

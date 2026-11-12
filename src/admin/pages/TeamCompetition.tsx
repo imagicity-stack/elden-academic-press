@@ -83,7 +83,15 @@ function Overview({ slug }: { slug: string }) {
 interface Row {
   id: string; code: string; teamName: string; institution: string; institutionType: string; city: string; state: string; category: string;
   status: string; statusText: string; result: string; members: string[]; createdAt: string; email: string; files: Record<string, { pages: number | null; at: string }>;
+  missing?: Missing[];
 }
+interface Missing { member: string; what: 'id' | 'instagram' }
+/** "2 IDs, 1 Instagram" */
+const missingText = (m: Missing[]) => {
+  const ids = m.filter((x) => x.what === 'id').length;
+  const ig = m.filter((x) => x.what === 'instagram').length;
+  return [ids ? `${ids} ID${ids === 1 ? '' : 's'}` : '', ig ? `${ig} Instagram` : ''].filter(Boolean).join(', ');
+};
 interface ListData { items: Row[]; groups: TeamConfig['groups']; institutionTypes: TeamConfig['institutionTypes']; files: { kind: string; label: string }[]; states: { code: string; name: string }[] }
 
 function Applications({ slug, cfg, submissions = false }: { slug: string; cfg: TeamConfig; submissions?: boolean }) {
@@ -142,7 +150,7 @@ function Applications({ slug, cfg, submissions = false }: { slug: string; cfg: T
                   <td><Link to={`/admin/competitions/${slug}/teams/${r.id}`} className="ad-strong" onClick={(e) => e.stopPropagation()}>{r.teamName}</Link><div className="ad-muted">{r.code}{r.result && ` · ${RESULT_TEXT[r.result]}`}</div></td>
                   <td>{r.category}</td>
                   <td><div>{r.institution || r.institutionType}</div><div className="ad-muted">{r.city}, {r.state}</div></td>
-                  <td className="ad-muted">{r.members.join(', ')}</td>
+                  <td className="ad-muted">{r.members.join(', ')}{r.missing && r.missing.length > 0 && <div><Badge tone="amber">Missing: {missingText(r.missing)}</Badge></div>}</td>
                   {submissions ? data.files.map((x) => <td key={x.kind}>{r.files[x.kind] ? <Badge tone="green">✓ {r.files[x.kind].pages ?? '?'} pages</Badge> : <Badge tone="grey">Not yet</Badge>}</td>) : <td><StatusBadge s={r.status} /></td>}
                   <td className="ad-muted">{fmtDate(r.createdAt, true)}</td>
                 </tr>
@@ -168,6 +176,7 @@ interface Detail {
   files: { id: string; kind: string; name: string; size: number; pages: number | null; uploadedAt: string; uploadedBy: string; replacedAt: string | null; available: boolean }[];
   notices: { title: string; createdAt: string }[];
   history: { at: string; actor: string; action: string; details: unknown }[];
+  missing?: Missing[];
 }
 const ACTION: Record<string, string> = {
   'team.approve': 'Approved', 'team.request_changes': 'Changes requested', 'team.reject': 'Rejected', 'team.result': 'Result set', 'team.notes': 'Notes changed', 'team.view_id': 'ID document viewed',
@@ -244,6 +253,12 @@ export function TeamApplication({ slug, id }: { slug: string; id: string }) {
           </Card>
         )}
 
+        {d.missing && d.missing.length > 0 && (
+          <div className="ad-alert ad-alert--amber">
+            <div><b>Not given yet:</b> {d.missing.map((x) => `${x.what === 'id' ? 'ID document' : 'Instagram username'} for ${x.member}`).join('; ')}.
+              {' '}The team can add them by changing the application (possible until it’s approved): ask them before approving.</div>
+          </div>
+        )}
         <Card title={`Members (${d.members.length})`} flush>
           <div className="ad-table-wrap">
             <table className="ad-table">
@@ -251,12 +266,12 @@ export function TeamApplication({ slug, id }: { slug: string; id: string }) {
               <tbody>
                 {d.members.map((m) => (
                   <tr key={m.id}>
-                    <td><span className="ad-strong">{m.fullName}</span>{m.captain && <div className="ad-muted">Captain</div>}{m.institutionName && <div className="ad-muted">{m.institutionName}</div>}{m.instagram && <div className="ad-muted">@{m.instagram}</div>}</td>
+                    <td><span className="ad-strong">{m.fullName}</span>{m.captain && <div className="ad-muted">Captain</div>}{m.institutionName && <div className="ad-muted">{m.institutionName}</div>}{m.instagram ? <div className="ad-muted">@{m.instagram}</div> : d.missing?.some((x) => x.what === 'instagram' && x.member === m.fullName) && <div><Badge tone="amber">No Instagram yet</Badge></div>}</td>
                     <td>{m.dob}<div className="ad-muted">{m.age} on {c.team!.ageOn}</div></td>
                     <td>{m.roles.map(role).join(', ')}</td>
                     <td>{m.email && <div><a href={`mailto:${m.email}`}>{m.email}</a></div>}{m.phone && <div>{m.phone}</div>}</td>
                     <td>{m.guardianName ? <>{m.guardianName} ({m.guardianRelation})<div>{m.guardianPhone}{m.guardianEmail && ` · ${m.guardianEmail}`}</div><div className="ad-muted">{m.guardianConsentAt ? `Consent ${fmtDate(m.guardianConsentAt, true)}` : 'No consent recorded'}</div></> : <span className="ad-muted">Adult</span>}</td>
-                    <td>{m.idDocType}<div>{m.idDoc ? <Btn size="sm" busy={busy === 'id'} onClick={() => openId(m.id)}>View (5 min link)</Btn> : <span className="ad-muted">{m.idDocDeletedAt ? `Deleted ${fmtDate(m.idDocDeletedAt)}` : 'None'}</span>}</div></td>
+                    <td>{m.idDocType}<div>{m.idDoc ? <Btn size="sm" busy={busy === 'id'} onClick={() => openId(m.id)}>View (5 min link)</Btn> : m.idDocDeletedAt ? <span className="ad-muted">Deleted {fmtDate(m.idDocDeletedAt)}</span> : <Badge tone="amber">Not uploaded yet</Badge>}</div></td>
                   </tr>
                 ))}
               </tbody>

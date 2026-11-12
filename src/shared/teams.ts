@@ -72,6 +72,12 @@ const trim = (v: unknown, max = 200) => (typeof v === 'string' ? v.trim().slice(
 
 export interface TeamCheck {
   errors: string[];
+  /**
+   * The same errors, by the field they belong to ("teamName", "members.1.dob"…), so the form can
+   * show each under its field. Errors about the whole team (members missing a required role, mixed
+   * ages, someone listed twice) have no field and are only in `errors`.
+   */
+  fields: Record<string, string>;
   /** The age group from the oldest member (null until the dates of birth allow it). */
   group: TeamGroup | null;
   ages: (number | null)[];
@@ -81,6 +87,9 @@ export interface TeamCheck {
 /** Everything the rules require of a team. `who` names a member in messages ("Member 2"). */
 export function checkTeam(cfg: TeamConfig, raw: TeamInput): TeamCheck {
   const errors: string[] = [];
+  const fields: Record<string, string> = {};
+  /** One error, under its field (the first error of a field is the one shown there). */
+  const add = (msg: string, field?: string) => { errors.push(msg); if (field && !(field in fields)) fields[field] = msg; };
   const inst = cfg.institutionTypes.find((x) => x.key === raw.institutionType);
   const team: TeamInput = {
     teamName: trim(raw.teamName, 60), institutionType: inst?.key ?? '', institutionName: trim(raw.institutionName, 120),
@@ -94,59 +103,75 @@ export function checkTeam(cfg: TeamConfig, raw: TeamInput): TeamCheck {
     })),
   };
 
-  if (team.teamName.length < 2) errors.push('Give your team a name.');
-  else if (/https?:|www\.|@/.test(team.teamName)) errors.push('The team name can’t contain links or handles.');
-  if (!inst) errors.push('Choose whether the team is from a school, a college or another institution.');
-  else if (inst.same && team.institutionName.length < 2) errors.push(`Name the ${inst.label.toLowerCase()} the team represents.`);
-  if (team.city.length < 2) errors.push('Add the team’s city or town.');
-  if (!team.state) errors.push('Choose the team’s state.');
+  if (team.teamName.length < 2) add('Give your team a name.', 'teamName');
+  else if (/https?:|www\.|@/.test(team.teamName)) add('The team name can’t contain links or handles.', 'teamName');
+  if (!inst) add('Choose whether the team is from a school, a college or another institution.', 'institutionType');
+  else if (inst.same && team.institutionName.length < 2) add(`Name the ${inst.label.toLowerCase()} the team represents.`, 'institutionName');
+  if (team.city.length < 2) add('Add the team’s city or town.', 'city');
+  if (!team.state) add('Choose the team’s state.', 'state');
 
   const n = team.members.length;
-  if (n < cfg.minMembers || n > cfg.maxMembers) errors.push(`A team has ${cfg.minMembers} to ${cfg.maxMembers} members.`);
+  if (n < cfg.minMembers || n > cfg.maxMembers) add(`A team has ${cfg.minMembers} to ${cfg.maxMembers} members.`);
 
   const ages = team.members.map((m) => ageOn(m.dob, cfg.ageOn));
   team.members.forEach((m, i) => {
     const who = i === 0 ? 'Team captain' : `Member ${i + 1}`;
+    const f = (k: string) => `members.${i}.${k}`;
     const age = ages[i];
-    if (m.fullName.length < 2) errors.push(`${who}: add their full name.`);
-    if (age === null) errors.push(`${who}: add their date of birth.`);
-    else if (age < cfg.minAge || age > cfg.maxAge) errors.push(`${who} must be ${cfg.minAge} to ${cfg.maxAge} years old on ${dayLabel(cfg.ageOn)} (they’ll be ${age}).`);
-    if (!m.roles.length) errors.push(`${who}: choose at least one role.`);
-    if (m.email && !emailOk(m.email)) errors.push(`${who}: the email address isn’t valid.`);
-    if (m.phone && !mobile(m.phone)) errors.push(`${who}: the phone number must be a 10-digit mobile number.`);
-    if (inst && !inst.same && m.institutionName.length < 2) errors.push(`${who}: add their school, college or institution.`);
-    if (!cfg.idDocs.some((d) => d.key === m.idDocType)) errors.push(`${who}: choose the type of ID document.`);
-    if (!m.idDocKey) errors.push(`${who}: upload their ID document.`);
-    if (age !== null && cfg.instagramFromAge !== null && age >= cfg.instagramFromAge) {
-      if (!m.instagram) errors.push(`${who}: add their Instagram username (needed from age ${cfg.instagramFromAge}).`);
-      else if (!instaOk(m.instagram)) errors.push(`${who}: the Instagram username isn’t valid.`);
+    if (m.fullName.length < 2) add(`${who}: add their full name.`, f('fullName'));
+    if (age === null) add(`${who}: add their date of birth.`, f('dob'));
+    else if (age < cfg.minAge || age > cfg.maxAge) add(`${who} must be ${cfg.minAge} to ${cfg.maxAge} years old on ${dayLabel(cfg.ageOn)} (they’ll be ${age}).`, f('dob'));
+    if (!m.roles.length) add(`${who}: choose at least one role.`, f('roles'));
+    if (m.email && !emailOk(m.email)) add(`${who}: the email address isn’t valid.`, f('email'));
+    if (m.phone && !mobile(m.phone)) add(`${who}: the phone number must be a 10-digit mobile number.`, f('phone'));
+    if (inst && !inst.same && m.institutionName.length < 2) add(`${who}: add their school, college or institution.`, f('institutionName'));
+    // The ID document and the Instagram username can be added later (before the team is approved):
+    // checked only when given.
+    if (m.idDocKey && !cfg.idDocs.some((d) => d.key === m.idDocType)) add(`${who}: choose the type of ID document.`, f('idDocType'));
+    if (age !== null && cfg.instagramFromAge !== null && age >= cfg.instagramFromAge && m.instagram && !instaOk(m.instagram)) {
+      add(`${who}: the Instagram username isn’t valid.`, f('instagram'));
     }
     if (age !== null && age < 18) {
-      if (m.guardianName.length < 2) errors.push(`${who} is under 18: add a parent’s or guardian’s name.`);
-      if (!m.guardianRelation) errors.push(`${who}: say how the parent or guardian is related.`);
-      if (!mobile(m.guardianPhone)) errors.push(`${who}: add the parent’s or guardian’s 10-digit mobile number.`);
-      if (m.guardianEmail && !emailOk(m.guardianEmail)) errors.push(`${who}: the parent’s or guardian’s email isn’t valid.`);
-      if (!m.guardianConsent) errors.push(`${who}: confirm the parent or guardian agrees.`);
-    } else if (age !== null && !m.email && !m.phone) errors.push(`${who}: add an email address or phone number.`);
+      if (m.guardianName.length < 2) add(`${who} is under 18: add a parent’s or guardian’s name.`, f('guardianName'));
+      if (!m.guardianRelation) add(`${who}: say how the parent or guardian is related.`, f('guardianRelation'));
+      if (!mobile(m.guardianPhone)) add(`${who}: add the parent’s or guardian’s 10-digit mobile number.`, f('guardianPhone'));
+      if (m.guardianEmail && !emailOk(m.guardianEmail)) add(`${who}: the parent’s or guardian’s email isn’t valid.`, f('guardianEmail'));
+      if (!m.guardianConsent) add(`${who}: confirm the parent or guardian agrees.`, f('guardianConsent'));
+    } else if (age !== null && !m.email && !m.phone) add(`${who}: add an email address or phone number.`, f('email'));
   });
   const seen = new Set<string>();
   team.members.forEach((m) => {
     const k = `${m.fullName.toLowerCase().replace(/\s+/g, ' ')}|${m.dob}`;
-    if (m.fullName && m.dob && seen.has(k)) errors.push(`${m.fullName} is listed twice.`);
+    if (m.fullName && m.dob && seen.has(k)) add(`${m.fullName} is listed twice.`);
     seen.add(k);
   });
   for (const r of cfg.requiredRoles) {
-    if (n && !team.members.some((m) => m.roles.includes(r))) errors.push(`Every team needs a ${cfg.roles.find((x) => x.key === r)?.label ?? r}.`);
+    if (n && !team.members.some((m) => m.roles.includes(r))) { const label = cfg.roles.find((x) => x.key === r)?.label ?? r; add(`Every team needs ${/^[aeiou]/i.test(label) ? 'an' : 'a'} ${label}.`); }
   }
   const known = ages.filter((a): a is number => a !== null);
   if (cfg.noMixedAdults && known.some((a) => a < 18) && known.some((a) => a >= 18)) {
-    errors.push('Members under 18 and members aged 18 or above can’t be on the same team.');
+    add('Members under 18 and members aged 18 or above can’t be on the same team.');
   }
   const oldest = known.length === n && n ? Math.max(...known) : null;
   const group = oldest !== null ? groupFor(cfg, oldest) : null;
-  if (!team.acceptRules) errors.push('Accept the rules and terms on behalf of every team member.');
-  if (!team.confirmTrue) errors.push('Confirm that the details are true.');
-  return { errors: [...new Set(errors)], group, ages, team };
+  if (!team.acceptRules) add('Accept the rules and terms on behalf of every team member.', 'acceptRules');
+  if (!team.confirmTrue) add('Confirm that the details are true.', 'confirmTrue');
+  return { errors: [...new Set(errors)], fields, group, ages, team };
+}
+
+/**
+ * What a team hasn't given yet that the rules ask for (an ID document; the Instagram username
+ * from the set age): for the organisers to review and ask for before approving.
+ */
+export function teamMissing(cfg: TeamConfig, members: { fullName: string; dob: string; instagram: string; idDocKey: string | null; idDocDeletedAt?: Date | string | null }[]) {
+  const out: { member: string; what: 'id' | 'instagram' }[] = [];
+  members.forEach((m, i) => {
+    const who = m.fullName || (i === 0 ? 'Team captain' : `Member ${i + 1}`);
+    if (!m.idDocKey && !m.idDocDeletedAt) out.push({ member: who, what: 'id' });
+    const age = ageOn(m.dob, cfg.ageOn);
+    if (age !== null && cfg.instagramFromAge !== null && age >= cfg.instagramFromAge && !m.instagram) out.push({ member: who, what: 'instagram' });
+  });
+  return out;
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

@@ -296,6 +296,30 @@ function FileSlot({ c, app, spec, onDone }: { c: TeamComp; app: TeamApp; spec: T
 
 /* ---------------- Registration, in four steps ---------------- */
 
+/**
+ * The form is saved on this device as it's filled in, so a leader can leave to collect a
+ * teammate's details and come back to it. One draft per competition and account (and per
+ * application, when changing one); kept 30 days, removed once sent.
+ */
+interface Draft { team: TeamInput; step: Step; savedAt: number }
+const DRAFT_DAYS = 30;
+const draftKey = (slug: string, email: string, editId?: string) => `elden-team-draft:${slug}:${email.toLowerCase()}${editId ? `:${editId}` : ''}`;
+function readDraft(key: string): Draft | null {
+  try {
+    const d = JSON.parse(localStorage.getItem(key) ?? 'null') as Draft | null;
+    if (!d || !d.team || !Array.isArray(d.team.members) || Date.now() - d.savedAt > DRAFT_DAYS * 86_400_000) return null;
+    return d;
+  } catch { return null; }
+}
+const forgetDraft = (key: string) => { try { localStorage.removeItem(key); } catch { /* ignore */ } };
+const savedTime = (t: number) => new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+
+/** A field's error, shown under it. */
+const FieldErr = ({ msg }: { msg?: string }) => (msg ? <span className="field__error dd-field-err">{msg}</span> : null);
+/** How a form part asks for its field's error (when it should show) and says it was left. */
+type ErrOf = (field: string) => string | undefined;
+type Touch = (field: string) => void;
+
 type Step = 0 | 1 | 2 | 3;
 const STEPS = ['Team', 'Members', 'Parents & guardians', 'Review & send'];
 
@@ -313,7 +337,9 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
   const cfg = c.team;
   const p = data.profile;
   const states = useStoreConfig()?.states ?? [];
-  const [team, setTeam] = useState<TeamInput>(() => {
+  const key = draftKey(c.slug, accountEmail, edit?.id);
+  const [draft] = useState(() => readDraft(key));
+  const fresh = (): TeamInput => {
     if (edit) {
       return {
         teamName: edit.teamName, institutionType: edit.institutionType, institutionName: edit.institutionName, city: edit.city, state: edit.state,
@@ -326,10 +352,35 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
     }
     const inst = p && ['student', 'teacher'].includes(p.type ?? '') ? { institutionType: p.institutionType, institutionName: p.institutionType === 'other' ? '' : p.institutionName } : { institutionType: '', institutionName: '' };
     return { teamName: '', ...inst, city: p?.city ?? '', state: p?.state ?? '', members: [first, emptyMember()], acceptRules: false, confirmTrue: false };
-  });
-  const [step, setStep] = useState<Step>(0);
+  };
+  // A saved draft wins over a fresh form (the ticks on the last step are always asked again).
+  const [team, setTeam] = useState<TeamInput>(() => (draft ? { ...draft.team, members: draft.team.members.map((m) => ({ ...emptyMember(), ...m })), acceptRules: false, confirmTrue: false } : fresh()));
+  // Back where they were: the Team or Members step (later steps are checked again from there).
+  const [step, setStep] = useState<Step>(() => (draft && draft.step >= 1 ? 1 : 0));
+  const [restored, setRestored] = useState<number | null>(draft?.savedAt ?? null);
+  const dirty = useRef(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Save as they type (a moment after the last change).
+  useEffect(() => {
+    if (!dirty.current) return;
+    const t = setTimeout(() => {
+      try {
+        const at = Date.now();
+        localStorage.setItem(key, JSON.stringify({ team: { ...team, acceptRules: false, confirmTrue: false }, step: step === 3 ? 1 : step, savedAt: at } satisfies Draft));
+        setSavedAt(at);
+      } catch { /* storage full or blocked: nothing saved */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [team, step, key]);
+  const startOver = () => {
+    if (!window.confirm('Clear everything typed in this form and start again?')) return;
+    forgetDraft(key); dirty.current = false; setTeam(fresh()); setStep(0); setRestored(null); setSavedAt(null); setTouched(new Set()); setShowErrors(false);
+  };
   useEffect(() => { if (!edit) trackStep(c.slug, 'start'); }, [edit, c.slug]);
   const [showErrors, setShowErrors] = useState(false);
+  // Fields the leader has been in and left: their errors show straight away.
+  const [touched, setTouched] = useState<Set<string>>(() => new Set());
+  const touch: Touch = (f) => setTouched((t) => (t.has(f) ? t : new Set(t).add(f)));
   const [busy, setBusy] = useState(false);
   const [serverErrs, setServerErrs] = useState<string[]>([]);
   const top = useRef<HTMLDivElement>(null);
@@ -338,11 +389,26 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
   const minors = team.members.map((m, i) => ({ m, i, age: ageOn(m.dob, cfg.ageOn) })).filter((x) => x.age !== null && x.age < 18);
   const steps: Step[] = minors.length ? [0, 1, 2, 3] : [0, 1, 3];
   const stepErrors = check.errors.filter((e) => stepOf(e) === step);
+  const fieldMsgs = new Set(Object.values(check.fields));
+  const errOf: ErrOf = (f) => (showErrors || touched.has(f) ? check.fields[f] : undefined);
+  // Errors about the whole team (no single field) are listed at the bottom.
+  // On the last step, everything still wrong is listed (earlier steps' fields aren't on screen), except its own two ticks.
+  const tickMsgs = new Set([check.fields.acceptRules, check.fields.confirmTrue]);
+  const teamErrors = !showErrors ? [] : step === 3 ? check.errors.filter((e) => !tickMsgs.has(e)) : stepErrors.filter((e) => !fieldMsgs.has(e));
+  const fieldErrorCount = showErrors ? stepErrors.filter((e) => fieldMsgs.has(e)).length : 0;
+  // After "Next" with errors, bring the first one into view.
+  useEffect(() => {
+    if (!showErrors) return;
+    const el = top.current?.querySelector('[aria-invalid="true"], .dd-field-err');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) el.focus({ preventScroll: true });
+  }, [showErrors, step]);
   const inst = cfg.institutionTypes.find((x) => x.key === team.institutionType);
-  const setT = (o: Partial<TeamInput>) => { setTeam({ ...team, ...o }); setServerErrs([]); };
+  const setT = (o: Partial<TeamInput>) => { dirty.current = true; setTeam({ ...team, ...o }); setServerErrs([]); };
   const setM = (i: number, o: Partial<MemberInput>) => setT({ members: team.members.map((m, k) => (k === i ? { ...m, ...o } : m)) });
-  const go = (to: Step) => {
-    setStep(to); setShowErrors(false); top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const go = (to: Step, withErrors = false) => {
+    dirty.current = true;
+    setStep(to); setShowErrors(withErrors); if (!withErrors) top.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     // Analytics: how far new registrations get (not edits).
     if (!edit && to === 1) trackStep(c.slug, 'members');
     if (!edit && to === 3) trackStep(c.slug, 'review');
@@ -352,12 +418,13 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
     go(steps[steps.indexOf(step) + 1]);
   };
   const submit = async () => {
-    if (check.errors.length) { setShowErrors(true); const first = stepOf(check.errors[0]); if (first !== 3) go(first); else setShowErrors(true); return; }
+    if (check.errors.length) { const first = stepOf(check.errors[0]); if (first !== 3) go(first, true); else setShowErrors(true); return; }
     setBusy(true); setServerErrs([]);
     try {
       const r = edit
         ? await authApi<{ application: TeamApp }>(`/competitions/${c.slug}/team/${edit.id}`, { method: 'PUT', body: team })
         : await authApi<{ application: TeamApp }>(`/competitions/${c.slug}/team`, { method: 'POST', body: team });
+      forgetDraft(key);
       onDone(r.application);
       // Meta CompleteRegistration for a new registration only (not an edit), after the success screen.
       if (!edit) trackRegistration(r.application.id, c.slug);
@@ -376,6 +443,10 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
         <ol className="dd-steps">
           {steps.map((s, i) => <li key={s} className={s === step ? 'is-on' : steps.indexOf(step) > i ? 'is-done' : ''}><span>{i + 1}</span>{STEPS[s]}</li>)}
         </ol>
+        {restored && (
+          <div className="dd-draft" role="status">We kept what you typed on this device ({savedTime(restored)}), so you can carry on where you left off.{' '}
+            <button type="button" className="text-link" onClick={startOver}>Start over</button></div>
+        )}
         {check.group && <div className="dd-group">Age group: <b>{check.group.label}</b> ({check.group.min}–{check.group.max}), from the oldest member on {dayLabel(cfg.ageOn)}</div>}
       </div>
 
@@ -384,7 +455,8 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
           {step === 0 && (
             <div className="dd-fields">
               <label className="field">Team name
-                <input className="input input--white" value={team.teamName} onChange={(e) => setT({ teamName: e.target.value })} maxLength={60} placeholder="Clean, original, not a brand or a film" />
+                <input className="input input--white" value={team.teamName} onChange={(e) => setT({ teamName: e.target.value })} onBlur={() => touch('teamName')} aria-invalid={Boolean(errOf('teamName'))} maxLength={60} placeholder="Clean, original, not a brand or a film" />
+                <FieldErr msg={errOf('teamName')} />
               </label>
               <fieldset className="dd-choice">
                 <legend>The team is from a</legend>
@@ -393,20 +465,23 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
                     <button key={x.key} type="button" role="radio" aria-checked={team.institutionType === x.key} className={'dd-opt' + (team.institutionType === x.key ? ' is-on' : '')} onClick={() => setT({ institutionType: x.key })}>{x.label}</button>
                   ))}
                 </div>
+                <FieldErr msg={errOf('institutionType')} />
               </fieldset>
               {inst && (
                 <label className="field">{inst.same ? `Name of the ${inst.label.toLowerCase()}` : 'Name of the group or organisation (optional)'}
-                  <input className="input input--white" value={team.institutionName} onChange={(e) => setT({ institutionName: e.target.value })} maxLength={120} placeholder={inst.placeholder} />
+                  <input className="input input--white" value={team.institutionName} onChange={(e) => setT({ institutionName: e.target.value })} onBlur={() => touch('institutionName')} aria-invalid={Boolean(errOf('institutionName'))} maxLength={120} placeholder={inst.placeholder} />
+                  <FieldErr msg={errOf('institutionName')} />
                   <small className="field__hint">{inst.same ? 'Every member must be a student of this school or college.' : 'Members may be from different institutions; each names their own on the next step.'}</small>
                 </label>
               )}
               <div className="dd-row2">
-                <label className="field">City or town<input className="input input--white" value={team.city} onChange={(e) => setT({ city: e.target.value })} maxLength={60} /></label>
+                <label className="field">City or town<input className="input input--white" value={team.city} onChange={(e) => setT({ city: e.target.value })} onBlur={() => touch('city')} aria-invalid={Boolean(errOf('city'))} maxLength={60} /><FieldErr msg={errOf('city')} /></label>
                 <label className="field">State
-                  <select className="input input--white" aria-label="State" value={team.state} onChange={(e) => setT({ state: e.target.value })}>
+                  <select className="input input--white" aria-label="State" value={team.state} onChange={(e) => setT({ state: e.target.value })} onBlur={() => touch('state')} aria-invalid={Boolean(errOf('state'))}>
                     <option value="">Choose…</option>
                     {states.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
                   </select>
+                  <FieldErr msg={errOf('state')} />
                 </label>
               </div>
             </div>
@@ -417,6 +492,7 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
               <p className="dd-lead">{cfg.minMembers} to {cfg.maxMembers} members, all aged {cfg.minAge} to {cfg.maxAge} on {dayLabel(cfg.ageOn)}. Members under 18 and adults can’t be on the same team. Member 1 is the team captain.</p>
               {team.members.map((m, i) => (
                 <MemberCard key={i} c={c} m={m} i={i} otherInst={inst ? !inst.same : false} canRemove={team.members.length > cfg.minMembers}
+                  errOf={(f) => errOf(`members.${i}.${f}`)} touch={(f) => touch(`members.${i}.${f}`)}
                   onChange={(o) => setM(i, o)} onRemove={() => setT({ members: team.members.filter((_, k) => k !== i) })} />
               ))}
               {team.members.length < cfg.maxMembers && <button type="button" className="btn btn--outline btn--md" onClick={() => setT({ members: [...team.members, emptyMember()] })}>+ Add a member</button>}
@@ -430,20 +506,22 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
                 <fieldset key={i} className="dd-member">
                   <legend>{m.fullName || `Member ${i + 1}`} <span>{age} yrs</span></legend>
                   <div className="dd-row2">
-                    <label className="field">Parent’s or guardian’s name<input className="input input--white" value={m.guardianName} onChange={(e) => setM(i, { guardianName: e.target.value })} maxLength={80} /></label>
+                    <label className="field">Parent’s or guardian’s name<input className="input input--white" value={m.guardianName} onChange={(e) => setM(i, { guardianName: e.target.value })} onBlur={() => touch(`members.${i}.guardianName`)} aria-invalid={Boolean(errOf(`members.${i}.guardianName`))} maxLength={80} /><FieldErr msg={errOf(`members.${i}.guardianName`)} /></label>
                     <label className="field">Relation
-                      <select className="input input--white" aria-label="Relation" value={m.guardianRelation} onChange={(e) => setM(i, { guardianRelation: e.target.value })}>
+                      <select className="input input--white" aria-label="Relation" value={m.guardianRelation} onChange={(e) => setM(i, { guardianRelation: e.target.value })} onBlur={() => touch(`members.${i}.guardianRelation`)} aria-invalid={Boolean(errOf(`members.${i}.guardianRelation`))}>
                         <option value="">Choose…</option>
                         {['Mother', 'Father', 'Guardian'].map((r) => <option key={r}>{r}</option>)}
                       </select>
+                      <FieldErr msg={errOf(`members.${i}.guardianRelation`)} />
                     </label>
-                    <label className="field">Their mobile number<input className="input input--white" type="tel" inputMode="tel" placeholder="10-digit mobile number" value={m.guardianPhone} onChange={(e) => setM(i, { guardianPhone: e.target.value })} maxLength={16} /></label>
-                    <label className="field">Their email <span className="field__opt">(optional)</span><input className="input input--white" type="email" value={m.guardianEmail} onChange={(e) => setM(i, { guardianEmail: e.target.value })} maxLength={120} /></label>
+                    <label className="field">Their mobile number<input className="input input--white" type="tel" inputMode="tel" placeholder="10-digit mobile number" value={m.guardianPhone} onChange={(e) => setM(i, { guardianPhone: e.target.value })} onBlur={() => touch(`members.${i}.guardianPhone`)} aria-invalid={Boolean(errOf(`members.${i}.guardianPhone`))} maxLength={16} /><FieldErr msg={errOf(`members.${i}.guardianPhone`)} /></label>
+                    <label className="field">Their email <span className="field__opt">(optional)</span><input className="input input--white" type="email" value={m.guardianEmail} onChange={(e) => setM(i, { guardianEmail: e.target.value })} onBlur={() => touch(`members.${i}.guardianEmail`)} aria-invalid={Boolean(errOf(`members.${i}.guardianEmail`))} maxLength={120} /><FieldErr msg={errOf(`members.${i}.guardianEmail`)} /></label>
                   </div>
                   <label className="tick dd-consent">
                     <input type="checkbox" checked={m.guardianConsent} onChange={(e) => setM(i, { guardianConsent: e.target.checked })} /><span className="tick__box" aria-hidden="true" />
                     <span>{m.guardianName || 'The parent or guardian'} agrees that {m.fullName || 'this member'} takes part in {c.title}, under its rules and terms, and that these details are shared with Elden Academic Press to run it.</span>
                   </label>
+                  <FieldErr msg={errOf(`members.${i}.guardianConsent`)} />
                 </fieldset>
               ))}
             </div>
@@ -461,16 +539,19 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
               </dl>
               <label className="tick"><input type="checkbox" checked={team.acceptRules} onChange={(e) => setT({ acceptRules: e.target.checked })} /><span className="tick__box" aria-hidden="true" />
                 <span>I’ve read the <Link to={`/competitions/${c.slug}/rules`} target="_blank">rules and terms</Link>, and every team member (and, for anyone under 18, their parent or guardian) agrees to them.</span></label>
+              <FieldErr msg={errOf('acceptRules')} />
               <label className="tick"><input type="checkbox" checked={team.confirmTrue} onChange={(e) => setT({ confirmTrue: e.target.checked })} /><span className="tick__box" aria-hidden="true" />
                 <span>The details are true. I understand false details or duplicate entries lead to disqualification.</span></label>
+              <FieldErr msg={errOf('confirmTrue')} />
             </div>
           )}
         </motion.div>
       </AnimatePresence>
 
-      {(showErrors ? (step === 3 ? check.errors : stepErrors) : []).concat(serverErrs).length > 0 && (
+      {(fieldErrorCount > 0 || teamErrors.length > 0 || serverErrs.length > 0) && (
         <div className="form-error dd-errors" role="alert">
-          <ul>{[...new Set((showErrors ? (step === 3 ? check.errors : stepErrors) : []).concat(serverErrs))].map((e) => <li key={e}>{e}</li>)}</ul>
+          {fieldErrorCount > 0 && step !== 3 && <p className="dd-errors__lead">Check the {fieldErrorCount === 1 ? 'field' : `${fieldErrorCount} fields`} marked in red above.</p>}
+          <ul>{[...new Set(teamErrors.concat(serverErrs))].map((e) => <li key={e}>{e}</li>)}</ul>
         </div>
       )}
       <div className="dd-wizard__foot">
@@ -480,14 +561,15 @@ function RegisterWizard({ c, data, accountEmail, edit, onCancel, onDone }: {
           : <button type="button" className="btn dd-btn dd-btn--big" disabled={busy} onClick={submit}>{busy ? 'Sending…' : edit ? 'Send the changes' : 'Send the application'}</button>}
         <button type="button" className="text-link dd-quiet" onClick={onCancel}>Cancel</button>
       </div>
-      <p className="dd-small">Registration closes {istDateTime(data.dates.closesAt)}. You can change the application until it’s approved.</p>
+      <p className="dd-small">{savedAt ? `Saved on this device at ${savedTime(savedAt)}: you can leave and come back to finish. ` : 'What you type is saved on this device, so you can leave and come back to finish. '}Registration closes {istDateTime(data.dates.closesAt)}. You can change the application until it’s approved.</p>
     </div>
   );
 }
 
-function MemberCard({ c, m, i, otherInst, canRemove, onChange, onRemove }: {
-  c: TeamComp; m: MemberInput; i: number; otherInst: boolean; canRemove: boolean; onChange: (o: Partial<MemberInput>) => void; onRemove: () => void;
+function MemberCard({ c, m, i, otherInst, canRemove, errOf, touch, onChange, onRemove }: {
+  c: TeamComp; m: MemberInput; i: number; otherInst: boolean; canRemove: boolean; errOf: ErrOf; touch: Touch; onChange: (o: Partial<MemberInput>) => void; onRemove: () => void;
 }) {
+  const bind = (f: string) => ({ onBlur: () => touch(f), 'aria-invalid': Boolean(errOf(f)) });
   const cfg = c.team;
   const age = ageOn(m.dob, cfg.ageOn);
   const minor = age !== null && age < 18;
@@ -496,13 +578,14 @@ function MemberCard({ c, m, i, otherInst, canRemove, onChange, onRemove }: {
       <legend>{i === 0 ? 'Team captain' : `Member ${i + 1}`}{age !== null && <span>{age} yrs on {dayLabel(cfg.ageOn)}</span>}
         {canRemove && <button type="button" className="text-link" onClick={onRemove}>Remove</button>}</legend>
       <div className="dd-row2">
-        <label className="field">Full name<input className="input input--white" value={m.fullName} onChange={(e) => onChange({ fullName: e.target.value })} maxLength={80} autoComplete="off" /></label>
-        <label className="field">Date of birth<input className="input input--white" type="date" value={m.dob} onChange={(e) => onChange({ dob: e.target.value })} min="1995-01-01" max={todayIST()} /></label>
-        <label className="field">Email {minor && <span className="field__opt">(optional)</span>}<input className="input input--white" type="email" value={m.email} onChange={(e) => onChange({ email: e.target.value })} maxLength={120} /></label>
-        <label className="field">Mobile number {minor ? <span className="field__opt">(optional)</span> : <span className="field__opt">(email or mobile)</span>}<input className="input input--white" type="tel" inputMode="tel" placeholder="10-digit mobile number" value={m.phone} onChange={(e) => onChange({ phone: e.target.value })} maxLength={16} /></label>
-        {otherInst && <label className="field">Their school, college or institution<input className="input input--white" value={m.institutionName} onChange={(e) => onChange({ institutionName: e.target.value })} maxLength={120} /></label>}
+        <label className="field">Full name<input className="input input--white" value={m.fullName} onChange={(e) => onChange({ fullName: e.target.value })} {...bind('fullName')} maxLength={80} autoComplete="off" /><FieldErr msg={errOf('fullName')} /></label>
+        <label className="field">Date of birth<input className="input input--white" type="date" value={m.dob} onChange={(e) => onChange({ dob: e.target.value })} {...bind('dob')} min="1995-01-01" max={todayIST()} /><FieldErr msg={errOf('dob')} /></label>
+        <label className="field">Email {minor && <span className="field__opt">(optional)</span>}<input className="input input--white" type="email" value={m.email} onChange={(e) => onChange({ email: e.target.value })} {...bind('email')} maxLength={120} /><FieldErr msg={errOf('email')} /></label>
+        <label className="field">Mobile number {minor ? <span className="field__opt">(optional)</span> : <span className="field__opt">(email or mobile)</span>}<input className="input input--white" type="tel" inputMode="tel" placeholder="10-digit mobile number" value={m.phone} onChange={(e) => onChange({ phone: e.target.value })} {...bind('phone')} maxLength={16} /><FieldErr msg={errOf('phone')} /></label>
+        {otherInst && <label className="field">Their school, college or institution<input className="input input--white" value={m.institutionName} onChange={(e) => onChange({ institutionName: e.target.value })} {...bind('institutionName')} maxLength={120} /><FieldErr msg={errOf('institutionName')} /></label>}
         {age !== null && cfg.instagramFromAge !== null && age >= cfg.instagramFromAge && (
-          <label className="field">Instagram username<input className="input input--white" placeholder="@username" value={m.instagram} onChange={(e) => onChange({ instagram: e.target.value })} maxLength={31} />
+          <label className="field">Instagram username<input className="input input--white" placeholder="@username" value={m.instagram} onChange={(e) => onChange({ instagram: e.target.value })} {...bind('instagram')} maxLength={31} />
+            <FieldErr msg={errOf('instagram')} />
             <small className="field__hint">Members aged {cfg.instagramFromAge}+ must follow @{c.instagram}.</small></label>
         )}
       </div>
@@ -514,13 +597,14 @@ function MemberCard({ c, m, i, otherInst, canRemove, onChange, onRemove }: {
             {r.label}{r.help && <small> ({r.help})</small>}
           </label>
         ))}
+        <FieldErr msg={errOf('roles')} />
       </div>
-      <IdUpload c={c} m={m} onChange={onChange} />
+      <IdUpload c={c} m={m} onChange={onChange} err={errOf('idDocType')} />
     </fieldset>
   );
 }
 
-function IdUpload({ c, m, onChange }: { c: TeamComp; m: MemberInput; onChange: (o: Partial<MemberInput>) => void }) {
+function IdUpload({ c, m, onChange, err: typeErr }: { c: TeamComp; m: MemberInput; onChange: (o: Partial<MemberInput>) => void; err?: string }) {
   const [progress, setProgress] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -546,10 +630,11 @@ function IdUpload({ c, m, onChange }: { c: TeamComp; m: MemberInput; onChange: (
   return (
     <div className="dd-id">
       <label className="field">ID document
-        <select className="input input--white" aria-label="ID document" value={m.idDocType} onChange={(e) => onChange({ idDocType: e.target.value })}>
+        <select className="input input--white" aria-label="ID document" value={m.idDocType} onChange={(e) => onChange({ idDocType: e.target.value })} aria-invalid={Boolean(typeErr)}>
           <option value="">Choose…</option>
           {c.team.idDocs.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
         </select>
+        <FieldErr msg={typeErr} />
         <small className="field__hint">Aadhaar is never required. If you use it, upload the masked version (only the last 4 digits showing).</small>
       </label>
       <div className="dd-id__file">
