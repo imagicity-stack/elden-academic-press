@@ -10,7 +10,7 @@ import { safeEqual } from '../lib/crypto.js';
 import { body, HttpError, notFound, rateLimit } from '../lib/http.js';
 import { audit } from './admin/auth.js';
 import {
-  addDoNotCall, callBlockers, callStats, dialDueCalls, fetchCallResult, lastCronRun, getCallSettings, leadByToken, recordCallResult, saveCallSettings, saveLead,
+  addDoNotCall, callBlockers, callStats, dialDueCalls, fetchCallResult, lastCronRun, placeTestCall, getCallSettings, leadByToken, recordCallResult, saveCallSettings, saveLead,
 } from '../services/calls.js';
 import { callableNumber, DAYS, DEFAULT_CALL_SETTINGS, inCallingHours, nextCallingTime, type CallSettings } from '../../src/shared/calls.js';
 
@@ -163,6 +163,16 @@ adminCalls.get('/connection-test', async (c) => {
   const ids = { org: deps.env.SARVAM_ORG_ID ?? '', workspace: deps.env.SARVAM_WORKSPACE_ID ?? '', cart: deps.env.SARVAM_CART_CAMPAIGN_ID ?? '', feedback: deps.env.SARVAM_FEEDBACK_CAMPAIGN_ID ?? '' };
   if (!deps.calls?.check) return c.json({ connected: false, key, ids, campaigns: [] });
   return c.json({ connected: true, key, ids, campaigns: await deps.calls.check() });
+});
+
+/** A test call: one of the agents calls a number (yours) now, with example details. Nothing is acted on. */
+adminCalls.post('/test', async (c) => {
+  const deps = c.get('deps');
+  const input = await body(c, z.object({ phone: z.string().max(20), kind: z.enum(['cart', 'cod_confirm', 'feedback']), name: z.string().trim().max(60).default('') }));
+  await rateLimit(deps.db, `test-call:${c.get('admin').email}`, 10, 3600);
+  const call = await placeTestCall(deps, { ...input, by: c.get('admin').email });
+  await audit(c, 'calls.test', 'call', call.id, { kind: input.kind });
+  return c.json({ call });
 });
 
 /** Queued calls more than 25 minutes past their time (the scheduled job runs every 10). */

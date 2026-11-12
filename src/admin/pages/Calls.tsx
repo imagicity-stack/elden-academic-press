@@ -1,4 +1,4 @@
-// Admin → Calls: the AI voice agents (cart recovery and order feedback). Switch them on and off,
+// Admin → Calls: the AI voice agents (cart recovery, COD confirmation and order feedback). Switch them on and off,
 // see every call (who, when, how it went, the transcript), the queue, saved checkouts, the
 // do-not-call list, the settings and the numbers.
 import { useEffect, useState, type ReactNode } from 'react';
@@ -32,7 +32,7 @@ export default function CallsAdmin() {
   const { tab = '' } = useParams();
   if (/^[0-9a-f-]{36}$/.test(tab)) return <CallDetail id={tab} />;
   return (
-    <Page title="Calls" subtitle="AI voice agents on Sarvam: cart recovery and order feedback.">
+    <Page title="Calls" subtitle="AI voice agents on Sarvam: cart recovery, cash-on-delivery confirmation and order feedback.">
       <nav className="ad-tabs ad-mt">
         {TABS.map(([k, l]) => <Link key={k} to={`/admin/calls${k ? `/${k}` : ''}`} className={'ad-tab' + (tab === k ? ' is-on' : '')}>{l}</Link>)}
       </nav>
@@ -91,6 +91,7 @@ function Overview() {
           <b>Outgoing calls aren't connected yet.</b> Customers who ring our numbers already reach the agents{st.webhook ? ' and show up here' : ''}. Checkouts are being saved and our calls queued, but the website can't place them until the Sarvam calling connection is added (Settings tab has the details).
         </div>
       )}
+      <TestCall />
       <Card title="On and off">
         <div className="ad-stack-sm">
           <div className="ad-row"><Toggle checked={s.enabled} label="All calls" onChange={(v) => save({ enabled: v }, v ? 'Calls switched on' : 'All calls paused')} />
@@ -221,7 +222,7 @@ function CallList({ queue = false }: { queue?: boolean }) {
                 <tr key={r.id}>
                   <td>{when(queue ? r.dueAt : r.endedAt ?? r.startedAt ?? r.createdAt)}</td>
                   <td><Link to={`/admin/calls/${r.id}`} className="ad-strong">{r.name || 'Unknown'}</Link><br /><span className="ad-muted">{r.phone}</span></td>
-                  <td>{kindLabel(r.kind)}{r.createdBy === INBOUND && <><br /><Badge tone="blue">Incoming</Badge></>}</td>
+                  <td>{kindLabel(r.kind)}{r.createdBy === INBOUND && <><br /><Badge tone="blue">Incoming</Badge></>}{r.createdBy?.startsWith('test:') && <><br /><Badge tone="navy">Test</Badge></>}</td>
                   <td><Status s={r.status} />{r.issueOpen && <> <Badge tone="red">Problem</Badge></>}{r.note && <><br /><small className="ad-muted">{r.note}</small></>}</td>
                   <td><Outcome o={r.outcome} />{r.rating && <> <small>{r.rating}★</small></>}</td>
                   <td className="ad-num">{secs(r.durationSeconds)}</td>
@@ -264,7 +265,7 @@ function CallDetail({ id }: { id: string }) {
   const c = data.call;
   const act = (action: string, ok: string) => run(action, () => adminApi(`/calls/${id}/${action}`, { method: 'POST' }), ok).then((r) => r && reload());
   return (
-    <Page title={c.name || c.phone} subtitle={<>{kindLabel(c.kind)}{c.createdBy === INBOUND && ' · Incoming call'} · {c.phone}{data.doNotCall && <> · <Badge tone="red">Do not call</Badge></>}</>} back={{ to: '/admin/calls/log', label: 'Calls' }}
+    <Page title={c.name || c.phone} subtitle={<>{kindLabel(c.kind)}{c.createdBy === INBOUND && ' · Incoming call'}{c.createdBy?.startsWith('test:') && ` · Test call by ${c.createdBy.slice(5)} (nothing is acted on)`} · {c.phone}{data.doNotCall && <> · <Badge tone="red">Do not call</Badge></>}</>} back={{ to: '/admin/calls/log', label: 'Calls' }}
       actions={<>
         <Link className="ad-btn ad-btn--ghost" to={`/admin/whatsapp?phone=${encodeURIComponent(c.phone)}`}>WhatsApp chat</Link>
         {c.issueOpen && <Btn kind="primary" busy={busy === 'resolve'} onClick={() => act('resolve', 'Marked as handled')}>Problem handled</Btn>}
@@ -487,5 +488,43 @@ function ConnectionTest() {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Test call: an agent calls your number now with example details, whatever the switches and
+ * calling hours, and the result shows on the call page like a real one. Nothing is acted on.
+ */
+function TestCall() {
+  const navigate = useNavigate();
+  const { busy, run } = useAction();
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('elden-test-call') ?? '{}') as { phone?: string; name?: string }; } catch { return {}; } })();
+  const [phone, setPhone] = useState(saved.phone ?? '');
+  const [name, setName] = useState(saved.name ?? '');
+  const [kind, setKind] = useState<CallKind>('cart');
+  const go = () => {
+    try { localStorage.setItem('elden-test-call', JSON.stringify({ phone, name })); } catch { /* ignore */ }
+    run('test-call', () => adminApi<{ call: { id: string } }>('/calls/test', { body: { phone, name, kind } }), 'Calling you now')
+      .then((r) => r && navigate(`/admin/calls/${r.call.id}`));
+  };
+  const help: Record<CallKind, string> = {
+    cart: 'As if you left checkout with 2 printed copies of a book (and the coupon, if set).',
+    cod_confirm: 'As if you placed cash-on-delivery order #1042: say yes, or no to hear the non-refundable advance line.',
+    feedback: 'As if you bought a book a few days ago: the agent asks how it went.',
+  };
+  return (
+    <Card title="Test call">
+      <p className="ad-muted">An agent calls your number right now with example details, even outside calling hours or with calls switched off, so you can hear it and check that the result comes back. Nothing is acted on: no emails, WhatsApps, orders or do-not-call changes, and it isn’t counted in the numbers below.</p>
+      <div className="ad-row ad-mt">
+        <TextField label="Your mobile number" placeholder="10-digit mobile" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <TextField label="Your first name (the agent uses it)" placeholder="Asha" value={name} onChange={(e) => setName(e.target.value)} />
+        <SelectField label="Which call" value={kind} onChange={(e) => setKind(e.target.value as CallKind)}>
+          {CALL_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+        </SelectField>
+      </div>
+      <p className="ad-muted">{help[kind]}</p>
+      <Btn kind="primary" busy={busy === 'test-call'} disabled={phone.replace(/\D/g, '').length < 10} onClick={go}>Call me now</Btn>
+      <span className="ad-muted"> Opens the call’s page: it shows <b>Calling</b>, then the result and transcript a minute or two after you hang up (use “Fetch result from Sarvam” there if it stays on Calling).</span>
+    </Card>
   );
 }

@@ -480,6 +480,37 @@ describe('Admin → Calls', () => {
     expect(leads.items[0]).toMatchObject({ call: { status: 'dialling' }, callDueAt: null });
   });
 
+  it('a test call goes out at once (calls off, outside hours), is recorded, and nothing is acted on', async () => {
+    const h = await admin();
+    at('2026-11-10T21:30:00+05:30'); // outside the hours, and all calls are paused
+    let r = await t.call('POST', '/admin/calls/test', { headers: h, body: { phone: '98765 43210', name: 'Asha Kumari', kind: 'cod_confirm' } });
+    expect(r.status).toBe(200);
+    expect(provider.started).toHaveLength(1);
+    expect(provider.started[0]).toMatchObject({ kind: 'cod_confirm', phone: '+919876543210', variables: { call_purpose: 'cod_confirmation', customer_name: 'Asha', order_number: '1042' } });
+    const id = r.json.call.id;
+    expect(r.json.call).toMatchObject({ status: 'dialling', createdBy: 'test:owner@eldenap.in', providerCallId: 'test-1' });
+    // "Don't call me" on a test call: recorded, but the number isn't added to the list.
+    await webhook({ metadata: { call_id: id }, status: 'completed', duration: 40, variables: { call_outcome: 'do_not_call' }, transcript: 'agent: Namaste' });
+    const [row] = await allCalls();
+    expect(row).toMatchObject({ status: 'done', outcome: 'do_not_call', transcript: 'agent: Namaste' });
+    expect((await t.call('GET', '/admin/calls/do-not-call', { headers: h })).json.items).toEqual([]);
+    expect(t.mailer.sent).toHaveLength(0);
+    // Not counted in the numbers.
+    const stats = (await t.call('GET', '/admin/calls/stats?days=30', { headers: h })).json;
+    expect(stats.cod.total).toBe(0);
+    // Unanswered: not retried.
+    r = await t.call('POST', '/admin/calls/test', { headers: h, body: { phone: '98765 43210', kind: 'cart' } });
+    expect(provider.started[1].variables).toMatchObject({ call_purpose: 'cart_recovery', customer_name: 'Test' });
+    await webhook({ metadata: { call_id: r.json.call.id }, status: 'no-answer' });
+    expect((await allCalls()).find((x) => x.id === r.json.call.id)?.status).toBe('no_answer');
+    // Sarvam refusing: shown at once.
+    provider.fail = true;
+    r = await t.call('POST', '/admin/calls/test', { headers: h, body: { phone: '98765 43210', kind: 'feedback' } });
+    expect(r.status).toBe(502);
+    expect(r.json.error).toContain('provider down');
+    expect((await t.call('POST', '/admin/calls/test', { headers: h, body: { phone: '12345', kind: 'cart' } })).status).toBe(400);
+  });
+
   it('"Call now" dials the call clicked, not an older one waiting', async () => {
     const h = await admin();
     await lead();
