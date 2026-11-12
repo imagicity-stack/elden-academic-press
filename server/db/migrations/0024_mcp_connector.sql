@@ -1,0 +1,53 @@
+CREATE TABLE "mcp_auth_codes" (
+	"code_hash" text PRIMARY KEY NOT NULL,
+	"client_id" text NOT NULL,
+	"user_id" uuid NOT NULL,
+	"redirect_uri" text NOT NULL,
+	"code_challenge" text NOT NULL,
+	"scope" text DEFAULT '' NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "mcp_clients" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" text DEFAULT '' NOT NULL,
+	"redirect_uris" text[] NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "mcp_grants" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"client_id" text NOT NULL,
+	"user_id" uuid NOT NULL,
+	"scope" text DEFAULT '' NOT NULL,
+	"access_hash" text NOT NULL,
+	"access_expires_at" timestamp with time zone NOT NULL,
+	"refresh_hash" text NOT NULL,
+	"refresh_expires_at" timestamp with time zone NOT NULL,
+	"prev_refresh_hash" text,
+	"rotated_at" timestamp with time zone,
+	"last_used_at" timestamp with time zone,
+	"revoked_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "mcp_grants_access_hash_unique" UNIQUE("access_hash"),
+	CONSTRAINT "mcp_grants_refresh_hash_unique" UNIQUE("refresh_hash")
+);
+--> statement-breakpoint
+ALTER TABLE "mcp_auth_codes" ADD CONSTRAINT "mcp_auth_codes_client_id_mcp_clients_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."mcp_clients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "mcp_auth_codes" ADD CONSTRAINT "mcp_auth_codes_user_id_admin_users_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."admin_users"("user_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "mcp_grants" ADD CONSTRAINT "mcp_grants_client_id_mcp_clients_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."mcp_clients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "mcp_grants" ADD CONSTRAINT "mcp_grants_user_id_admin_users_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."admin_users"("user_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "mcp_grants_user_idx" ON "mcp_grants" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "mcp_grants_prev_refresh_idx" ON "mcp_grants" USING btree ("prev_refresh_hash");--> statement-breakpoint
+-- Only the store's server reads these tables: lock them against Supabase's public API keys.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['mcp_clients', 'mcp_auth_codes', 'mcp_grants'] LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);
+    END IF;
+  END LOOP;
+END $$;

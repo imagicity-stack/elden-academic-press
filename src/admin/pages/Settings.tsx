@@ -11,7 +11,7 @@ const STATES: [string, string][] = [['35', 'Andaman and Nicobar Islands'], ['37'
 export default function Settings() {
   const { tab = 'store' } = useParams();
   const { me } = useMe();
-  const tabs = [['store', 'Store'], ['categories', 'Categories'], ...(me.role === 'owner' ? [['staff', 'Staff'], ['activity', 'Activity log']] : [])];
+  const tabs = [['store', 'Store'], ['categories', 'Categories'], ['claude', 'Claude'], ...(me.role === 'owner' ? [['staff', 'Staff'], ['activity', 'Activity log']] : [])];
   return (
     <Page title="Settings">
       <div className="ad-tabs">{tabs.map(([k, l]) => <NavLink key={k} to={`/admin/settings${k === 'store' ? '' : '/' + k}`} end className={({ isActive }) => 'ad-tab' + (isActive || (k === 'store' && tab === 'store') ? ' is-on' : '')}>{l}</NavLink>)}</div>
@@ -19,6 +19,7 @@ export default function Settings() {
       {tab === 'categories' && <Categories />}
       {tab === 'staff' && me.role === 'owner' && <Staff />}
       {tab === 'activity' && me.role === 'owner' && <Activity />}
+      {tab === 'claude' && <ClaudeConnections />}
     </Page>
   );
 }
@@ -262,5 +263,46 @@ function Activity() {
       )}
       {data && data.total > 100 && <div className="ad-pager"><Btn size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Newer</Btn><Btn size="sm" disabled={page * 100 >= data.total} onClick={() => setPage(page + 1)}>Older →</Btn></div>}
     </Card>
+  );
+}
+
+/* ---------------- Claude connector ---------------- */
+
+interface Connection { id: string; app: string; email: string; role: string; createdAt: string; lastUsedAt: string | null }
+
+function ClaudeConnections() {
+  const { me } = useMe();
+  const { data, error, reload } = useAdmin<{ items: Connection[] }>('/mcp/connections');
+  const { busy, run } = useAction();
+  const url = `${window.location.origin}/api/mcp`;
+  return (
+    <>
+      <Card title="Connect Claude to the store">
+        <div className="ad-form">
+          <p>Claude can read sales, orders, products and where buyers came from, compare them with your Meta ads, and add or edit books, stock and discount codes for you. It acts as the person who connects it, with their role, and every change shows in the activity log as “via Claude”. It can’t refund or cancel orders, delete anything, or change settings or staff.</p>
+          <ol className="ad-steps">
+            <li>In Claude, open <b>Settings → Connectors</b> and choose <b>Add custom connector</b>.</li>
+            <li>Name it <b>Elden Academic Press</b> and paste this address: <code className="ad-code">{url}</code> <Btn size="sm" onClick={() => navigator.clipboard?.writeText(url)}>Copy</Btn></li>
+            <li>Click <b>Connect</b>. This admin opens: sign in (with your authenticator app) and choose <b>Allow</b>.</li>
+          </ol>
+        </div>
+      </Card>
+      <Card title={me.role === 'owner' ? 'Connected apps (everyone’s)' : 'Your connected apps'} flush>
+        {error ? <ErrorBox error={error} retry={reload} /> : !data ? <Loading /> : !data.items.length ? <p className="ad-muted ad-pad">Nothing connected yet.</p> : (
+          <table className="ad-table">
+            <thead><tr><th>App</th><th>Acts as</th><th>Connected</th><th>Last used</th><th /></tr></thead>
+            <tbody>{data.items.map((x) => (
+              <tr key={x.id}>
+                <td><b>{x.app}</b></td>
+                <td>{x.email}<div className="ad-muted">{x.role}</div></td>
+                <td className="ad-muted">{fmtDate(x.createdAt, true)}</td>
+                <td className="ad-muted">{x.lastUsedAt ? fmtDate(x.lastUsedAt, true) : 'Not yet'}</td>
+                <td><Btn size="sm" kind="danger" busy={busy === x.id} onClick={() => run(x.id, () => adminApi(`/mcp/connections/${x.id}`, { method: 'DELETE' }), 'Disconnected').then(() => reload())}>Disconnect</Btn></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+      </Card>
+    </>
   );
 }

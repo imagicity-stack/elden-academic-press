@@ -23,6 +23,7 @@ import { adminPopups } from './popups.js';
 import { adminOrders } from './orders.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
 import { adminCategories, adminInventory, adminProducts, adminUploads } from './products.js';
+import { adminMcp } from '../mcp/oauth.js';
 
 export type { AdminSession } from './auth.js';
 
@@ -53,6 +54,8 @@ admin.route('/resources', adminResources);
 admin.route('/newsletter', adminNewsletter);
 admin.route('/audience', adminAudience);
 admin.route('/consent', adminConsent);
+// Connecting Claude: approving a sign-in, and the list of connections.
+admin.route('/mcp', adminMcp);
 // Popups: managers and the owner.
 admin.use('/popups', requireRole('manager'));
 admin.use('/popups/*', requireRole('manager'));

@@ -1169,3 +1169,48 @@ export const consentStats = pgTable('consent_stats', {
   timing: text('timing').notNull(),
   n: integer('n').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.day, t.event, t.device, t.region, t.channel, t.page, t.timing] })]);
+
+/* ---------------- Claude connector (MCP over OAuth) ---------------- */
+
+/** Apps that registered themselves to connect to the store (OAuth dynamic client registration), e.g. Claude. */
+export const mcpClients = pgTable('mcp_clients', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().default(''),
+  /** Where the sign-in may send its one-time code: only Claude's own addresses and this computer (server/routes/mcp/oauth.ts). */
+  redirectUris: text('redirect_uris').array().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A one-time code from the approval screen, swapped for tokens within minutes (only its hash is kept). */
+export const mcpAuthCodes = pgTable('mcp_auth_codes', {
+  codeHash: text('code_hash').primaryKey(),
+  clientId: text('client_id').notNull().references(() => mcpClients.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => adminUsers.userId, { onDelete: 'cascade' }),
+  redirectUri: text('redirect_uri').notNull(),
+  /** PKCE: base64url(sha256(code_verifier)). */
+  codeChallenge: text('code_challenge').notNull(),
+  scope: text('scope').notNull().default(''),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * A connection a team member approved (Admin → Settings → Claude): it acts with that person's role.
+ * Only hashes of its tokens are kept; the refresh token changes each time it is used.
+ */
+export const mcpGrants = pgTable('mcp_grants', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clientId: text('client_id').notNull().references(() => mcpClients.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => adminUsers.userId, { onDelete: 'cascade' }),
+  scope: text('scope').notNull().default(''),
+  accessHash: text('access_hash').notNull().unique(),
+  accessExpiresAt: timestamp('access_expires_at', { withTimezone: true }).notNull(),
+  refreshHash: text('refresh_hash').notNull().unique(),
+  refreshExpiresAt: timestamp('refresh_expires_at', { withTimezone: true }).notNull(),
+  /** The refresh token before the last swap, still accepted for a minute in case the reply to that swap was lost. */
+  prevRefreshHash: text('prev_refresh_hash'),
+  rotatedAt: timestamp('rotated_at', { withTimezone: true }),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('mcp_grants_user_idx').on(t.userId), index('mcp_grants_prev_refresh_idx').on(t.prevRefreshHash)]);
