@@ -150,6 +150,19 @@ adminCalls.get('/:id{[0-9a-f-]{36}}', async (c) => {
   return c.json({ call, lead: lead ? { email: lead.email, items: lead.items, total: lead.total, orderId: lead.orderId, createdAt: lead.createdAt } : null, order: order ?? null, history, doNotCall: Boolean(dnc) });
 });
 
+/**
+ * Test the Sarvam connection without calling anyone: which key the live site is using (its length
+ * and a few characters, never the key), the ids, and whether Sarvam accepts the key and each campaign.
+ */
+adminCalls.get('/connection-test', async (c) => {
+  const deps = c.get('deps');
+  const raw = (deps.env.SARVAM_API_KEY ?? '').replace(/^\s*["']|["']\s*$/g, '').trim();
+  const key = raw ? { length: raw.length, start: raw.slice(0, 3), end: raw.slice(-4) } : null;
+  const ids = { org: deps.env.SARVAM_ORG_ID ?? '', workspace: deps.env.SARVAM_WORKSPACE_ID ?? '', cart: deps.env.SARVAM_CART_CAMPAIGN_ID ?? '', feedback: deps.env.SARVAM_FEEDBACK_CAMPAIGN_ID ?? '' };
+  if (!deps.calls?.check) return c.json({ connected: false, key, ids, campaigns: [] });
+  return c.json({ connected: true, key, ids, campaigns: await deps.calls.check() });
+});
+
 /** Queued calls more than 25 minutes past their time (the scheduled job runs every 10). */
 async function overdueCalls(deps: Deps) {
   const [r] = await deps.db.select({ n: count(), oldest: sql<string | null>`min(${calls.dueAt})` }).from(calls)

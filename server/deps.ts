@@ -79,7 +79,9 @@ async function buildDeps(env: Env): Promise<Deps> {
 
 /** Outgoing calls through Sarvam, once its key, workspace and both campaign ids are set; else null. */
 export function sarvamCallsFrom(env: Env, fetchImpl?: typeof fetch): CallProvider | null {
-  const { SARVAM_API_KEY: apiKey, SARVAM_ORG_ID: orgId, SARVAM_WORKSPACE_ID: workspaceId, SARVAM_CART_CAMPAIGN_ID: cartCampaignId, SARVAM_FEEDBACK_CAMPAIGN_ID: feedbackCampaignId } = env;
+  // Quotes pasted around a value in Vercel ("…") would make Sarvam refuse it: they are dropped.
+  const v = (x?: string) => x?.replace(/^\s*["']|["']\s*$/g, '').trim() || undefined;
+  const [apiKey, orgId, workspaceId, cartCampaignId, feedbackCampaignId] = [env.SARVAM_API_KEY, env.SARVAM_ORG_ID, env.SARVAM_WORKSPACE_ID, env.SARVAM_CART_CAMPAIGN_ID, env.SARVAM_FEEDBACK_CAMPAIGN_ID].map(v);
   if (!apiKey || !orgId || !workspaceId || !cartCampaignId || !feedbackCampaignId) return null;
   return sarvamCalls({ apiKey, orgId, workspaceId, cartCampaignId, feedbackCampaignId, fetch: fetchImpl });
 }
