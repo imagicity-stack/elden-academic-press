@@ -72,7 +72,7 @@ async function buildDeps(env: Env): Promise<Deps> {
   const authUser = sbAdmin ? supabaseAuthUser(...sbAdmin) : undefined;
   const meta = env.VITE_META_PIXEL_ID && env.META_CAPI_TOKEN ? metaHttp(env.VITE_META_PIXEL_ID, env.META_CAPI_TOKEN, env.META_TEST_EVENT_CODE) : null;
   const calls = sarvamCallsFrom(env);
-  const whatsapp = env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID ? whatsappHttp({ token: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID }) : null;
+  const whatsapp = env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID ? whatsappHttp({ token: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, messagingAccountId: env.WHATSAPP_BUSINESS_ACCOUNT_ID }) : null;
   const whatsappTemplates = env.WHATSAPP_TOKEN && env.WHATSAPP_BUSINESS_ACCOUNT_ID ? whatsappTemplatesHttp({ token: env.WHATSAPP_TOKEN, businessAccountId: env.WHATSAPP_BUSINESS_ACCOUNT_ID }) : null;
   return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, calls, whatsapp, whatsappTemplates, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task.finally(afterConnectionsClose)) : undefined };
 }

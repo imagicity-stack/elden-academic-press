@@ -42,14 +42,20 @@ export class WhatsAppError extends Error {
   constructor(message: string, readonly status: number, readonly code?: number) { super(message); }
 }
 
-export function whatsappHttp(cfg: { token: string; phoneNumberId: string; fetch?: typeof fetch; baseUrl?: string }): WhatsApp {
+/**
+ * messagingAccountId: the Messaging account (the WhatsApp Business Account id, where the templates
+ * are) to send from. Under Meta's new account model a phone number can belong to several
+ * Messaging accounts; without it Meta may pick another one (with none of our templates) and
+ * refuse every template with 132001, or bill the wrong one.
+ */
+export function whatsappHttp(cfg: { token: string; phoneNumberId: string; messagingAccountId?: string; fetch?: typeof fetch; baseUrl?: string }): WhatsApp {
   const fetchImpl = cfg.fetch ?? fetch;
   const url = `${(cfg.baseUrl ?? 'https://graph.facebook.com').replace(/\/+$/, '')}/${GRAPH_VERSION}/${encodeURIComponent(cfg.phoneNumberId)}/messages`;
   async function send(body: Record<string, unknown>) {
     const res = await fetchImpl(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', ...body }),
+      body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', ...(cfg.messagingAccountId ? { messaging_account_id: cfg.messagingAccountId } : {}), ...body }),
       signal: AbortSignal.timeout(10_000),
     });
     const text = await res.text();
