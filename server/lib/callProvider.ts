@@ -21,7 +21,11 @@ export interface CallProvider {
   name: string;
   /** Start the call now; returns the provider's id for it. Throws if it can't. */
   start(call: StartCall): Promise<{ providerCallId: string }>;
+  /** Check the connection without calling anyone: is the key accepted, and is each campaign there and running? */
+  check?(): Promise<ConnectionCheck[]>;
 }
+
+export interface ConnectionCheck { kind: 'cart' | 'feedback'; campaignId: string; ok: boolean; status?: string; agentVersion?: number | null; endsAt?: string; error?: string }
 
 /** How a call went, from the provider's webhook. */
 export interface CallResult {
@@ -135,12 +139,29 @@ export function sarvamCalls(cfg: SarvamCallsConfig): CallProvider {
   const fetchImpl = cfg.fetch ?? fetch;
   const base = (cfg.baseUrl ?? 'https://apps.sarvam.ai').replace(/\/+$/, '');
   const e = encodeURIComponent;
+  const campaignUrl = (id: string) => `${base}/api/scheduling/v1/orgs/${e(cfg.orgId)}/workspaces/${e(cfg.workspaceId)}/campaigns/${e(id)}`;
   return {
     name: 'sarvam',
+    async check() {
+      const out: ConnectionCheck[] = [];
+      for (const [kind, campaignId] of [['cart', cfg.cartCampaignId], ['feedback', cfg.feedbackCampaignId]] as const) {
+        try {
+          const res = await fetchImpl(campaignUrl(campaignId), { headers: { 'X-API-Key': cfg.apiKey, Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+          const text = await res.text();
+          if (!res.ok) { out.push({ kind, campaignId, ok: false, error: sarvamError(res.status, text) }); continue; }
+          const j = obj(JSON.parse(text));
+          const status = str(j.status);
+          out.push({ kind, campaignId, ok: status === 'active' || status === 'scheduled', status, agentVersion: j.app_version == null ? null : Number(j.app_version), endsAt: str(j.end_timestamp) });
+        } catch (err) {
+          out.push({ kind, campaignId, ok: false, error: (err as Error).message.slice(0, 200) });
+        }
+      }
+      return out;
+    },
     async start({ callId, kind, phone, variables }) {
       // The cart agent also makes the cash-on-delivery confirmation calls (call_purpose tells it which).
       const campaignId = kind === 'feedback' ? cfg.feedbackCampaignId : cfg.cartCampaignId;
-      const url = `${base}/api/scheduling/v1/orgs/${e(cfg.orgId)}/workspaces/${e(cfg.workspaceId)}/campaigns/${e(campaignId)}/cohorts/stream`;
+      const url = `${campaignUrl(campaignId)}/cohorts/stream`;
       // Sarvam takes string values only.
       const appVariables = Object.fromEntries(Object.entries(variables ?? {}).map(([k, v]) => [k, str(v)]));
       const res = await fetchImpl(url, {

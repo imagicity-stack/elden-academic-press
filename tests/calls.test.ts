@@ -461,6 +461,41 @@ describe('Sarvam (outgoing campaigns)', () => {
     expect(r).toEqual({ providerCallId: CALL_ID });
   });
 
+  it('checks the connection without calling anyone: key refused, campaign running, campaign paused', async () => {
+    const f = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.endsWith('/campaigns/Elden---Car-4ab29de8-5933')) return new Response(JSON.stringify({ status: 'scheduled', app_version: 3, end_timestamp: '2027-02-07T13:30:00Z' }), { status: 200 });
+      if (u.endsWith('/campaigns/Elden---Ord-7b9b8ed1-4ddd')) return new Response(JSON.stringify({ status: 'paused', app_version: 2 }), { status: 200 });
+      return new Response('', { status: 500 });
+    });
+    const r = await sarvamCalls({ ...cfg, fetch: f as unknown as typeof fetch }).check!();
+    expect(f.mock.calls[0][0]).toBe('https://apps.sarvam.ai/api/scheduling/v1/orgs/org-1/workspaces/ws-1/campaigns/Elden---Car-4ab29de8-5933');
+    expect(r).toEqual([
+      { kind: 'cart', campaignId: 'Elden---Car-4ab29de8-5933', ok: true, status: 'scheduled', agentVersion: 3, endsAt: '2027-02-07T13:30:00Z' },
+      { kind: 'feedback', campaignId: 'Elden---Ord-7b9b8ed1-4ddd', ok: false, status: 'paused', agentVersion: 2, endsAt: '' },
+    ]);
+    const refused = await sarvamCalls({ ...cfg, fetch: reply(401, { detail: 'Invalid API key' }) }).check!();
+    expect(refused[0]).toMatchObject({ ok: false, error: 'Sarvam 401: Invalid API key' });
+  });
+
+  it('Admin → Calls → Test Sarvam connection shows which key the site uses (never the key), and drops pasted quotes', async () => {
+    t.deps.env.SARVAM_API_KEY = '"sk_live_abcdefgh1234"';
+    t.deps.env.SARVAM_ORG_ID = 'org-1';
+    t.deps.env.SARVAM_WORKSPACE_ID = 'ws-1';
+    t.deps.env.SARVAM_CART_CAMPAIGN_ID = 'Elden---Car-4ab29de8-5933';
+    t.deps.env.SARVAM_FEEDBACK_CAMPAIGN_ID = 'Elden---Ord-7b9b8ed1-4ddd';
+    const seen: string[] = [];
+    t.deps.calls = sarvamCallsFrom(t.deps.env, (async (_u: string | URL | Request, init?: RequestInit) => {
+      seen.push(String((init?.headers as Record<string, string>)['X-API-Key']));
+      return new Response(JSON.stringify({ status: 'active', app_version: 3 }), { status: 200 });
+    }) as typeof fetch);
+    const r = await t.call('GET', '/admin/calls/connection-test', { headers: await admin() });
+    expect(r.json.key).toEqual({ length: 20, start: 'sk_', end: '1234' });
+    expect(JSON.stringify(r.json)).not.toContain('abcdefgh');
+    expect(r.json.campaigns.map((c: any) => c.ok)).toEqual([true, true]);
+    expect(seen).toEqual(['sk_live_abcdefgh1234', 'sk_live_abcdefgh1234']); // sent without the quotes
+  });
+
   it("throws with Sarvam's own message on an error", async () => {
     const start = (f: typeof fetch) => sarvamCalls({ ...cfg, fetch: f }).start({ callId: CALL_ID, kind: 'cart', phone: '+919876543210', variables: {} });
     await expect(start(reply(422, { error: { code: 'invalid_app_variables', message: 'Unknown app_variables: foo' } }))).rejects.toThrow('Sarvam 422: Unknown app_variables: foo');

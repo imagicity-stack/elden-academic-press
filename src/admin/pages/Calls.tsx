@@ -429,8 +429,49 @@ function SettingsTab() {
         <TextArea label="Call-end webhook address (for Sarvam)" readOnly rows={2}
           value={st.webhook ? `${location.origin}/api/calls/webhook/<CALLS_WEBHOOK_SECRET>` : 'Set CALLS_WEBHOOK_SECRET in Vercel first.'}
           hint="Replace <CALLS_WEBHOOK_SECRET> with the value you set in Vercel. Sarvam posts each call's result here." />
+        <ConnectionTest />
         <p className="ad-muted">The agents on Sarvam: “Elden Academic Press – Cart Recovery” and “Elden Academic Press – Order Feedback”, calling from +91 79658 60108 and +91 79658 60105 and transferring to +91 73700 02080.</p>
       </Card>
+    </div>
+  );
+}
+
+interface ConnTest {
+  connected: boolean;
+  key: { length: number; start: string; end: string } | null;
+  ids: { org: string; workspace: string; cart: string; feedback: string };
+  campaigns: { kind: string; campaignId: string; ok: boolean; status?: string; agentVersion?: number | null; endsAt?: string; error?: string }[];
+}
+
+/** Asks Sarvam, with the live site's own key, whether it's accepted and each campaign is there and running. Calls nobody. */
+function ConnectionTest() {
+  const { busy, run } = useAction();
+  const [r, setR] = useState<ConnTest | null>(null);
+  return (
+    <div className="ad-mt">
+      <Btn busy={busy === 'conn'} onClick={() => run('conn', () => adminApi<ConnTest>('/calls/connection-test')).then((x) => x && setR(x))}>Test Sarvam connection</Btn>
+      <span className="ad-muted"> Checks the key and both campaigns with Sarvam. Nobody is called.</span>
+      {r && (
+        <dl className="ad-dl ad-mt">
+          <dt>API key in use</dt>
+          <dd>{r.key ? <><code>{r.key.start}…{r.key.end}</code> ({r.key.length} characters). Compare with the key in apps.sarvam.ai → Settings → API Key.</> : <Badge tone="red">SARVAM_API_KEY not set</Badge>}</dd>
+          <dt>Org / workspace</dt><dd><code>{r.ids.org || '(not set)'}</code> / <code>{r.ids.workspace || '(not set)'}</code></dd>
+          {!r.connected && <><dt>Result</dt><dd><Badge tone="red">Not connected</Badge> one of the five SARVAM_ settings is missing in Vercel.</dd></>}
+          {r.campaigns.map((c) => (
+            <div key={c.kind}>
+              <dt>{c.kind === 'cart' ? 'Cart campaign' : 'Feedback campaign'}</dt>
+              <dd><code>{c.campaignId}</code>{' '}
+                {c.ok ? <Badge tone="green">OK: {c.status}{c.agentVersion != null ? `, agent version ${c.agentVersion}` : ''}</Badge>
+                  : c.error ? <><Badge tone="red">Refused</Badge> <span className="ad-neg">{c.error}</span>
+                    {/Sarvam 40[13]/.test(c.error) && <div className="ad-muted">Sarvam doesn’t accept this key for this org and workspace. If the key above isn’t the one in apps.sarvam.ai, the new key hasn’t reached the live site: save it for Production and redeploy. If it is the same key, it belongs to another workspace.</div>}
+                    {/Sarvam 404/.test(c.error) && <div className="ad-muted">The key works, but Sarvam can’t find this campaign in this org and workspace: check the ids.</div>}</>
+                    : <Badge tone="amber">{c.status}: resume it in Sarvam</Badge>}
+                {c.endsAt && <span className="ad-muted"> · ends {new Date(c.endsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}</span>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </div>
   );
 }
