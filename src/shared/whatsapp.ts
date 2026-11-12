@@ -142,8 +142,6 @@ export const WA_STATUS_LABEL: Record<WaStatus, string> = {
   queued: 'Waiting', sent: 'Sent', delivered: 'Delivered', read: 'Read', failed: 'Failed', skipped: 'Not sent', received: 'Received',
 };
 
-/** Reminders and announcements go out only between these hours, India time; order updates any time. */
-export const WA_DAY = { start: 9, end: 21 };
 
 /** Customers may reply freely for 24 hours after their last message; after that only a template can be sent. */
 export const WA_REPLY_WINDOW_MS = 24 * 3600_000;

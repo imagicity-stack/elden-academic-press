@@ -7,7 +7,7 @@ import { hmacHex } from '../server/lib/crypto.js';
 import { memoryCalls } from '../server/lib/callProvider.js';
 import { memoryWhatsApp, parseWebhook, verifyWhatsAppSignature, whatsappHttp, whatsappTemplatesHttp } from '../server/lib/whatsapp.js';
 import { runCalls } from '../server/services/calls.js';
-import { nextDaytime, processWhatsApp, runWhatsApp, templateComponents } from '../server/services/whatsapp.js';
+import { processWhatsApp, runWhatsApp, templateComponents } from '../server/services/whatsapp.js';
 import { WA_TEMPLATES } from '../src/shared/whatsapp.js';
 import { address, contact, setup, supabaseToken } from './helpers.js';
 
@@ -80,11 +80,6 @@ describe('the Cloud API client', () => {
     expect(verifyWhatsAppSignature(raw, 'sha256=00', 'app-secret')).toBe(false);
   });
 
-  it('waits for daytime in India', () => {
-    expect(nextDaytime(new Date('2026-11-10T11:00:00+05:30')).toISOString()).toBe(new Date('2026-11-10T11:00:00+05:30').toISOString());
-    expect(nextDaytime(new Date('2026-11-10T22:30:00+05:30')).toISOString()).toBe(new Date('2026-11-11T09:00:00+05:30').toISOString());
-    expect(nextDaytime(new Date('2026-11-11T06:00:00+05:30')).toISOString()).toBe(new Date('2026-11-11T09:00:00+05:30').toISOString());
-  });
 });
 
 /* ---------------- The site ---------------- */
@@ -189,7 +184,7 @@ describe('automatic messages', () => {
     expect(wa.sent).toEqual([]);
   });
 
-  it('cart reminder after the delay, in daytime, once; skipped once paid', async () => {
+  it('cart reminder after the delay, once; skipped once paid', async () => {
     await waSettings({ enabled: true, cart: true, cartDelayMinutes: 30 });
     await lead();
     at('2026-11-10T11:20:00+05:30');
@@ -202,14 +197,12 @@ describe('automatic messages', () => {
     expect((await runWhatsApp(t.deps)).queued).toBe(0);
   });
 
-  it('a late-night checkout is reminded the next morning', async () => {
+  it('any hour: a late-night checkout is reminded as soon as the delay has passed (24x7)', async () => {
     await waSettings({ enabled: true, cart: true, cartDelayMinutes: 30 });
-    at('2026-11-10T22:00:00+05:30');
+    at('2026-11-10T23:00:00+05:30');
     await lead();
-    at('2026-11-10T22:40:00+05:30');
-    expect(await runWhatsApp(t.deps)).toMatchObject({ queued: 1, sent: 0 });
-    at('2026-11-11T09:05:00+05:30');
-    expect((await runWhatsApp(t.deps)).sent).toBe(1);
+    at('2026-11-10T23:40:00+05:30');
+    expect(await runWhatsApp(t.deps)).toMatchObject({ queued: 1, sent: 1 });
   });
 
   it('order confirmed and shipped, only for buyers who ticked the box', async () => {
