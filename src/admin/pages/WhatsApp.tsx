@@ -177,7 +177,7 @@ function NewBooks() {
   const send = (testPhone?: string) => {
     if (!testPhone && !window.confirm(`Send this to ${audience.data?.count ?? 0} subscribers on WhatsApp? Meta charges for each marketing message.`)) return;
     run(testPhone ? 'test' : 'send', () => adminApi<{ queued: number }>('/whatsapp/new-books', { method: 'POST', body: { message, link, ...(testPhone ? { testPhone } : {}) } }))
-      .then((r) => r && alert(testPhone ? 'Test queued: it goes out now if WhatsApp is on.' : `${r.queued} messages queued. They go out between 9 am and 9 pm.`));
+      .then((r) => r && alert(testPhone ? 'Test queued: it goes out now if WhatsApp is on.' : `${r.queued} messages queued. They go out now.`));
   };
   return (
     <div className="ad-grid-2">
@@ -203,7 +203,7 @@ function NewBooks() {
 /* ---------------- Settings ---------------- */
 
 const SWITCHES: { key: 'cart' | 'orderConfirmed' | 'shipped' | 'ebookReady' | 'callFollowup'; template: (typeof WA_TEMPLATES)[number]['key']; help: string }[] = [
-  { key: 'cart', template: 'cart', help: 'Someone ticked the call/WhatsApp box at checkout and didn’t pay. Sent once, between 9 am and 9 pm.' },
+  { key: 'cart', template: 'cart', help: 'Someone ticked the call/WhatsApp box at checkout and didn’t pay. Sent once, after the delay below, at any hour.' },
   { key: 'orderConfirmed', template: 'order_confirmed', help: 'When the payment comes in (buyers who ticked the box).' },
   { key: 'shipped', template: 'shipped', help: 'When you mark a printed order Shipped with “email the customer” on.' },
   { key: 'ebookReady', template: 'ebook_ready', help: 'Cash on delivery: when the books are delivered and the free e-book unlocks.' },

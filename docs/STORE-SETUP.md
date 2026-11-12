@@ -358,13 +358,13 @@ The site sends WhatsApp messages from the business number **+1 555-747-5125** ("
 
 | Message (template) | When | Category |
 |---|---|---|
-| Cart reminder (`elden_cart_reminder`) | A checkout with the tick wasn't paid: once, after the set delay (default 30 minutes), between 9 am and 9 pm | Marketing |
+| Cart reminder (`elden_cart_reminder`) | A checkout with the tick wasn't paid: once, after the set delay (default 30 minutes), at any hour | Marketing |
 | Order confirmed (`elden_order_confirmed`) | The payment comes in | Utility |
 | Order shipped (`elden_order_shipped`) | You mark it Shipped with "email the customer" on (with courier and tracking) | Utility |
 | Free e-book ready (`elden_ebook_ready`) | Cash on delivery: delivered, and the free e-book unlocks. Tells them to sign in with Google using the email they ordered with, with a *Get my e-book* button to the Library | Utility |
 | After a call (`elden_call_followup`) | A Sarvam voice call ended: thank-you and the link (finish your order, with the coupon if the agent gave one; or the order, or the new books); not after "don't call me", "not interested" or a wrong number | Utility |
 | Missed our call (`elden_missed_call`) | The last try of a Sarvam call went unanswered: "we tried to call you", with their link | Utility |
-| New books (`elden_new_books`) | You send it from *Admin → WhatsApp → New books* (test to one number first); once per person, between 9 am and 9 pm | Marketing |
+| New books (`elden_new_books`) | You send it from *Admin → WhatsApp → New books* (test to one number first); once per person, sent at once, at any hour | Marketing |
 
 Each message is a switch in *Admin → WhatsApp → Settings*, under a master switch; everything starts **off**. Within 24 hours of a customer's own message you can reply freely from the inbox; after that WhatsApp only allows templates. *Sent* lists every message with its status (sent, delivered, read, failed with Meta's reason). The inbox links to that number's calls, and each call links to its WhatsApp chat.
 

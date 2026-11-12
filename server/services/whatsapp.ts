@@ -15,7 +15,7 @@ import { inr } from '../lib/format.js';
 import { parseWebhook, type WaComponent, type WaIncoming, type WaStatusUpdate, type WaTemplateInfo } from '../lib/whatsapp.js';
 import { callableNumber } from '../../src/shared/calls.js';
 import {
-  DEFAULT_WA_SETTINGS, WA_DAY, WA_REPLY_WINDOW_MS, WA_START, WA_STOP, WA_TEMPLATES, type WaKind, type WaStatus, type WaTemplateDef, type WaTemplateKey, type WhatsAppSettings,
+  DEFAULT_WA_SETTINGS, WA_REPLY_WINDOW_MS, WA_START, WA_STOP, WA_TEMPLATES, type WaKind, type WaStatus, type WaTemplateDef, type WaTemplateKey, type WhatsAppSettings,
 } from '../../src/shared/whatsapp.js';
 import { orderLink, type Order } from './orders.js';
 import { libraryPath } from './ebooks.js';
@@ -38,17 +38,6 @@ export async function saveWhatsAppSettings(db: Q, next: WhatsAppSettings, by: st
 export async function isOptedOut(db: Q, phone: string) {
   const [row] = await db.select({ phone: whatsappOptOuts.phone }).from(whatsappOptOuts).where(eq(whatsappOptOuts.phone, phone));
   return Boolean(row);
-}
-
-/* ---------------- Time of day ---------------- */
-
-const IST = 5.5 * 3600_000;
-/** Now if it's daytime in India (WA_DAY), else the next morning's start. */
-export function nextDaytime(t: Date): Date {
-  const local = new Date(t.getTime() + IST);
-  const h = local.getUTCHours();
-  if (h >= WA_DAY.start && h < WA_DAY.end) return t;
-  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + (h >= WA_DAY.end ? 1 : 0), WA_DAY.start) - IST);
 }
 
 /* ---------------- Queueing ---------------- */
@@ -138,7 +127,7 @@ export async function planCartMessages(deps: Deps, s: WhatsAppSettings) {
     if (paid) continue;
     const items = join(lead.items.map((i) => `${i.title}${i.quantity > 1 ? ` x${i.quantity}` : ''}`));
     const link = `${deps.env.SITE_URL}/checkout?resume=${lead.resumeToken}`;
-    if (await enqueue(deps, s, { kind: 'cart', phone: lead.phone, name: lead.name, leadId: lead.id, params: [firstName(lead.name) || 'there', items, inr(lead.total)], link, dueAt: nextDaytime(t) })) n++;
+    if (await enqueue(deps, s, { kind: 'cart', phone: lead.phone, name: lead.name, leadId: lead.id, params: [firstName(lead.name) || 'there', items, inr(lead.total)], link, dueAt: t })) n++;
   }
   return n;
 }
@@ -246,7 +235,8 @@ export async function queueNewBooks(deps: Deps, input: { message: string; link: 
   const s = await getWhatsAppSettings(deps.db);
   const broadcastId = `${input.testPhone ? 'test' : 'nb'}-${deps.now().toISOString().slice(0, 10)}-${randomBytes(4).toString('hex')}`;
   const to = input.testPhone ? [{ phone: input.testPhone, name: '' }] : await newBooksAudience(deps.db);
-  const dueAt = input.testPhone ? deps.now() : nextDaytime(deps.now());
+  // Sent straight away, at any hour.
+  const dueAt = deps.now();
   let queued = 0;
   for (const r of to) {
     if (await enqueue(deps, s, { kind: 'new_books', phone: r.phone, name: r.name, broadcastId, dueAt, createdBy: by, params: [firstName(r.name) || 'there', input.message], link: input.link })) queued++;
