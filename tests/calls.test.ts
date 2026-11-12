@@ -215,6 +215,40 @@ describe('call results', () => {
     expect(row).toMatchObject({ status: 'done', outcome: 'will_order', durationSeconds: 43, providerCallId: 'test-1', transcript: 'agent: Namaste Asha ji\nuser: Haan, bataiye' });
   });
 
+  it('a call whose webhook never came is completed from Sarvam: by the 10-minute job, or "Fetch result from Sarvam"', async () => {
+    const c = await dialled();
+    let ready = false;
+    provider.lookup = async ({ callId }) => (ready ? {
+      user_identifier: callId, connectivity_status: 'connected', duration: 50, recording_url: 'https://rec/2.mp3',
+      final_agent_variables: { call_outcome: 'callback', callback_time: 'evening' }, interaction_transcript: [{ role: 'agent', en_text: 'Namaste' }],
+    } : null);
+    const h = await admin();
+    // Too soon, then no result yet: still calling.
+    expect((await runCalls(t.deps)).fetched).toBe(0);
+    at('2026-11-10T12:10:00+05:30');
+    expect((await runCalls(t.deps)).fetched).toBe(0);
+    let r = await t.call('POST', `/admin/calls/${c.id}/fetch-result`, { headers: h });
+    expect(r.status).toBe(409);
+    expect(r.json.error).toContain('no final result');
+    expect((await allCalls())[0].status).toBe('dialling');
+    // Sarvam has it now: the button records it.
+    ready = true;
+    r = await t.call('POST', `/admin/calls/${c.id}/fetch-result`, { headers: h });
+    expect(r.status).toBe(200);
+    expect(r.json.call).toMatchObject({ outcome: 'callback', transcript: 'agent: Namaste', recordingUrl: 'https://rec/2.mp3', durationSeconds: 50 });
+    // The webhook arriving late changes nothing.
+    await webhook({ metadata: { call_id: c.id }, status: 'completed', variables: { call_outcome: 'callback' } });
+    expect((await allCalls()).filter((x) => x.outcome === 'callback')).toHaveLength(1);
+  });
+
+  it('the 10-minute job fetches a stuck call by itself', async () => {
+    const c = await dialled();
+    provider.lookup = async ({ callId }) => ({ user_identifier: callId, connectivity_status: 'connected', duration: 30, final_agent_variables: { call_outcome: 'not_interested' } });
+    at('2026-11-10T12:15:00+05:30');
+    expect((await runCalls(t.deps)).fetched).toBe(1);
+    expect((await allCalls()).find((x) => x.id === c.id)).toMatchObject({ status: 'done', outcome: 'not_interested' });
+  });
+
   it('refuses a webhook without the secret, and ignores unknown calls', async () => {
     expect((await webhook({ status: 'completed' }, 'wrong')).status).toBe(401);
     expect((await webhook({ metadata: { call_id: '00000000-0000-4000-8000-000000000000' }, status: 'completed' })).json).toEqual({ ok: true, matched: false });
@@ -431,6 +465,52 @@ describe('Admin → Calls', () => {
     expect(st.blockers).toEqual([]);
   });
 
+  it('shows when the 10-minute job last ran, and when each saved checkout joins the queue', async () => {
+    const h = await admin();
+    await settings({ enabled: true });
+    expect((await t.call('GET', '/admin/calls/settings', { headers: h })).json.status.lastCronRun).toBeNull();
+    await lead(); // left at 11:00, the default delay is 60 minutes
+    let leads = (await t.call('GET', '/admin/calls/leads', { headers: h })).json;
+    expect(leads.delayMinutes).toBe(60);
+    expect(leads.items[0]).toMatchObject({ call: null, callDueAt: new Date('2026-11-10T12:00:00+05:30').toISOString() });
+    at('2026-11-10T12:05:00+05:30');
+    await runCalls(t.deps);
+    expect((await t.call('GET', '/admin/calls/settings', { headers: h })).json.status.lastCronRun).toBe(new Date('2026-11-10T12:05:00+05:30').toISOString());
+    leads = (await t.call('GET', '/admin/calls/leads', { headers: h })).json;
+    expect(leads.items[0]).toMatchObject({ call: { status: 'dialling' }, callDueAt: null });
+  });
+
+  it('a test call goes out at once (calls off, outside hours), is recorded, and nothing is acted on', async () => {
+    const h = await admin();
+    at('2026-11-10T21:30:00+05:30'); // outside the hours, and all calls are paused
+    let r = await t.call('POST', '/admin/calls/test', { headers: h, body: { phone: '98765 43210', name: 'Asha Kumari', kind: 'cod_confirm' } });
+    expect(r.status).toBe(200);
+    expect(provider.started).toHaveLength(1);
+    expect(provider.started[0]).toMatchObject({ kind: 'cod_confirm', phone: '+919876543210', variables: { call_purpose: 'cod_confirmation', customer_name: 'Asha', order_number: '1042' } });
+    const id = r.json.call.id;
+    expect(r.json.call).toMatchObject({ status: 'dialling', createdBy: 'test:owner@eldenap.in', providerCallId: 'test-1' });
+    // "Don't call me" on a test call: recorded, but the number isn't added to the list.
+    await webhook({ metadata: { call_id: id }, status: 'completed', duration: 40, variables: { call_outcome: 'do_not_call' }, transcript: 'agent: Namaste' });
+    const [row] = await allCalls();
+    expect(row).toMatchObject({ status: 'done', outcome: 'do_not_call', transcript: 'agent: Namaste' });
+    expect((await t.call('GET', '/admin/calls/do-not-call', { headers: h })).json.items).toEqual([]);
+    expect(t.mailer.sent).toHaveLength(0);
+    // Not counted in the numbers.
+    const stats = (await t.call('GET', '/admin/calls/stats?days=30', { headers: h })).json;
+    expect(stats.cod.total).toBe(0);
+    // Unanswered: not retried.
+    r = await t.call('POST', '/admin/calls/test', { headers: h, body: { phone: '98765 43210', kind: 'cart' } });
+    expect(provider.started[1].variables).toMatchObject({ call_purpose: 'cart_recovery', customer_name: 'Test' });
+    await webhook({ metadata: { call_id: r.json.call.id }, status: 'no-answer' });
+    expect((await allCalls()).find((x) => x.id === r.json.call.id)?.status).toBe('no_answer');
+    // Sarvam refusing: shown at once.
+    provider.fail = true;
+    r = await t.call('POST', '/admin/calls/test', { headers: h, body: { phone: '98765 43210', kind: 'feedback' } });
+    expect(r.status).toBe(502);
+    expect(r.json.error).toContain('provider down');
+    expect((await t.call('POST', '/admin/calls/test', { headers: h, body: { phone: '12345', kind: 'cart' } })).status).toBe(400);
+  });
+
   it('"Call now" dials the call clicked, not an older one waiting', async () => {
     const h = await admin();
     await lead();
@@ -511,6 +591,36 @@ describe('Sarvam (outgoing campaigns)', () => {
     expect(JSON.stringify(r.json)).not.toContain('abcdefgh');
     expect(r.json.campaigns.map((c: any) => c.ok)).toEqual([true, true]);
     expect(seen).toEqual(['sk_live_abcdefgh1234', 'sk_live_abcdefgh1234']); // sent without the quotes
+  });
+
+  it("looks a call's result up in Sarvam's analytics by our call id (when the webhook didn't arrive)", async () => {
+    const urls: string[] = [];
+    const f = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      urls.push(u);
+      const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
+      if (u.endsWith('/campaigns/Elden---Car-4ab29de8-5933')) return json({ app_id: 'Elden-Acade-e49b18a7-09b3', status: 'active' });
+      if (u.includes('/attempts?')) return json({ items: [{ attempt_id: 'att-1', interaction_id: '20261112/abc', connectivity_status: 'connected', next_action_status: 'UNKNOWN', duration_in_seconds: 61.2, campaign_id: 'Elden---Car-4ab29de8-5933', cohort_id: 'co-1' }] });
+      if (u.includes('/interactions?')) return json({ items: [{ interaction_id: '20261112/abc', duration_in_seconds: 61.2, audio_url: 'https://rec/1.mp3', agent_variables: { call_outcome: 'will_order', wants_link: true }, translate_transcript: [{ role: 'agent', text: 'Namaste' }, { role: 'user', text: 'Haan' }] }] });
+      return new Response('', { status: 404 });
+    });
+    const p = sarvamCalls({ ...cfg, fetch: f as unknown as typeof fetch });
+    const r = await p.lookup!({ callId: CALL_ID, kind: 'cod_confirm', since: new Date('2026-11-12T11:00:00Z') });
+    const attemptsUrl = new URL(urls.find((u) => u.includes('/attempts?'))!);
+    expect(attemptsUrl.pathname).toBe('/api/analytics/v1/org-1/ws-1/Elden-Acade-e49b18a7-09b3/attempts');
+    expect(JSON.parse(attemptsUrl.searchParams.get('filter_conditions')!)).toEqual([{ field: 'user_identifier', operator: 'equals', value: CALL_ID }]);
+    expect(attemptsUrl.searchParams.get('start_datetime')).toBe('2026-11-12T10:45:00+00:00');
+    expect(new URL(urls.find((u) => u.includes('/interactions?'))!).searchParams.get('include_transcript')).toBe('true');
+    expect(r).toMatchObject({ user_identifier: CALL_ID, connectivity_status: 'connected', duration: 61.2, recording_url: 'https://rec/1.mp3', final_agent_variables: { call_outcome: 'will_order' }, interaction_transcript: [{ role: 'agent', en_text: 'Namaste' }, { role: 'user', en_text: 'Haan' }] });
+    // What the site makes of it.
+    expect(callResultFrom(r)).toMatchObject({ callId: CALL_ID, status: 'answered', durationSeconds: 61, transcript: 'agent: Namaste\nuser: Haan', recordingUrl: 'https://rec/1.mp3', variables: { call_outcome: 'will_order' } });
+
+    // Nothing yet, or Sarvam will try again: no result. Not answered and final: a result.
+    const attempts = (items: unknown[]) => vi.fn(async (url: string | URL | Request) => new Response(JSON.stringify(String(url).includes('/attempts?') ? { items } : { app_id: 'agent-1' }), { status: 200 }));
+    const look = (items: unknown[]) => sarvamCalls({ ...cfg, fetch: attempts(items) as unknown as typeof fetch }).lookup!({ callId: CALL_ID, kind: 'cart', since: new Date() });
+    expect(await look([])).toBeNull();
+    expect(await look([{ connectivity_status: 'no_answer', next_action_status: 'retry' }])).toBeNull();
+    expect(await look([{ connectivity_status: 'no_answer', next_action_status: 'UNKNOWN' }])).toMatchObject({ connectivity_status: 'no_answer' });
   });
 
   it("throws with Sarvam's own message on an error", async () => {

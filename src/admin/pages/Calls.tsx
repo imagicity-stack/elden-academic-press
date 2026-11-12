@@ -1,4 +1,4 @@
-// Admin → Calls: the AI voice agents (cart recovery and order feedback). Switch them on and off,
+// Admin → Calls: the AI voice agents (cart recovery, COD confirmation and order feedback). Switch them on and off,
 // see every call (who, when, how it went, the transcript), the queue, saved checkouts, the
 // do-not-call list, the settings and the numbers.
 import { useEffect, useState, type ReactNode } from 'react';
@@ -15,7 +15,7 @@ const OUTCOME_TONE: Record<string, Tone> = { enquiry: 'blue', will_order: 'green
 interface SettingsData {
   settings: CallSettings;
   books: { id: string; title: string }[];
-  status: { connected: boolean; provider: string | null; webhook: boolean; inHours: boolean; nextWindow: string; blockers: string[]; overdue: { count: number; oldest: string | null } };
+  status: { connected: boolean; provider: string | null; webhook: boolean; inHours: boolean; nextWindow: string; blockers: string[]; overdue: { count: number; oldest: string | null }; lastCronRun: string | null };
 }
 interface Row {
   id: string; kind: CallKind; status: CallStatus; phone: string; name: string; outcome: string; dueAt: string; attempts: number;
@@ -32,7 +32,7 @@ export default function CallsAdmin() {
   const { tab = '' } = useParams();
   if (/^[0-9a-f-]{36}$/.test(tab)) return <CallDetail id={tab} />;
   return (
-    <Page title="Calls" subtitle="AI voice agents on Sarvam: cart recovery and order feedback.">
+    <Page title="Calls" subtitle="AI voice agents on Sarvam: cart recovery, cash-on-delivery confirmation and order feedback.">
       <nav className="ad-tabs ad-mt">
         {TABS.map(([k, l]) => <Link key={k} to={`/admin/calls${k ? `/${k}` : ''}`} className={'ad-tab' + (tab === k ? ' is-on' : '')}>{l}</Link>)}
       </nav>
@@ -70,6 +70,17 @@ function Overview() {
             <span className="ad-muted">Queued calls wait and are dialled once this is fixed.</span></div>
         </div>
       )}
+      {(() => {
+        const ago = st.lastCronRun ? (Date.now() - new Date(st.lastCronRun).getTime()) / 60_000 : null;
+        const ok = ago !== null && ago < 25;
+        return (
+          <div className={`ad-alert ${ok ? 'ad-alert--green' : 'ad-alert--red'}`}>
+            <div><b>Scheduled job (every 10 minutes): {ago === null ? 'has never run' : `last ran ${when(st.lastCronRun)}`}.</b>{' '}
+              {ok ? 'It queues checkouts once their delay has passed and dials the queue.'
+                : 'Without it, left checkouts never reach the queue and queued calls are never dialled (only “Call now” works). In Vercel → the project → Settings → Cron Jobs, check /api/cron/calls is listed and enabled, and that CRON_SECRET is set for Production, then redeploy.'}</div>
+          </div>
+        );
+      })()}
       {st.overdue.count > 0 && st.blockers.every((b) => b.startsWith('It’s outside')) && st.inHours && (
         <div className="ad-alert ad-alert--amber">
           <div><b>{st.overdue.count} queued call{st.overdue.count === 1 ? ' is' : 's are'} overdue</b> (the oldest was due {when(st.overdue.oldest)}). The job that dials them every 10 minutes isn’t running: in Vercel → the project → Settings → Cron Jobs, check that <code>/api/cron/calls</code> runs, and that CRON_SECRET is set (then redeploy). “Call now” still works meanwhile.</div>
@@ -80,6 +91,7 @@ function Overview() {
           <b>Outgoing calls aren't connected yet.</b> Customers who ring our numbers already reach the agents{st.webhook ? ' and show up here' : ''}. Checkouts are being saved and our calls queued, but the website can't place them until the Sarvam calling connection is added (Settings tab has the details).
         </div>
       )}
+      <TestCall />
       <Card title="On and off">
         <div className="ad-stack-sm">
           <div className="ad-row"><Toggle checked={s.enabled} label="All calls" onChange={(v) => save({ enabled: v }, v ? 'Calls switched on' : 'All calls paused')} />
@@ -210,7 +222,7 @@ function CallList({ queue = false }: { queue?: boolean }) {
                 <tr key={r.id}>
                   <td>{when(queue ? r.dueAt : r.endedAt ?? r.startedAt ?? r.createdAt)}</td>
                   <td><Link to={`/admin/calls/${r.id}`} className="ad-strong">{r.name || 'Unknown'}</Link><br /><span className="ad-muted">{r.phone}</span></td>
-                  <td>{kindLabel(r.kind)}{r.createdBy === INBOUND && <><br /><Badge tone="blue">Incoming</Badge></>}</td>
+                  <td>{kindLabel(r.kind)}{r.createdBy === INBOUND && <><br /><Badge tone="blue">Incoming</Badge></>}{r.createdBy?.startsWith('test:') && <><br /><Badge tone="navy">Test</Badge></>}</td>
                   <td><Status s={r.status} />{r.issueOpen && <> <Badge tone="red">Problem</Badge></>}{r.note && <><br /><small className="ad-muted">{r.note}</small></>}</td>
                   <td><Outcome o={r.outcome} />{r.rating && <> <small>{r.rating}★</small></>}</td>
                   <td className="ad-num">{secs(r.durationSeconds)}</td>
@@ -253,12 +265,13 @@ function CallDetail({ id }: { id: string }) {
   const c = data.call;
   const act = (action: string, ok: string) => run(action, () => adminApi(`/calls/${id}/${action}`, { method: 'POST' }), ok).then((r) => r && reload());
   return (
-    <Page title={c.name || c.phone} subtitle={<>{kindLabel(c.kind)}{c.createdBy === INBOUND && ' · Incoming call'} · {c.phone}{data.doNotCall && <> · <Badge tone="red">Do not call</Badge></>}</>} back={{ to: '/admin/calls/log', label: 'Calls' }}
+    <Page title={c.name || c.phone} subtitle={<>{kindLabel(c.kind)}{c.createdBy === INBOUND && ' · Incoming call'}{c.createdBy?.startsWith('test:') && ` · Test call by ${c.createdBy.slice(5)} (nothing is acted on)`} · {c.phone}{data.doNotCall && <> · <Badge tone="red">Do not call</Badge></>}</>} back={{ to: '/admin/calls/log', label: 'Calls' }}
       actions={<>
         <Link className="ad-btn ad-btn--ghost" to={`/admin/whatsapp?phone=${encodeURIComponent(c.phone)}`}>WhatsApp chat</Link>
         {c.issueOpen && <Btn kind="primary" busy={busy === 'resolve'} onClick={() => act('resolve', 'Marked as handled')}>Problem handled</Btn>}
         {['queued', 'no_answer', 'failed', 'skipped'].includes(c.status) && <Btn busy={busy === 'call-now'} onClick={() => act('call-now', 'Dialling now')}>Call now</Btn>}
         {c.status === 'queued' && <Btn busy={busy === 'skip'} onClick={() => act('skip', 'Skipped')}>Skip</Btn>}
+        {c.status === 'dialling' && c.createdBy !== INBOUND && <Btn busy={busy === 'fetch-result'} onClick={() => act('fetch-result', 'Result fetched from Sarvam')}>Fetch result from Sarvam</Btn>}
       </>}>
       <div className="ad-grid-2 ad-grid-2--wide">
         <div className="ad-stack">
@@ -313,17 +326,20 @@ function CallDetail({ id }: { id: string }) {
 /* ---------------- Checkouts, do-not-call ---------------- */
 
 function Leads() {
-  const { data, error, reload } = useAdmin<{ items: { id: string; name: string; phone: string; email: string; total: number; items: { title: string }[]; paid: boolean; updatedAt: string }[] }>('/calls/leads');
+  const { data, error, reload } = useAdmin<{ delayMinutes: number; items: { id: string; name: string; phone: string; email: string; total: number; items: { title: string }[]; paid: boolean; consent: boolean; updatedAt: string; call: { status: CallStatus; dueAt: string } | null; callDueAt: string | null }[] }>('/calls/leads');
   if (error) return <ErrorBox error={error} retry={reload} />;
   if (!data) return <Loading />;
   return (
     <Card flush title="Checkouts saved in the last 30 days" actions={<span className="ad-muted">Only people who ticked “you may call or WhatsApp me” are saved.</span>}>
       {!data.items.length ? <Empty title="No saved checkouts yet." /> : (
         <div className="ad-table-wrap"><table className="ad-table">
-          <thead><tr><th>Last change</th><th>Customer</th><th>Books</th><th>Total</th><th>Paid?</th></tr></thead>
+          <thead><tr><th>Last change</th><th>Customer</th><th>Books</th><th>Total</th><th>Paid?</th><th>Cart call</th></tr></thead>
           <tbody>{data.items.map((l) => (
             <tr key={l.id}><td>{when(l.updatedAt)}</td><td><b>{l.name || '—'}</b><br /><span className="ad-muted">{l.phone} · {l.email || 'no email'}</span></td>
-              <td>{l.items.map((i) => i.title).join(', ')}</td><td className="ad-num">{inr(l.total)}</td><td>{l.paid ? <Badge tone="green">Paid</Badge> : <Badge tone="amber">Not yet</Badge>}</td></tr>
+              <td>{l.items.map((i) => i.title).join(', ')}</td><td className="ad-num">{inr(l.total)}</td><td>{l.paid ? <Badge tone="green">Paid</Badge> : <Badge tone="amber">Not yet</Badge>}</td>
+                <td>{l.call ? <><Status s={l.call.status} />{l.call.status === 'queued' && <><br /><small className="ad-muted">{when(l.call.dueAt)}</small></>}</>
+                  : l.callDueAt ? <small className="ad-muted">Joins the queue {when(l.callDueAt)}</small>
+                    : <span className="ad-muted">{l.paid ? 'Not needed' : l.consent ? '—' : 'Unticked the box'}</span>}</td></tr>
           ))}</tbody>
         </table></div>
       )}
@@ -472,5 +488,43 @@ function ConnectionTest() {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Test call: an agent calls your number now with example details, whatever the switches and
+ * calling hours, and the result shows on the call page like a real one. Nothing is acted on.
+ */
+function TestCall() {
+  const navigate = useNavigate();
+  const { busy, run } = useAction();
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('elden-test-call') ?? '{}') as { phone?: string; name?: string }; } catch { return {}; } })();
+  const [phone, setPhone] = useState(saved.phone ?? '');
+  const [name, setName] = useState(saved.name ?? '');
+  const [kind, setKind] = useState<CallKind>('cart');
+  const go = () => {
+    try { localStorage.setItem('elden-test-call', JSON.stringify({ phone, name })); } catch { /* ignore */ }
+    run('test-call', () => adminApi<{ call: { id: string } }>('/calls/test', { body: { phone, name, kind } }), 'Calling you now')
+      .then((r) => r && navigate(`/admin/calls/${r.call.id}`));
+  };
+  const help: Record<CallKind, string> = {
+    cart: 'As if you left checkout with 2 printed copies of a book (and the coupon, if set).',
+    cod_confirm: 'As if you placed cash-on-delivery order #1042: say yes, or no to hear the non-refundable advance line.',
+    feedback: 'As if you bought a book a few days ago: the agent asks how it went.',
+  };
+  return (
+    <Card title="Test call">
+      <p className="ad-muted">An agent calls your number right now with example details, even outside calling hours or with calls switched off, so you can hear it and check that the result comes back. Nothing is acted on: no emails, WhatsApps, orders or do-not-call changes, and it isn’t counted in the numbers below.</p>
+      <div className="ad-row ad-mt">
+        <TextField label="Your mobile number" placeholder="10-digit mobile" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <TextField label="Your first name (the agent uses it)" placeholder="Asha" value={name} onChange={(e) => setName(e.target.value)} />
+        <SelectField label="Which call" value={kind} onChange={(e) => setKind(e.target.value as CallKind)}>
+          {CALL_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+        </SelectField>
+      </div>
+      <p className="ad-muted">{help[kind]}</p>
+      <Btn kind="primary" busy={busy === 'test-call'} disabled={phone.replace(/\D/g, '').length < 10} onClick={go}>Call me now</Btn>
+      <span className="ad-muted"> Opens the call’s page: it shows <b>Calling</b>, then the result and transcript a minute or two after you hang up (use “Fetch result from Sarvam” there if it stays on Calling).</span>
+    </Card>
   );
 }
