@@ -84,6 +84,10 @@ export function userData(u: MetaUser): Record<string, unknown> {
   return out;
 }
 
+/** The user_data keys Meta can match a person on: an event needs at least one, or it can't be used. */
+export const MATCH_KEYS = ['em', 'ph', 'fn', 'ln', 'ct', 'st', 'zp', 'db', 'ge'] as const;
+export const canMatch = (u: MetaUser) => MATCH_KEYS.some((k) => k in userData(u));
+
 export function toPayload(e: MetaEvent) {
   return {
     event_name: e.name,
