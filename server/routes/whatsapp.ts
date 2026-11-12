@@ -10,10 +10,10 @@ import { body, HttpError, notFound } from '../lib/http.js';
 import { verifyWhatsAppSignature } from '../lib/whatsapp.js';
 import { audit } from './admin/auth.js';
 import {
-  canReply, getWhatsAppSettings, needsUpdate, syncTemplates, isOptedOut, lastIncoming, newBooksAudience, processWhatsApp, queueNewBooks, recordWebhook, saveWhatsAppSettings, sendReply, whatsappStats,
+  canReply, getWhatsAppSettings, needsUpdate, syncTemplates, isOptedOut, lastIncoming, newBooksAudience, processWhatsApp, queueNewBooks, recordWebhook, retryFailed, saveWhatsAppSettings, sendReply, testTemplate, whatsappStats,
 } from '../services/whatsapp.js';
 import { callableNumber } from '../../src/shared/calls.js';
-import { DEFAULT_WA_SETTINGS, WA_REPLY_WINDOW_MS, WA_TEMPLATES, type WhatsAppSettings } from '../../src/shared/whatsapp.js';
+import { DEFAULT_WA_SETTINGS, WA_REPLY_WINDOW_MS, WA_TEMPLATES, type WaTemplateKey, type WhatsAppSettings } from '../../src/shared/whatsapp.js';
 
 /* ---------------- Meta's webhook ---------------- */
 
@@ -91,10 +91,11 @@ adminWhatsApp.get('/templates', async (c) => {
     items: WA_TEMPLATES.map((t) => {
       const name = s.templates[t.key];
       // Only the language the site sends counts: en and en_US are different templates to Meta.
-      const m = found.find((x) => x.name === name && x.language === s.language);
-      const others = found.filter((x) => x.name === name && x.language !== s.language).map((x) => ({ language: x.language, status: x.status }));
+      const lang = s.languages[t.key] || s.language;
+      const m = found.find((x) => x.name === name && x.language === lang);
+      const others = found.filter((x) => x.name === name && x.language !== lang).map((x) => ({ language: x.language, status: x.status }));
       return {
-        key: t.key, name, status: m?.status ?? 'MISSING', language: s.language, otherLanguages: others, category: m?.category ?? t.category, rejectedReason: m?.rejectedReason ?? '',
+        key: t.key, name, status: m?.status ?? 'MISSING', language: lang, otherLanguages: others, category: m?.category ?? t.category, rejectedReason: m?.rejectedReason ?? '',
         // Meta's copy differs from the site's current design (Update all templates fixes it).
         outdated: Boolean(m && needsUpdate(t, m, deps.env.SITE_URL)),
       };
@@ -128,8 +129,18 @@ adminWhatsApp.get('/diagnose', async (c) => {
   try {
     const all = await t.list();
     const ours = WA_TEMPLATES.map((x) => s.templates[x.key]);
-    const approved = all.filter((x) => ours.includes(x.name) && x.language === s.language && x.status === 'APPROVED').map((x) => x.name);
-    steps.push({ label: `Templates in account ${wabaId}`, ok: approved.length === ours.length, detail: `${approved.length} of ${ours.length} approved in ${s.language}. All templates there: ${all.map((x) => `${x.name} [${x.language}, ${x.status.toLowerCase()}]`).join(', ') || 'none'}` });
+    const lang = (key: WaTemplateKey) => s.languages[key] || s.language;
+    const approved = WA_TEMPLATES.filter((x) => all.some((y) => y.name === s.templates[x.key] && y.language === lang(x.key) && y.status === 'APPROVED'));
+    steps.push({ label: `Templates in account ${wabaId}`, ok: approved.length === ours.length, detail: `${approved.length} of ${ours.length} approved in the language the site sends. All templates there: ${all.map((x) => `${x.name} [${x.language}, ${x.status.toLowerCase()}]`).join(', ') || 'none'}` });
+    for (const x of WA_TEMPLATES) {
+      const name = s.templates[x.key];
+      const there = all.filter((y) => y.name === name);
+      const ok = there.some((y) => y.language === lang(x.key) && y.status === 'APPROVED');
+      steps.push({
+        label: `${x.label}: ${name}`, ok,
+        detail: `The site sends it in "${lang(x.key)}". In Meta: ${there.map((y) => `${y.language} ${y.status.toLowerCase()}${y.rejectedReason ? ` (${y.rejectedReason})` : ''}`).join(', ') || 'not there'}.${ok ? ' Use "Test" under Templates to send it to your own number.' : ''}`,
+      });
+    }
   } catch (e) { steps.push({ label: `Templates in account ${wabaId}`, ok: false, detail: (e as Error).message }); }
   return c.json({ steps });
 });
@@ -145,6 +156,29 @@ adminWhatsApp.post('/templates/sync', async (c) => {
   try { results = await syncTemplates(deps); } catch (e) { throw new HttpError(502, (e as Error).message); }
   await audit(c, 'whatsapp.templates_sync', 'whatsapp', null, { results });
   return c.json({ results });
+});
+
+/** Send one template now, with its sample values, to a number (yours), and show what Meta answered. */
+adminWhatsApp.post('/templates/test', async (c) => {
+  const deps = c.get('deps');
+  const input = await body(c, z.object({ key: z.enum(WA_TEMPLATES.map((t) => t.key) as [WaTemplateKey, ...WaTemplateKey[]]), phone: z.string().max(20) }));
+  if (!deps.whatsapp) throw new HttpError(409, 'Set WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID in Vercel first.');
+  const phone = callableNumber(input.phone);
+  if (!phone) throw new HttpError(400, 'Enter a 10-digit Indian mobile number.');
+  const r = await testTemplate(deps, input.key, phone);
+  await audit(c, 'whatsapp.template_test', 'whatsapp', r.name, { ok: r.ok, language: r.language });
+  return c.json(r);
+});
+
+/** Failed messages from the last 3 days go back in the queue and are sent now (after fixing the cause). */
+adminWhatsApp.post('/messages/retry-failed', async (c) => {
+  const deps = c.get('deps');
+  if (!deps.whatsapp) throw new HttpError(409, 'WhatsApp is not connected yet.');
+  const s = await getWhatsAppSettings(deps.db);
+  if (!s.enabled) throw new HttpError(409, 'Switch WhatsApp on first.');
+  const n = await retryFailed(deps);
+  await audit(c, 'whatsapp.retry_failed', 'whatsapp', null, { n });
+  return c.json({ requeued: n });
 });
 
 /** Conversations, newest first: each number's last message and how many of theirs are unread. */

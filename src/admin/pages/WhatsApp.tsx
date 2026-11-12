@@ -132,9 +132,13 @@ function Sent() {
   const [status, setStatus] = useState('');
   const qs = new URLSearchParams({ ...(kind ? { kind } : {}), ...(status ? { status } : {}) });
   const { data, error, reload } = useAdmin<{ items: SentRow[] }>(`/whatsapp/messages?${qs}`);
+  const { busy, run } = useAction();
+  const retry = () => run('retry', () => adminApi<{ requeued: number }>('/whatsapp/messages/retry-failed', { method: 'POST' }))
+    .then((r) => { if (r) { alert(r.requeued ? `${r.requeued} failed message${r.requeued === 1 ? '' : 's'} sent again. Check their status below.` : 'No failed messages from the last 3 days.'); reload(); } });
   return (
     <Card flush>
       <div className="ad-toolbar ad-pad">
+        <Btn size="sm" busy={busy === 'retry'} onClick={retry}>Retry failed (last 3 days)</Btn>
         <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Message">
           <option value="">All messages</option>{WA_TEMPLATES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}<option value="reply">Replies</option>
         </select>
@@ -274,6 +278,13 @@ function Templates({ enabled }: { enabled: boolean }) {
   const { busy, run } = useAction();
   const [results, setResults] = useState<{ name: string; result: string }[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [testPhone, setTestPhone] = useState(() => { try { return localStorage.getItem('elden-wa-test-phone') ?? ''; } catch { return ''; } });
+  const [tests, setTests] = useState<Record<string, { ok: boolean; language: string; detail: string }>>({});
+  const test = (key: string) => {
+    try { localStorage.setItem('elden-wa-test-phone', testPhone); } catch { /* ignore */ }
+    run(`test-${key}`, () => adminApi<{ ok: boolean; language: string; detail: string }>('/whatsapp/templates/test', { method: 'POST', body: { key, phone: testPhone } }))
+      .then((r) => { if (r) { setTests((x) => ({ ...x, [key]: r })); reload(); } });
+  };
   const sync = () => {
     if (!window.confirm('Update all templates in Meta to the current designs? Meta reviews each changed one again (usually minutes, sometimes a day); messages using it wait until it is approved.')) return;
     run('sync', () => adminApi<{ results: { name: string; result: string }[] }>('/whatsapp/templates/sync', { method: 'POST' })).then((r) => { if (r) { setResults(r.results); reload(); } });
@@ -296,8 +307,12 @@ function Templates({ enabled }: { enabled: boolean }) {
                 <div className="ad-warn ad-mb"><b>Approved in {langs.join(', ')}, but the site sends “{data.language}”.</b> Meta treats each language as a separate template. Set <b>Language code</b> below to {langs[0]} and save, or create them in {data.language}.</div>
               ) : null;
             })()}
+            <div className="ad-row ad-mb">
+              <TextField label="Your WhatsApp number, for tests" placeholder="10-digit mobile" value={testPhone} onChange={(e) => setTestPhone(e.target.value)}
+                hint="“Test” sends that template now, with example values, and shows exactly what Meta answered." />
+            </div>
             <table className="ad-table">
-              <thead><tr><th>Template</th><th>Meta ({data.language})</th></tr></thead>
+              <thead><tr><th>Template</th><th>Meta (language sent)</th><th /></tr></thead>
               <tbody>{data.items.map((t) => (
                 <tr key={t.key}>
                   <td>
@@ -305,10 +320,12 @@ function Templates({ enabled }: { enabled: boolean }) {
                     <br /><button type="button" className="ad-link" onClick={() => setOpen(open === t.key ? null : t.key)}>{open === t.key ? 'Hide design' : 'See design'}</button>
                     {open === t.key && <TemplatePreview t={WA_TEMPLATES.find((x) => x.key === t.key)!} />}
                   </td>
-                  <td><Badge tone={TPL_TONE[t.status] ?? 'grey'}>{t.status === 'MISSING' ? `Not in ${t.language}` : t.status.toLowerCase()}</Badge>
+                  <td><Badge tone={TPL_TONE[t.status] ?? 'grey'}>{t.status === 'MISSING' ? `Not in ${t.language}` : `${t.status.toLowerCase()} · ${t.language}`}</Badge>
                     {t.outdated && <> <Badge tone="blue">New design ready</Badge></>}
                     {t.rejectedReason && <><br /><small className="ad-neg">{t.rejectedReason}</small></>}
-                    {t.otherLanguages.length > 0 && <><br /><small className="ad-muted">Also: {t.otherLanguages.map((o) => `${o.language} ${o.status.toLowerCase()}`).join(', ')}</small></>}</td>
+                    {t.otherLanguages.length > 0 && <><br /><small className="ad-muted">Also: {t.otherLanguages.map((o) => `${o.language} ${o.status.toLowerCase()}`).join(', ')}</small></>}
+                    {tests[t.key] && <><br /><Badge tone={tests[t.key].ok ? 'green' : 'red'}>{tests[t.key].ok ? `Sent (${tests[t.key].language})` : 'Refused'}</Badge> <small className={tests[t.key].ok ? 'ad-muted' : 'ad-neg'} style={{ overflowWrap: 'anywhere' }}>{tests[t.key].detail}</small></>}</td>
+                  <td><Btn size="sm" busy={busy === `test-${t.key}`} disabled={!/\d{10}/.test(testPhone.replace(/\D/g, ''))} onClick={() => test(t.key)}>Test</Btn></td>
                 </tr>
               ))}</tbody>
             </table>

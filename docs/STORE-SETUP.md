@@ -378,6 +378,13 @@ Each message is a switch in *Admin → WhatsApp → Settings*, under a master sw
 7. **Payment:** WhatsApp Manager → the account → *Payment settings*: add a card. Meta charges per marketing and utility message (replies within 24 hours of the customer's message are free).
 8. Switch on what you want in *Settings*. The number starts at 250 customers a day; Meta raises it as quality stays good.
 
+**If a message fails with 132001** ("template name does not exist in the translation"): Meta can't find an *approved* template with that name and language for the sending number. The site now checks why by itself, asking Meta with its own keys, and writes the reason on the message in *Sent*:
+- **Approved in another language** (e.g. `en_US` while the site sends `en`): it is sent again in that language straight away, and that language is used for that template from then on.
+- **Still in review**, for example after *Update all templates* changed it, or **just approved**: the message waits and is tried again every 20 minutes for a day.
+- **The sending number isn't in the templates' account**, the template is **rejected or paused**, or it **doesn't exist**: it fails and says which, with the ids.
+
+To check a template yourself, put your number in *Settings → Templates in WhatsApp* and press **Test** on its row. It is sent to you at once with example values, and Meta's exact answer is shown. *Diagnose* now lists every template, the language the site sends it in, and what Meta has. Once fixed, **Retry failed (last 3 days)** in *Sent* sends the failed messages again.
+
 ## 17. Audience (profiles and where people came from)
 
 **One-time:** run [`0018_audience_sources.sql`](supabase-updates/0018_audience_sources.sql) in Supabase → SQL Editor before this version goes live.

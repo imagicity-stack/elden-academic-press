@@ -7,7 +7,7 @@ import { hmacHex } from '../server/lib/crypto.js';
 import { memoryCalls } from '../server/lib/callProvider.js';
 import { memoryWhatsApp, parseWebhook, verifyWhatsAppSignature, whatsappHttp, whatsappTemplatesHttp } from '../server/lib/whatsapp.js';
 import { runCalls } from '../server/services/calls.js';
-import { nextDaytime, runWhatsApp, templateComponents } from '../server/services/whatsapp.js';
+import { nextDaytime, processWhatsApp, runWhatsApp, templateComponents } from '../server/services/whatsapp.js';
 import { WA_TEMPLATES } from '../src/shared/whatsapp.js';
 import { address, contact, setup, supabaseToken } from './helpers.js';
 
@@ -362,6 +362,103 @@ describe('template language', () => {
   });
 });
 
+describe('when Meta says 132001', () => {
+  /** WhatsApp that only knows the templates approved in `approved` (name:language). */
+  function metaWith(approved: string[]) {
+    const w = memoryWhatsApp();
+    const inner = w.sendTemplate.bind(w);
+    w.sendTemplate = async (to, template, language, params, button) => {
+      if (!approved.includes(`${template}:${language}`)) throw new Error(`WhatsApp 404 (132001): (#132001) Template name does not exist in the translation: template name (${template}) does not exist in ${language}`);
+      return inner(to, template, language, params, button);
+    };
+    return w;
+  }
+  const templates = (list: { name: string; language: string; status: string }[], numbers = [{ id: 'phone-1', number: '+1 555-747-5125' }]) => {
+    t.deps.env.WHATSAPP_PHONE_NUMBER_ID = 'phone-1';
+    t.deps.env.WHATSAPP_BUSINESS_ACCOUNT_ID = 'waba-1';
+    t.deps.whatsappTemplates = {
+      async list() { return list.map((x) => ({ ...x, category: 'UTILITY', rejectedReason: '' })); },
+      async create() { return { id: '1', status: 'PENDING' }; },
+      async edit() {},
+      async phoneNumbers() { return numbers; },
+      async numberInfo() { return {}; },
+    };
+  };
+
+  it('approved only in another language: sent in that one at once, and remembered', async () => {
+    wa = metaWith(['elden_order_confirmed:en_US']);
+    t.deps.whatsapp = wa;
+    templates([{ name: 'elden_order_confirmed', language: 'en_US', status: 'APPROVED' }]);
+    await waSettings({ enabled: true, orderConfirmed: true });
+    await lead();
+    await pay();
+    const [m] = await msgs();
+    expect(m).toMatchObject({ status: 'sent', error: '' });
+    expect(wa.sent[0]).toMatchObject({ template: 'elden_order_confirmed', language: 'en_US' });
+    const s = await t.call('GET', '/admin/whatsapp/settings', { headers: await admin() });
+    expect(s.json.settings.languages).toEqual({ order_confirmed: 'en_US' });
+    const list = await t.call('GET', '/admin/whatsapp/templates', { headers: await admin() });
+    expect(list.json.items.find((x: any) => x.key === 'order_confirmed')).toMatchObject({ status: 'APPROVED', language: 'en_US' });
+  });
+
+  it('still in review (or just approved): waits and tries again by itself, then sends', async () => {
+    wa = metaWith([]);
+    t.deps.whatsapp = wa;
+    templates([{ name: 'elden_order_confirmed', language: 'en', status: 'PENDING' }]);
+    await waSettings({ enabled: true, orderConfirmed: true });
+    await lead();
+    await pay();
+    let [m] = await msgs();
+    expect(m.status).toBe('queued');
+    expect(m.error).toContain('still being reviewed by Meta');
+    expect(m.dueAt.getTime()).toBe(new Date('2026-11-10T11:20:00+05:30').getTime());
+    // Approved since: the next run sends it.
+    wa = metaWith(['elden_order_confirmed:en']);
+    t.deps.whatsapp = wa;
+    at('2026-11-10T11:21:00+05:30');
+    await processWhatsApp(t.deps);
+    [m] = await msgs();
+    expect(m).toMatchObject({ status: 'sent', error: '' });
+  });
+
+  it('the sending number is not in the templates\' account: fails, naming both ids', async () => {
+    wa = metaWith([]);
+    t.deps.whatsapp = wa;
+    templates([{ name: 'elden_order_confirmed', language: 'en', status: 'APPROVED' }], [{ id: 'phone-2', number: '+91 70000 00000' }]);
+    await waSettings({ enabled: true, orderConfirmed: true });
+    await lead();
+    await pay();
+    const [m] = await msgs();
+    expect(m.status).toBe('failed');
+    expect(m.error).toContain('(WHATSAPP_PHONE_NUMBER_ID phone-1) is not in WhatsApp account waba-1');
+  });
+
+  it('"Test" sends a template to your number now and shows Meta\'s answer; "Retry failed" sends failed ones again', async () => {
+    wa = metaWith([]);
+    t.deps.whatsapp = wa;
+    templates([]);
+    const h = await admin();
+    let r = await t.call('POST', '/admin/whatsapp/templates/test', { headers: h, body: { key: 'order_confirmed', phone: '98765 43210' } });
+    expect(r.json).toMatchObject({ ok: false, name: 'elden_order_confirmed', language: 'en' });
+    expect(r.json.detail).toContain('There is no template "elden_order_confirmed" in account waba-1');
+
+    await waSettings({ enabled: true, orderConfirmed: true });
+    await lead();
+    await pay();
+    expect((await msgs())[0].status).toBe('failed');
+
+    // Fixed in Meta: the test goes through, and the failed message is sent again.
+    wa = metaWith(['elden_order_confirmed:en']);
+    t.deps.whatsapp = wa;
+    r = await t.call('POST', '/admin/whatsapp/templates/test', { headers: h, body: { key: 'order_confirmed', phone: '98765 43210' } });
+    expect(r.json).toMatchObject({ ok: true, language: 'en' });
+    expect(wa.sent[0]).toMatchObject({ to: '+919876543210', template: 'elden_order_confirmed', params: ['Asha', '1042', '₹798.00'], button: 'order/1042?t=abc123' });
+    r = await t.call('POST', '/admin/whatsapp/messages/retry-failed', { headers: h });
+    expect(r.json).toEqual({ requeued: 1 });
+    expect((await msgs())[0]).toMatchObject({ status: 'sent', error: '' });
+  });
+});
+
 describe('diagnose', () => {
   it('reports the number the site sends from and whether it is in the templates\' account', async () => {
     t.deps.env.WHATSAPP_TOKEN = 'tok';
@@ -375,7 +472,10 @@ describe('diagnose', () => {
       async numberInfo(id) { if (id !== '111') throw new Error('bad'); return { display_phone_number: '+91 70000 00000' }; },
     };
     const r = await t.call('GET', '/admin/whatsapp/diagnose', { headers: await admin() });
-    expect(r.json.steps.map((x: any) => x.ok)).toEqual([true, true, false, false]);
+    expect(r.json.steps.slice(0, 4).map((x: any) => x.ok)).toEqual([true, true, false, false]);
+    // Then one line per template: in which language the site sends it, and what Meta has.
+    expect(r.json.steps.find((x: any) => x.label === 'New books (to subscribers): elden_new_books')).toMatchObject({ ok: true });
+    expect(r.json.steps.find((x: any) => x.label === 'Order confirmed: elden_order_confirmed')).toMatchObject({ ok: false, detail: 'The site sends it in "en". In Meta: not there.' });
     expect(r.json.steps[2].detail).toContain('111 is NOT one of them');
   });
 });
