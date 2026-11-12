@@ -27,7 +27,7 @@ export type WaMessage = typeof whatsappMessages.$inferSelect;
 export async function getWhatsAppSettings(db: Q): Promise<WhatsAppSettings> {
   const [row] = await db.select().from(whatsappSettings).where(eq(whatsappSettings.id, 1));
   const d = (row?.data ?? {}) as Partial<WhatsAppSettings>;
-  return { ...DEFAULT_WA_SETTINGS, ...d, templates: { ...DEFAULT_WA_SETTINGS.templates, ...d.templates } };
+  return { ...DEFAULT_WA_SETTINGS, ...d, templates: { ...DEFAULT_WA_SETTINGS.templates, ...d.templates }, languages: { ...d.languages } };
 }
 
 export async function saveWhatsAppSettings(db: Q, next: WhatsAppSettings, by: string) {
@@ -257,6 +257,88 @@ export async function queueNewBooks(deps: Deps, input: { message: string; link: 
 
 /* ---------------- Sending ---------------- */
 
+/** The language a template is sent in: the one it was found approved in, else the settings' language. */
+const languageOf = (s: WhatsAppSettings, key: WaTemplateKey) => s.languages[key] || s.language;
+
+/**
+ * Why Meta answered 132001 ("template name does not exist in the translation") for this template,
+ * asked from Meta with the site's own keys: is the sending number in the templates' account, does
+ * the template exist there, in which languages and with what status. Returns the explanation, an
+ * approved language to use instead (if there is one), and whether trying again later can work.
+ */
+export async function explainMissingTemplate(deps: Deps, s: WhatsAppSettings, key: WaTemplateKey, name: string): Promise<{ text: string; useLanguage?: string; retryLater: boolean }> {
+  const t = deps.whatsappTemplates;
+  const waba = deps.env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? '';
+  const phoneId = deps.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
+  const lang = languageOf(s, key);
+  if (!t) return { text: `Meta has no approved "${name}" in "${lang}" for this number's account. See Admin → WhatsApp → Settings → Templates, and set WHATSAPP_BUSINESS_ACCOUNT_ID in Vercel so the site can check why.`, retryLater: false };
+  let numbers: { id: string; number: string }[] | null = null;
+  try { numbers = await t.phoneNumbers(); } catch { /* shown as unknown */ }
+  if (numbers && !numbers.some((n) => n.id === phoneId)) {
+    return {
+      text: `The sending number (WHATSAPP_PHONE_NUMBER_ID ${phoneId}) is not in WhatsApp account ${waba}, where the templates are. Numbers in that account: ${numbers.map((n) => `${n.number} (id ${n.id})`).join(', ') || 'none'}. Fix one of the two ids in Vercel and redeploy.`,
+      retryLater: false,
+    };
+  }
+  let all: WaTemplateInfo[];
+  try { all = await t.list(); } catch (e) { return { text: `Meta has no approved "${name}" in "${lang}", and listing the templates failed: ${(e as Error).message}`, retryLater: true }; }
+  const mine = all.filter((x) => x.name === name);
+  const same = mine.find((x) => x.language === lang);
+  const otherApproved = mine.find((x) => x.language !== lang && x.status === 'APPROVED');
+  const list = mine.map((x) => `${x.language} ${x.status.toLowerCase()}`).join(', ');
+  if (same?.status === 'APPROVED') {
+    return { text: `Meta lists "${name}" as approved in "${lang}" in account ${waba}, and the number is in that account, but refused it. A template approved or edited in the last hour can take a while before it can be sent: the site tries again by itself.`, retryLater: true };
+  }
+  if (same && ['PENDING', 'IN_APPEAL'].includes(same.status)) {
+    if (otherApproved) return { text: `"${name}" in "${lang}" is still being reviewed by Meta; it is approved in "${otherApproved.language}", so that one is used.`, useLanguage: otherApproved.language, retryLater: false };
+    return { text: `"${name}" in "${lang}" is still being reviewed by Meta (status ${same.status.toLowerCase()}, e.g. after "Update all templates" changed it). It can't be sent until it's approved: the site tries again by itself.`, retryLater: true };
+  }
+  if (otherApproved) return { text: `"${name}" is approved in "${otherApproved.language}", not "${lang}": the site uses ${otherApproved.language} for it from now on.`, useLanguage: otherApproved.language, retryLater: false };
+  if (same) {
+    return { text: `"${name}" in "${lang}" is ${same.status.toLowerCase()}${same.rejectedReason ? ` (${same.rejectedReason})` : ''} in Meta, so it can't be sent. See Admin → WhatsApp → Settings → Templates.`, retryLater: false };
+  }
+  return {
+    text: `There is no template "${name}" in account ${waba}${list ? ` in "${lang}" (only: ${list})` : ''}. Press "Update all templates in Meta" in Admin → WhatsApp → Settings, or fix the name under Template names.`,
+    retryLater: false,
+  };
+}
+
+export class TemplateSendError extends Error {
+  constructor(message: string, readonly retryLater: boolean) { super(message); }
+}
+
+/**
+ * Send one template. On 132001 the site finds out why: if Meta approved it in another language,
+ * it is sent again in that one straight away (and remembered); otherwise the error says why.
+ */
+export async function sendTemplate(deps: Deps, s: WhatsAppSettings, key: WaTemplateKey, name: string, phone: string, params: string[], buttonPath?: string) {
+  const wa = deps.whatsapp;
+  if (!wa) throw new TemplateSendError('WhatsApp is not connected yet.', false);
+  const lang = languageOf(s, key);
+  try {
+    return { ...(await wa.sendTemplate(phone, name, lang, params, buttonPath)), language: lang };
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (!/132001/.test(msg)) throw new TemplateSendError(msg, false);
+    const why = await explainMissingTemplate(deps, s, key, name);
+    if (why.useLanguage && why.useLanguage !== lang) {
+      try {
+        const r = await wa.sendTemplate(phone, name, why.useLanguage, params, buttonPath);
+        s.languages = { ...s.languages, [key]: why.useLanguage };
+        await saveWhatsAppSettings(deps.db, s, 'system');
+        return { ...r, language: why.useLanguage };
+      } catch (e2) {
+        throw new TemplateSendError(`${msg}. Also refused in "${why.useLanguage}": ${(e2 as Error).message}`, false);
+      }
+    }
+    throw new TemplateSendError(`${msg} — ${why.text}`, why.retryLater);
+  }
+}
+
+/** A message refused because its template isn't usable yet is tried again this often, for a day. */
+const TEMPLATE_RETRY_MS = 20 * 60_000;
+const TEMPLATE_RETRY_FOR_MS = 24 * 3600_000;
+
 /** Send queued messages that are due. Order updates go any time; reminders and new books wait for daytime (their due time). */
 export async function processWhatsApp(deps: Deps, limit = 60) {
   const { db, now } = deps;
@@ -282,17 +364,45 @@ export async function processWhatsApp(deps: Deps, limit = 60) {
       // Body variables first, then the button's path (see enqueue).
       const def = templateOf(m.kind as WaTemplateKey);
       const n = def?.vars.length ?? m.params.length;
-      const r = await deps.whatsapp.sendTemplate(m.phone, m.template, s.language, m.params.slice(0, n), m.params[n]);
-      await db.update(whatsappMessages).set({ waId: r.id, updatedAt: now() }).where(eq(whatsappMessages.id, m.id));
+      const r = await sendTemplate(deps, s, m.kind as WaTemplateKey, m.template, m.phone, m.params.slice(0, n), m.params[n]);
+      await db.update(whatsappMessages).set({ waId: r.id, error: '', updatedAt: now() }).where(eq(whatsappMessages.id, m.id));
       sent++;
     } catch (e) {
       const msg = (e as Error).message;
-      // 132001: no approved template with this name in this language, in the sending number's account.
-      const hint = /132001/.test(msg) ? ` (Meta has no approved "${m.template}" in "${s.language}" for this number's account: see Admin → WhatsApp → Settings → Templates)` : '';
-      await db.update(whatsappMessages).set({ status: 'failed', error: (msg + hint).slice(0, 500), updatedAt: now() }).where(eq(whatsappMessages.id, m.id));
+      // The template isn't usable yet (in review, or just approved): wait and try again, for up to a day.
+      if (e instanceof TemplateSendError && e.retryLater && now().getTime() - m.createdAt.getTime() < TEMPLATE_RETRY_FOR_MS) {
+        await db.update(whatsappMessages).set({ status: 'queued', sentAt: null, dueAt: new Date(now().getTime() + TEMPLATE_RETRY_MS), error: `Waiting to try again: ${msg}`.slice(0, 500), updatedAt: now() }).where(eq(whatsappMessages.id, m.id));
+        continue;
+      }
+      await db.update(whatsappMessages).set({ status: 'failed', error: msg.slice(0, 500), updatedAt: now() }).where(eq(whatsappMessages.id, m.id));
     }
   }
   return sent;
+}
+
+/**
+ * Admin → WhatsApp → Settings → Templates → Test: send one template now, with its sample values,
+ * to a number (yours), and say exactly what Meta answered. Not recorded as a customer message.
+ */
+export async function testTemplate(deps: Deps, key: WaTemplateKey, phone: string) {
+  const s = await getWhatsAppSettings(deps.db);
+  const def = templateOf(key);
+  const name = s.templates[key];
+  try {
+    const r = await sendTemplate(deps, s, key, name, phone, def.samples, def.button.sample);
+    return { ok: true as const, name, language: r.language, waId: r.id, detail: `Meta accepted it (message id ${r.id}). It should arrive on WhatsApp in a few seconds.` };
+  } catch (e) {
+    return { ok: false as const, name, language: languageOf(s, key), detail: (e as Error).message };
+  }
+}
+
+/** Put failed template messages from the last few days back in the queue (after fixing the cause). */
+export async function retryFailed(deps: Deps, days = 3) {
+  const rows = await deps.db.update(whatsappMessages).set({ status: 'queued', dueAt: deps.now(), sentAt: null, updatedAt: deps.now() })
+    .where(and(eq(whatsappMessages.status, 'failed'), eq(whatsappMessages.direction, 'out'), sql`${whatsappMessages.template} <> ''`,
+      gte(whatsappMessages.createdAt, new Date(deps.now().getTime() - days * 86_400_000)))).returning({ id: whatsappMessages.id });
+  if (rows.length) await processWhatsApp(deps, 60);
+  return rows.length;
 }
 
 /** The cron job: queue cart reminders, then send what's due. */

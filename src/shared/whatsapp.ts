@@ -120,6 +120,9 @@ export interface WhatsAppSettings {
   callFollowup: boolean;
   /** Template names, if yours differ from the defaults. */
   templates: Record<WaTemplateKey, string>;
+  /** A template Meta approved only in another language (e.g. en_US): found by the site when a send
+   *  failed with 132001, and used for that template from then on. */
+  languages: Partial<Record<WaTemplateKey, string>>;
 }
 
 export const DEFAULT_WA_SETTINGS: WhatsAppSettings = {
@@ -132,6 +135,7 @@ export const DEFAULT_WA_SETTINGS: WhatsAppSettings = {
   ebookReady: false,
   callFollowup: false,
   templates: Object.fromEntries(WA_TEMPLATES.map((t) => [t.key, t.name])) as Record<WaTemplateKey, string>,
+  languages: {},
 };
 
 export const WA_STATUS_LABEL: Record<WaStatus, string> = {
