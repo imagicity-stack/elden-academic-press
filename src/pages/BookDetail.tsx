@@ -107,7 +107,7 @@ function BookView({ book }: { book: Product }) {
         <div className="pd__grid">
           <div className="pd__side">
             <div className="pd__media" style={{ '--pd-tint': c.bg } as CSSProperties}>
-              <motion.div className="pd__cover" initial={{ opacity: 0, y: 30, rotate: -4 }} animate={{ opacity: 1, y: 0, rotate: 0 }} transition={{ duration: 0.9, ease: EASE }}>
+              <motion.div className="pd__cover" initial={{ y: 18, rotate: -3 }} animate={{ y: 0, rotate: 0 }} transition={{ duration: 0.7, ease: EASE }}>
                 <Tilt max={12}><BookCover book={book} size="detail" /></Tilt>
               </motion.div>
             </div>

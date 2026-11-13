@@ -71,12 +71,45 @@ export async function openPrintable(path: string) {
 }
 
 /** Upload a file straight to storage with a one-time signed link from the API. */
-export async function uploadFile(bucket: 'covers' | 'ebooks' | 'resources' | 'competition-media' | 'competition-files', file: File) {
+/**
+ * Covers and book photos are shown at a few hundred pixels: a 2 MB, 2000 px PNG straight from a
+ * design tool only slows the store down. Big ones are redrawn here at up to 1600 px as WebP (JPEG
+ * where the browser can't make WebP) before upload. Anything already small goes up as it is.
+ */
+const COVER_MAX_SIDE = 1600;
+async function shrinkCover(file: File): Promise<File> {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || typeof createImageBitmap === 'undefined') return file;
+  let bmp: ImageBitmap;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { return file; }
+  try {
+    if (file.size <= 350 * 1024 && Math.max(bmp.width, bmp.height) <= COVER_MAX_SIDE) return file;
+    const scale = Math.min(1, COVER_MAX_SIDE / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * scale); canvas.height = Math.round(bmp.height * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height); // transparent edges on white
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const make = (type: string) => new Promise<Blob | null>((r) => canvas.toBlob(r, type, 0.86));
+    let blob = await make('image/webp');
+    if (!blob || blob.type !== 'image/webp') blob = await make('image/jpeg');
+    if (!blob || blob.size >= file.size) return file;
+    const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.' + ext, { type: blob.type });
+  } finally {
+    bmp.close();
+  }
+}
+
+export async function uploadFile(bucket: 'covers' | 'ebooks' | 'resources' | 'competition-media' | 'competition-files', original: File) {
+  const file = bucket === 'covers' ? await shrinkCover(original) : original;
   const signed = await adminApi<{ url: string; token: string; path: string; publicUrl: string | null }>('/uploads', {
     body: { bucket, fileName: file.name, contentType: file.type || 'application/octet-stream', size: file.size },
   });
   if (supabase) {
-    const { error } = await supabase.storage.from(bucket).uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type });
+    // Every upload gets a new address (year/uuid/name), so a public file never changes: browsers may keep it a year.
+    const cacheControl = bucket === 'covers' || bucket === 'competition-media' ? '31536000' : undefined;
+    const { error } = await supabase.storage.from(bucket).uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type, ...(cacheControl ? { cacheControl } : {}) });
     if (error) throw new ApiError(500, `Upload failed: ${error.message}`);
   } else {
     const res = await fetch(signed.url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });

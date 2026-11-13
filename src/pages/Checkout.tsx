@@ -337,7 +337,7 @@ export function Checkout() {
                 const q = quote?.lines.find((x) => x.productId === l.productId && x.kind === l.kind);
                 return (
                   <li key={l.productId + l.kind}>
-                    <div className="co-lines__cover">{p && <BookCover book={p} />}<span className="co-lines__qty">{l.quantity}</span></div>
+                    <div className="co-lines__cover">{p && <BookCover book={p} size="mini" />}<span className="co-lines__qty">{l.quantity}</span></div>
                     <div className="co-lines__text"><strong>{p?.title ?? q?.title}</strong><span>{formatLabel(p, l.kind)}</span>{q?.issue && <em>{issueText(q)}</em>}</div>
                     <div className="co-lines__price">{q ? inr(q.lineTotal) : ''}</div>
                   </li>

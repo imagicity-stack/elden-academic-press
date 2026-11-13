@@ -1,8 +1,8 @@
-// Meta Pixel. Loads only after the visitor accepts cookies, never on the admin or for staff.
+// Meta Pixel. Loads on every page for every visitor (no cookie choice on this site), never on the admin or for staff.
 // Each event has an id; the server sends the same event with the same id (Conversions API),
 // so Meta counts it once even when one of the two is blocked.
-import { getConsent, isMetaOff, isStaff, syncConsent, type Consent } from './consent';
-import { forgetUser, knownUser, phoneDigits, type MatchUser } from './visitor';
+import { getConsent, isMetaOff, isStaff, metaTestMode, syncConsent } from './consent';
+import { knownUser, phoneDigits, type MatchUser } from './visitor';
 import { fireOnce, registrationEventId, registrationParams, SIGNUP_EVENT, signupParams } from './shared/metaEvents';
 
 export { rememberUser } from './visitor';
@@ -31,8 +31,10 @@ export const formatName = (kind: string) => (kind === 'digital' ? 'ebook' : kind
 export const formatList = (kinds: string[]) => [...new Set(kinds.map(formatName))].sort().join(',');
 
 const onAdmin = () => /^\/admin(\/|$)/.test(location.pathname);
+// Before launch the coming-soon page counts nothing (staff can still test with ?meta-test).
+const storeOpen = () => import.meta.env.VITE_SITE_LIVE === 'true' || metaTestMode();
 // Never for staff, the admin, or a signed-in student under Meta's minimum age (consent.ts → isMetaOff).
-const active = () => Boolean(PIXEL) && getConsent() === 'all' && !isStaff() && !onAdmin() && !isMetaOff();
+const active = () => Boolean(PIXEL) && storeOpen() && getConsent() === 'all' && !isStaff() && !onAdmin() && !isMetaOff();
 
 export const newEventId = () =>
   (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -52,19 +54,52 @@ const setCookie = (name: string, value: string) => {
   document.cookie = `${name}=${value}; Path=/; Max-Age=7776000; SameSite=Lax${cookieDomain()}${location.protocol === 'https:' ? '; Secure' : ''}`;
 };
 
+/** The click id inside an _fbc value (fb.1.<time>.<click id>, sometimes with Meta's own suffix after it). */
+const clickIdOf = (fbc: string) => fbc.split('.').slice(3).join('.');
+
 /**
  * Meta's two browser cookies, set before the first event, so the server's copy of the
  * very first page view already carries them (Meta's script would set them a moment later;
- * it keeps cookies that already exist). _fbc only exists after an ad click.
+ * it keeps cookies that already exist). _fbc only exists after an ad click, and a new ad
+ * click replaces an older one (Meta wants the latest click, not the first one ever).
  */
 function setMetaCookies() {
   if (!readCookie('_fbp')) setCookie('_fbp', `fb.1.${Date.now()}.${Math.floor(Math.random() * 9e9) + 1e9}`);
-  if (readCookie('_fbc')) return;
   try {
     const saved = JSON.parse(sessionStorage.getItem(FBCLID) ?? 'null') as { id: string; at: number } | null;
-    if (saved) setCookie('_fbc', `fb.1.${saved.at}.${saved.id}`);
+    if (!saved) return;
+    const current = readCookie('_fbc');
+    if (!current || !clickIdOf(current).startsWith(saved.id)) setCookie('_fbc', `fb.1.${saved.at}.${saved.id}`);
   } catch { /* ignore */ }
 }
+
+/**
+ * Meta's Parameter Builder (meta-capi-param-builder-clientjs), once per page. It keeps _fbc and _fbp
+ * right and finds the ad click inside Facebook's and Instagram's own browsers when the address
+ * doesn't carry it (where most ad visitors are), and stores the visitor's IPv6 address in _fbi for
+ * the server's events (our server is only ever reached over IPv4; Meta matches IPv6 visitors better
+ * on IPv6). Nothing shows on the page and it never delays an event: the server's copy of the first
+ * page view waits for it at most PARAMS_WAIT_MS.
+ */
+const PARAMS_WAIT_MS = 1500;
+/** The visitor's public address as seen from outside, IPv6 where they have it (IPv4 otherwise). */
+export const IP_LOOKUP = 'https://api64.ipify.org';
+async function clientIp(): Promise<string> {
+  const res = await fetch(IP_LOOKUP, { signal: AbortSignal.timeout(2500), credentials: 'omit', cache: 'no-store' });
+  return res.ok ? (await res.text()).trim().slice(0, 64) : '';
+}
+type ParamBuilder = { processAndCollectAllParams(url?: string | null, getIpFn?: () => Promise<string>): Promise<unknown> };
+let params: Promise<void> | undefined;
+function collectParams(): Promise<void> {
+  params ??= import('meta-capi-param-builder-clientjs')
+    .then((m) => {
+      const pb = ((m as { default?: ParamBuilder }).default ?? m) as ParamBuilder;
+      return pb.processAndCollectAllParams(location.href, clientIp);
+    })
+    .then(() => {}, () => {});
+  return params;
+}
+const paramsOrTimeout = () => Promise.race([collectParams(), new Promise<void>((r) => setTimeout(r, PARAMS_WAIT_MS))]);
 
 /** The Pixel's "advanced matching" fields, normalised the way Meta asks (it hashes them). */
 function pixelMatch(u: MatchUser | null): Record<string, string> {
@@ -88,6 +123,7 @@ function load() {
   if (loaded || !PIXEL || isMetaOff()) return;
   loaded = true;
   setMetaCookies();
+  collectParams();
   // Meta's standard loader, written out so no inline script is needed.
   const n = function (...args: unknown[]) {
     if (n.callMethod) n.callMethod(...args); else n.queue.push(args);
@@ -107,11 +143,18 @@ function load() {
 }
 
 function relay(name: Relayed, eventId: string, custom: Record<string, unknown>) {
+  const url = location.origin + location.pathname;
+  const user = knownUser() ?? undefined;
+  // The first page view's server copy waits (briefly) for the Parameter Builder's click id and IPv6 cookies.
+  (name === 'PageView' ? paramsOrTimeout() : Promise.resolve()).then(() => send(name, eventId, custom, url, user));
+}
+
+function send(name: Relayed, eventId: string, custom: Record<string, unknown>, url: string, user: MatchUser | undefined) {
   fetch('/api/meta/event', {
     method: 'POST',
     keepalive: true,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, eventId, url: location.origin + location.pathname, custom, user: knownUser() ?? undefined }),
+    body: JSON.stringify({ name, eventId, url, custom, user }),
   }).catch(() => {});
 }
 
@@ -171,21 +214,7 @@ document.addEventListener('click', (e) => {
   track('Contact', { content_name: href.startsWith('mailto:') ? 'email' : href.startsWith('tel:') ? 'phone' : 'whatsapp' });
 }, true);
 
-// Start-up, and changes of mind.
+// Start-up: everyone is counted (no cookie choice on this site), except staff, the admin and
+// signed-in students under Meta's minimum age (see active()).
 syncConsent();
 if (active()) load();
-window.addEventListener('elden:consent', (e) => {
-  const c = (e as CustomEvent<Consent>).detail;
-  if (c === 'all') {
-    if (loaded) window.fbq?.('consent', 'grant'); // changed their mind back
-    track('PageView'); // the page they're on
-  } else if (loaded) {
-    lastPageView = '';
-    window.fbq?.('consent', 'revoke');
-    forgetUser();
-    for (const name of ['_fbp', '_fbc']) {
-      document.cookie = `${name}=; Path=/; Max-Age=0`;
-      document.cookie = `${name}=; Path=/; Max-Age=0${cookieDomain()}`;
-    }
-  }
-});

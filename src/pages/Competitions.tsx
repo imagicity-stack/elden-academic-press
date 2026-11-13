@@ -1,7 +1,8 @@
 // /competitions: every competition built in src/shared/competitions.ts, open ones first.
 // /competitions/<slug>: its page, with registration (one person or a group) after signing
 // in with Google and completing the profile once. No approval from anyone.
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useState, type FormEvent } from 'react';
+import { dropPrerender } from '../prerender';
 import { trackStep } from '../competitionTrack';
 import { Link, useParams } from 'react-router-dom';
 import { authApi, useAccount, type Profile } from '../store/account';
@@ -73,6 +74,8 @@ export function CompetitionsPage() {
 export function CompetitionPage() {
   const { slug = '' } = useParams();
   const c = findCompetition(slug);
+  // The app's page is ready: it replaces the server's ready-made top of the page before the next paint.
+  useLayoutEffect(() => dropPrerender(), []);
   useEffect(() => { if (c) document.title = `${c.title} — Elden Academic Press`; }, [c]);
   useEffect(() => { if (c) trackStep(c.slug, 'view'); }, [c]);
   if (!c) return <NotFound />;

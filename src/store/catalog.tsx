@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { isStaff } from '../consent';
 import { api } from './api';
+import { loadStoreConfig } from './config';
 import type { Category, Kind, Product, Resource, StoreConfig } from './types';
 
 interface Catalog {
@@ -56,12 +57,7 @@ export function useResources(): { items: Resource[]; status: 'loading' | 'ready'
   return state;
 }
 
-let configPromise: Promise<StoreConfig> | undefined;
-/** The store's public settings, fetched once per page. */
-export function loadStoreConfig(): Promise<StoreConfig> {
-  configPromise ??= api<StoreConfig>('/config').catch((e) => { configPromise = undefined; throw e; });
-  return configPromise;
-}
+export { loadStoreConfig };
 export function useStoreConfig(): StoreConfig | null {
   const [cfg, setCfg] = useState<StoreConfig | null>(null);
   useEffect(() => { loadStoreConfig().then(setCfg, () => {}); }, []);

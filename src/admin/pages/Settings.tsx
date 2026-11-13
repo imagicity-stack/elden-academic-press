@@ -4,7 +4,7 @@ import { NavLink, useParams } from 'react-router-dom';
 import { inr } from '../../store/api';
 import { adminApi, ApiError, fmtDate, rupees, toPaise, useAdmin } from '../api';
 import { useMe } from '../AdminApp';
-import { Badge, Btn, Card, Check, ErrorBox, Loading, Modal, MoneyField, Page, SelectField, TextArea, TextField, Toggle, useAction } from '../ui';
+import { Badge, Btn, Card, Check, ErrorBox, Loading, Modal, MoneyField, Page, SelectField, TextArea, TextField, useAction } from '../ui';
 
 const STATES: [string, string][] = [['35', 'Andaman and Nicobar Islands'], ['37', 'Andhra Pradesh'], ['12', 'Arunachal Pradesh'], ['18', 'Assam'], ['10', 'Bihar'], ['04', 'Chandigarh'], ['22', 'Chhattisgarh'], ['26', 'Dadra and Nagar Haveli and Daman and Diu'], ['07', 'Delhi'], ['30', 'Goa'], ['24', 'Gujarat'], ['06', 'Haryana'], ['02', 'Himachal Pradesh'], ['01', 'Jammu and Kashmir'], ['20', 'Jharkhand'], ['29', 'Karnataka'], ['32', 'Kerala'], ['38', 'Ladakh'], ['31', 'Lakshadweep'], ['23', 'Madhya Pradesh'], ['27', 'Maharashtra'], ['14', 'Manipur'], ['17', 'Meghalaya'], ['15', 'Mizoram'], ['13', 'Nagaland'], ['21', 'Odisha'], ['34', 'Puducherry'], ['03', 'Punjab'], ['08', 'Rajasthan'], ['11', 'Sikkim'], ['33', 'Tamil Nadu'], ['36', 'Telangana'], ['16', 'Tripura'], ['09', 'Uttar Pradesh'], ['05', 'Uttarakhand'], ['19', 'West Bengal']];
 
@@ -309,27 +309,14 @@ function ClaudeConnections() {
 }
 
 /** One click: the cookie banner off (every visitor counts as having accepted) or on (ask again). */
-function CookieSwitch({ on, owner, onChange }: { on: boolean; owner: boolean; onChange: () => void }) {
-  const { busy, run } = useAction();
-  const flip = (auto: boolean) => {
-    const ask = auto
-      ? 'Switch the cookie banner OFF? Every visitor will be tracked by Meta and Google Analytics as if they had accepted (not staff, and not students under Meta’s minimum age). Anyone who chooses “Only essential” in Cookie settings keeps that choice.'
-      : 'Switch the cookie banner back ON? Visitors who never chose will be asked again, and nothing is tracked until they accept.';
-    if (!window.confirm(ask)) return;
-    run('consent', () => adminApi('/settings/consent', { method: 'PUT', body: { auto } }), auto ? 'Cookie banner off: tracking everyone' : 'Cookie banner on: asking visitors').then((r) => r !== undefined && onChange());
-  };
+function CookieSwitch(_: { on: boolean; owner: boolean; onChange: () => void }) {
   return (
     <Card title="Cookies & tracking">
-      <div className="ad-row">
-        <Toggle checked={on} label="Track every visitor (cookie banner off)" onChange={(v) => owner && flip(v)} />
-        <strong>{on ? 'ON: no cookie banner, every visitor is tracked' : 'OFF: the cookie banner asks each visitor'}</strong>
-        {busy === 'consent' && <span className="ad-muted">Saving…</span>}
-      </div>
+      <div className="ad-row"><strong>Every visitor is tracked. The website has no cookie banner or cookie settings.</strong></div>
       <p className="ad-muted ad-mt">
-        While ON, Meta Pixel, Meta’s Conversions API and Google Analytics run for every visitor as if they had clicked “Accept all”. Never for staff signed in to the admin,
-        and never sent to Meta for students under Meta’s minimum age (nor Google Analytics for any signed-in student). A visitor who chooses “Only essential” under Cookie settings
-        keeps that choice. The privacy policy wording follows this switch. Switch it OFF before India’s DPDP consent rules apply (May 2027).
-        {!owner && ' Only the owner can change it.'}
+        Meta Pixel, Meta’s Conversions API and Google Analytics run for every visitor (the owner’s decision, November 2026). Never for staff signed in to the admin,
+        never sent to Meta for students under Meta’s minimum age, and no Google Analytics for any signed-in student. Bringing a cookie choice back needs a website change:
+        ask a developer before India’s DPDP consent rules apply (expected May 2027).
       </p>
     </Card>
   );
