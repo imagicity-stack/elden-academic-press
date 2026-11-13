@@ -21,6 +21,7 @@ import { BookSchema } from '../components/BookSchema';
 import { DeliveryCheck } from '../components/DeliveryCheck';
 import { trackAddToCart } from '../trackCart';
 import { dropPrerender } from '../prerender';
+import { engagedPage } from '../engagedVisit';
 
 const TABS = ['Overview', 'Contents'] as const;
 
@@ -53,6 +54,8 @@ function BookView({ book }: { book: Product }) {
   useLayoutEffect(() => dropPrerender(), []);
 
   useEffect(() => { document.title = `${book.title} — Elden Academic Press`; }, [book.title]);
+  // EngagedVisit on this page carries the book.
+  useEffect(() => { engagedPage(location.pathname, { ids: [book.id], name: book.title }); }, [book.id, book.title]);
   useEffect(() => {
     const price = (book.formats.print ?? book.formats.digital)?.price;
     track('ViewContent', { content_ids: [book.id], content_name: book.title, content_type: 'product', ...(price ? { value: price / 100, currency: 'INR' } : {}) });

@@ -10,6 +10,7 @@ import { CartProvider } from './store/cart';
 import { CatalogProvider } from './store/catalog';
 import { CartDrawer } from './components/CartDrawer';
 import { track } from './meta';
+import { engagedPage } from './engagedVisit';
 import { Footer } from './components/Footer';
 import { Header, TopBar } from './components/Header';
 import { About } from './pages/About';
@@ -35,8 +36,8 @@ function ScrollToTop() {
   const { pathname } = useLocation();
   // A block body: in newer browsers scrollTo returns a Promise, which React would take for a clean-up function.
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
-  // Meta page view (src/early.ts already counted the first one).
-  useEffect(() => { track('PageView'); }, [pathname]);
+  // Meta page view (src/early.ts already counted the first one), and a new page for EngagedVisit.
+  useEffect(() => { track('PageView'); engagedPage(pathname); }, [pathname]);
   // A ready-made page from the server belongs to its own address only.
   useLayoutEffect(() => dropPrerenderUnless(pathname), [pathname]);
   return null;

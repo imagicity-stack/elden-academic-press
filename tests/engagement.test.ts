@@ -13,7 +13,7 @@ function rig(opts: { stored?: string; refuse?: string } = {}) {
     now: () => t,
     setTimeout: (fn, ms) => { const id = nextId++; timers.push({ at: t + ms, fn, id }); return id; },
     clearTimeout: (id) => { timers = timers.filter((x) => x.id !== id); },
-    send: (d) => { if (opts.refuse) return opts.refuse; sent.push(d); return null; },
+    send: (d) => { if (opts.refuse) return { reason: opts.refuse }; sent.push(d); return { eventId: `ev-${sent.length}` }; },
     storage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => { store.set(k, v); } },
     log: (m) => logs.push(m),
   });
@@ -43,7 +43,7 @@ describe('EngagedVisit', () => {
     r.e.scrolled(1);
     expect(r.sent).toHaveLength(1);
     expect(r.logs[0]).toMatch(/timer started/);
-    expect(r.logs.at(-1)).toMatch(/EngagedVisit sent · trigger=time · 15s/);
+    expect(r.logs.at(-1)).toMatch(/EngagedVisit sent · trigger=time · 15s .* eventID=ev-1$/);
   });
 
   it('pauses while the tab is hidden and resumes where it left off', () => {

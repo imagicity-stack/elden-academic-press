@@ -2,8 +2,9 @@
 // either comes first:
 //   - 15 seconds of visible time on the site (paused while the tab is hidden, kept across
 //     page changes within the visit), or
-//   - scrolling half-way down a page (the window scrolls; only real scrolls count, and each
-//     new page starts again from the top).
+//   - scrolling half-way down a page: half of the distance the window can scroll, on pages at
+//     least 1.5 screens tall (shorter pages rely on the timer). Only real scrolls count, and each
+//     new page starts again from the top.
 // It lives outside React on purpose: re-renders can't restart the timer.
 //
 // Debug: open any page with ?debug_pixel=1 and, for that tab, the console says when the timer
@@ -22,8 +23,8 @@ export interface EngagementDeps {
   now(): number;
   setTimeout(fn: () => void, ms: number): unknown;
   clearTimeout(t: unknown): void;
-  /** Sends the event; returns why it wasn't sent, or null when it was. */
-  send(data: EngagedData): string | null;
+  /** Sends the event: its event id, or why it wasn't sent. */
+  send(data: EngagedData): { eventId: string } | { reason: string };
   /** Session storage (null when blocked). */
   storage: Pick<Storage, 'getItem' | 'setItem'> | null;
   log(message: string): void;
@@ -47,6 +48,7 @@ export function createEngagement(d: EngagementDeps) {
   let depth = 0;
   let page = { type: 'other', contentIds: undefined as string[] | undefined, contentName: undefined as string | undefined };
   let stopped = fired;
+  let everStarted = false;
 
   const seconds = () => Math.round((spentMs + (runningSince !== null ? d.now() - runningSince : 0)) / 1000);
 
@@ -58,11 +60,11 @@ export function createEngagement(d: EngagementDeps) {
       trigger, engaged_seconds: seconds(), scroll_depth: Math.round(depth * 100), page_type: page.type,
       ...(page.contentIds ? { content_ids: page.contentIds } : {}), ...(page.contentName ? { content_name: page.contentName } : {}),
     };
-    const why = d.send(data);
-    if (why) { d.log(`${ENGAGED_EVENT} not sent (${trigger}): ${why}`); return; }
+    const r = d.send(data);
+    if ('reason' in r) { d.log(`${ENGAGED_EVENT} not sent (${trigger}): ${r.reason}`); return; }
     fired = true;
     try { d.storage?.setItem(FIRED_KEY, '1'); } catch { /* private mode: once per page load instead */ }
-    d.log(`${ENGAGED_EVENT} sent · trigger=${trigger} · ${data.engaged_seconds}s · scroll ${data.scroll_depth}% · page=${data.page_type}`);
+    d.log(`${ENGAGED_EVENT} sent · trigger=${trigger} · ${data.engaged_seconds}s · scroll ${data.scroll_depth}% · page=${data.page_type} · eventID=${r.eventId}`);
   }
 
   function schedule() {
@@ -70,11 +72,12 @@ export function createEngagement(d: EngagementDeps) {
     timer = d.setTimeout(() => { timer = null; fire('time'); }, Math.max(0, left));
   }
 
-  function start(first: boolean) {
+  function start() {
     if (stopped || runningSince !== null) return;
     runningSince = d.now();
     schedule();
-    d.log(first ? `timer started (${ENGAGED_SECONDS}s, or scroll ${ENGAGED_SCROLL * 100}%)` : `timer resumed at ${Math.round(spentMs / 1000)}s`);
+    d.log(everStarted ? `timer resumed at ${Math.round(spentMs / 1000)}s` : `timer started (${ENGAGED_SECONDS}s visible, or scroll ${ENGAGED_SCROLL * 100}%)`);
+    everStarted = true;
   }
 
   function pause(quiet = false) {
@@ -89,11 +92,11 @@ export function createEngagement(d: EngagementDeps) {
     /** The page became visible (or loaded visible): count time. */
     visible(first = false) {
       if (fired) { if (first) d.log(`${ENGAGED_EVENT} already sent in this session: not again`); return; }
-      start(first);
+      start();
     },
     /** The tab was hidden: stop counting. */
     hidden() { if (!stopped) pause(); },
-    /** A real scroll: how far down the page the bottom of the screen is (0 to 1). */
+    /** A real scroll: the share of the page's scrollable distance scrolled so far (0 to 1). */
     scrolled(fraction: number) {
       if (stopped) return;
       depth = Math.max(depth, Math.min(1, fraction));
