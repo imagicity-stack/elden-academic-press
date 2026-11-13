@@ -111,6 +111,7 @@ Sample, school/bulk, teacher-access and distributor enquiry forms (`src/componen
   - `routes/` — store, orders, webhooks, enquiries/cron, `admin/`
   - `services/` — orders and payments, catalogue, emails, invoices
   - `lib/` — pricing and GST, Razorpay, storage, email, CSV, validation
+- `server/routes/llms.ts` — `/llms.txt`, a Markdown guide to the store for AI assistants (books, prices, formats, delivery, policies), built from the live catalogue like `/sitemap.xml`; `public/robots.txt` points to both
 - `scripts/seed.ts` — `npm run db:seed` (categories) or `-- --demo` (sample catalogue)
 - `tests/` — Vitest suites for pricing, checkout/payments and admin
 - `docs/STORE-SETUP.md` — connecting Supabase, Razorpay, Google Workspace email and Vercel

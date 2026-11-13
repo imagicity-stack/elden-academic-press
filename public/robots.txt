@@ -1,3 +1,8 @@
+# Elden Academic Press: https://eldenap.in
+# Every crawler is welcome, search engines and AI assistants alike (Google, Bing, ChatGPT, Claude,
+# Perplexity, Gemini…). Private and personal pages are kept out below.
+# A guide to the store for AI assistants: https://eldenap.in/llms.txt
+
 User-agent: *
 Allow: /
 Disallow: /admin
@@ -5,5 +10,7 @@ Disallow: /api/
 Disallow: /checkout
 Disallow: /order/
 Disallow: /account
+Disallow: /track
+Disallow: /competitions/*/confirmation/
 
 Sitemap: https://eldenap.in/sitemap.xml
