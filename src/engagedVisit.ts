@@ -2,22 +2,11 @@
 // changes, and the debug log (?debug_pixel=1 for this tab, ?debug_pixel=0 to stop).
 import { createEngagement } from './engagement';
 import { trackEngagedVisit } from './meta';
-
-const DEBUG_KEY = 'elden-debug-pixel';
+import { pixelDebugOn, pixelLog } from './pixelDebug';
 /** Pages at least this many screens tall can trigger on scrolling. */
 const MIN_SCREENS = 1.5;
 
 function session(): Storage | null { try { return window.sessionStorage; } catch { return null; } }
-
-function debugOn(): boolean {
-  const q = new URLSearchParams(location.search).get('debug_pixel');
-  const s = session();
-  try {
-    if (q === '1') s?.setItem(DEBUG_KEY, '1');
-    if (q === '0') s?.removeItem(DEBUG_KEY);
-    return s?.getItem(DEBUG_KEY) === '1';
-  } catch { return q === '1'; }
-}
 
 let engagement: ReturnType<typeof createEngagement> | null = null;
 let currentPath = '';
@@ -25,8 +14,8 @@ let currentPath = '';
 /** Starts once per page load, from the page's first script (src/early.ts). Not on the admin. */
 export function startEngagedVisit() {
   if (engagement || typeof document === 'undefined' || /^\/admin(\/|$)/.test(location.pathname)) return;
-  const debug = debugOn();
-  const log = (m: string) => { if (debug) console.info(`[pixel debug] ${m}`); };
+  const debug = pixelDebugOn();
+  const log = pixelLog;
   engagement = createEngagement({
     now: () => performance.now(),
     setTimeout: (fn, ms) => window.setTimeout(fn, ms),
