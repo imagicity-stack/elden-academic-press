@@ -195,7 +195,7 @@ function prerenderBook(b: CatalogItem, image: ReturnType<typeof coverImg> | null
   const tags = [b.category?.name, LV[b.level as keyof typeof LV], b.isNew ? 'New' : ''].filter(Boolean);
   const by = [b.author ? `by <b>${esc(b.author)}</b>` : '', esc([b.classLabel, b.boards.join(', ')].filter(Boolean).join(' · '))].filter(Boolean).join(' · ');
   const cover = image
-    ? `<img src="${esc(image.src)}"${image.srcset ? ` srcset="${esc(image.srcset)}" sizes="${esc(image.sizes)}"` : ''} alt="Cover of ${esc(b.title)}" fetchpriority="high" />`
+    ? `<img src="${esc(image.src)}"${image.srcset ? ` srcset="${esc(image.srcset)}" sizes="${esc(image.sizes)}"` : ''} width="360" height="498" alt="Cover of ${esc(b.title)}" fetchpriority="high" />`
     : (() => {
       // No uploaded cover: the app draws one in the book's colours; this is a plain version of it.
       const c = PAL[b.palette] ?? PAL[0];
@@ -229,6 +229,8 @@ function prerenderBook(b: CatalogItem, image: ReturnType<typeof coverImg> | null
 // app renders out of sight, and swaps in when its book page is ready (src/prerender.ts).
 const PRERENDER_CSS = [
   '#prerender~#root{display:none}',
+  // The site's stylesheet sets this too; set it from the start so its arrival doesn't nudge the page.
+  'body{margin:0}',
   "#prerender{font:16px/1.55 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#0B1220;background:#F4F2ED;min-height:100vh}",
   '#prerender a{color:inherit}#prerender h1,#prerender h2{font-family:inherit;color:#0B1220}',
   '.pr-head,.pr-main,.pr-foot{max-width:1200px;margin:0 auto;padding-left:20px;padding-right:20px}',
@@ -238,6 +240,8 @@ const PRERENDER_CSS = [
   '.pr-main{padding-bottom:48px}.pr-crumbs{font-size:13px;color:#576072;margin:4px 0 24px}',
   '.pr-book{display:grid;gap:32px}@media(min-width:860px){.pr-book{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px;align-items:start}}',
   '.pr-cover img,.pr-blank{display:block;width:100%;max-width:min(400px,70vw);height:auto;margin:0 auto;border-radius:6px;box-shadow:0 18px 40px rgba(11,18,32,.18)}',
+  // The cover's space is kept before it arrives (the app's cover shape), so the text beside or below it doesn't jump.
+  '.pr-cover img{aspect-ratio:3/4.15;object-fit:cover;background:#E4E0D8}',
   '.pr-blank{aspect-ratio:3/4;background:#1C2638;color:#fff;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;padding:24px;font-size:clamp(20px,5vw,26px);line-height:1.15}.pr-blank span{font-size:14px;opacity:.85}',
   '.pr-tags{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#576072}',
   '#prerender h1{font-size:clamp(30px,5vw,46px);line-height:1.08;margin:8px 0 10px}',
