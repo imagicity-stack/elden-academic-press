@@ -154,14 +154,14 @@ function load() {
   n('init', PIXEL, pixelMatch(knownUser()));
 }
 
-function relay(name: Relayed, eventId: string, custom: Record<string, unknown>) {
+function relay(name: Relayed | typeof ENGAGED_EVENT, eventId: string, custom: Record<string, unknown>) {
   const url = location.origin + location.pathname;
   const user = knownUser() ?? undefined;
   // The first page view's server copy waits (briefly) for the Parameter Builder's click id and IPv6 cookies.
   (name === 'PageView' ? paramsOrTimeout() : Promise.resolve()).then(() => send(name, eventId, custom, url, user));
 }
 
-function send(name: Relayed, eventId: string, custom: Record<string, unknown>, url: string, user: MatchUser | undefined) {
+function send(name: Relayed | typeof ENGAGED_EVENT, eventId: string, custom: Record<string, unknown>, url: string, user: MatchUser | undefined) {
   fetch('/api/meta/event', {
     method: 'POST',
     keepalive: true,
@@ -233,12 +233,15 @@ if (active()) load();
 
 /**
  * EngagedVisit (src/engagement.ts): fbq('trackCustom', 'EngagedVisit', data, { eventID }) with a
- * fresh event id. Returns the id, or why nothing was sent.
+ * fresh event id, and the same event through the server (POST /api/meta/event). Returns the id,
+ * or why nothing was sent.
  */
 export function trackEngagedVisit(data: Record<string, unknown>): { eventId: string } | { reason: string } {
   const off = pixelOffReason();
   if (off) return { reason: off };
   const eventId = newEventId();
   trackCustom(ENGAGED_EVENT, data, { eventId });
+  // The server's copy (Conversions API), same event id: Meta counts it once, even if an ad blocker stopped the Pixel.
+  relay(ENGAGED_EVENT, eventId, data);
   return { eventId };
 }
