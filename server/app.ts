@@ -22,6 +22,7 @@ import { customerOrders } from './routes/orders.js';
 import { store } from './routes/store.js';
 import { productFeedXml } from './routes/feeds.js';
 import { sitemapXml } from './routes/sitemap.js';
+import { llmsTxt } from './routes/llms.js';
 import { webhooks } from './routes/webhooks.js';
 import { authorizationServer, oauth, origin, protectedResource } from './routes/mcp/oauth.js';
 import { mcpServer } from './routes/mcp/server.js';
@@ -39,6 +40,13 @@ export function createApp(getDeps: () => Promise<Deps>) {
     const xml = await sitemapXml(await getDeps(), process.env.VITE_SITE_LIVE === 'true');
     await tagCatalog();
     return c.body(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' });
+  });
+
+  // A guide to the store for AI assistants (vercel.json rewrites /llms.txt here). See server/routes/llms.ts.
+  root.get('/llms.txt', async (c) => {
+    const text = await llmsTxt(await getDeps(), process.env.VITE_SITE_LIVE === 'true');
+    await tagCatalog(); // saving a book in the admin clears it
+    return c.body(text, 200, { 'Content-Type': 'text/markdown; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' });
   });
 
   // A competition's page with its own link-preview tags (vercel.json sends /competitions/<slug> here).
