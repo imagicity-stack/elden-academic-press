@@ -11,7 +11,9 @@ export const GRAPH_VERSION = 'v24.0';
 export type MetaEventName = 'PageView' | 'ViewContent' | 'Search' | 'CustomizeProduct' | 'AddToCart' | 'InitiateCheckout' | 'AddPaymentInfo'
   | 'Purchase' | 'Lead' | 'Contact' | 'SubmitApplication' | 'CompleteRegistration' | 'Subscribe'
   /** Custom event: a new account (first Google sign-in). */
-  | 'AccountSignup';
+  | 'AccountSignup'
+  /** Custom event: 15 seconds on the site or half-way down a page (src/engagement.ts). */
+  | 'EngagedVisit';
 
 export interface MetaUser {
   email?: string | null;

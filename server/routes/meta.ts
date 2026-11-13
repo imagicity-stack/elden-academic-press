@@ -9,7 +9,7 @@ import { report, visitOf } from '../services/tracking.js';
 
 const zId = z.string().trim().max(80);
 const zEvent = z.object({
-  name: z.enum(['PageView', 'ViewContent', 'Search', 'CustomizeProduct', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Contact']),
+  name: z.enum(['PageView', 'ViewContent', 'Search', 'CustomizeProduct', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Contact', 'EngagedVisit']),
   eventId: z.string().trim().min(8).max(80),
   url: z.url().max(1000),
   custom: z.object({
@@ -22,6 +22,11 @@ const zEvent = z.object({
     num_items: z.number().int().min(0).max(1000).optional(),
     search_string: zText(100).optional(),
     format: z.string().regex(/^[a-z+,]{1,40}$/).optional(),
+    // EngagedVisit (src/engagement.ts)
+    trigger: z.enum(['time', 'scroll']).optional(),
+    engaged_seconds: z.number().int().min(0).max(86_400).optional(),
+    scroll_depth: z.number().int().min(0).max(100).optional(),
+    page_type: z.string().regex(/^[a-z_]{1,20}$/).optional(),
   }).optional(),
   /** Details the visitor gave us earlier (checkout, sign-in, a form): hashed before they go to Meta. */
   user: z.object({

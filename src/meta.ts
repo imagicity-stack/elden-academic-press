@@ -4,6 +4,7 @@
 import { getConsent, isMetaOff, isStaff, metaTestMode, syncConsent } from './consent';
 import { knownUser, phoneDigits, type MatchUser } from './visitor';
 import { fireOnce, registrationEventId, registrationParams, SIGNUP_EVENT, signupParams } from './shared/metaEvents';
+import { ENGAGED_EVENT } from './engagement';
 
 export { rememberUser } from './visitor';
 
@@ -35,6 +36,17 @@ const onAdmin = () => /^\/admin(\/|$)/.test(location.pathname);
 const storeOpen = () => import.meta.env.VITE_SITE_LIVE === 'true' || metaTestMode();
 // Never for staff, the admin, or a signed-in student under Meta's minimum age (consent.ts → isMetaOff).
 const active = () => Boolean(PIXEL) && storeOpen() && getConsent() === 'all' && !isStaff() && !onAdmin() && !isMetaOff();
+
+/** Why the Pixel sends nothing in this browser (for the debug log), or null when it's on. Nothing personal. */
+export function pixelOffReason(): string | null {
+  if (!PIXEL) return 'no Pixel id in this build (VITE_META_PIXEL_ID)';
+  if (!storeOpen()) return 'the store is not launched (coming-soon page)';
+  if (onAdmin()) return 'admin page';
+  if (isStaff()) return 'this browser is signed into the admin, so it is not tracked: open the page with ?meta-test, or use a private window';
+  if (isMetaOff()) return 'a student under Meta’s minimum age is signed in';
+  if (getConsent() !== 'all') return 'no cookie consent';
+  return null;
+}
 
 export const newEventId = () =>
   (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -142,14 +154,14 @@ function load() {
   n('init', PIXEL, pixelMatch(knownUser()));
 }
 
-function relay(name: Relayed, eventId: string, custom: Record<string, unknown>) {
+function relay(name: Relayed | typeof ENGAGED_EVENT, eventId: string, custom: Record<string, unknown>) {
   const url = location.origin + location.pathname;
   const user = knownUser() ?? undefined;
   // The first page view's server copy waits (briefly) for the Parameter Builder's click id and IPv6 cookies.
   (name === 'PageView' ? paramsOrTimeout() : Promise.resolve()).then(() => send(name, eventId, custom, url, user));
 }
 
-function send(name: Relayed, eventId: string, custom: Record<string, unknown>, url: string, user: MatchUser | undefined) {
+function send(name: Relayed | typeof ENGAGED_EVENT, eventId: string, custom: Record<string, unknown>, url: string, user: MatchUser | undefined) {
   fetch('/api/meta/event', {
     method: 'POST',
     keepalive: true,
@@ -178,7 +190,7 @@ export function track(name: EventName, custom: Record<string, unknown> = {}, opt
 }
 
 /** A custom event (the Pixel's trackCustom), with the id the server's twin uses. */
-export function trackCustom(name: typeof SIGNUP_EVENT, custom: Record<string, unknown>, opts: { eventId: string }) {
+export function trackCustom(name: typeof SIGNUP_EVENT | typeof ENGAGED_EVENT, custom: Record<string, unknown>, opts: { eventId: string }) {
   if (!active()) return;
   load();
   window.fbq!('trackCustom', name, custom, { eventID: opts.eventId });
@@ -218,3 +230,18 @@ document.addEventListener('click', (e) => {
 // signed-in students under Meta's minimum age (see active()).
 syncConsent();
 if (active()) load();
+
+/**
+ * EngagedVisit (src/engagement.ts): fbq('trackCustom', 'EngagedVisit', data, { eventID }) with a
+ * fresh event id, and the same event through the server (POST /api/meta/event). Returns the id,
+ * or why nothing was sent.
+ */
+export function trackEngagedVisit(data: Record<string, unknown>): { eventId: string } | { reason: string } {
+  const off = pixelOffReason();
+  if (off) return { reason: off };
+  const eventId = newEventId();
+  trackCustom(ENGAGED_EVENT, data, { eventId });
+  // The server's copy (Conversions API), same event id: Meta counts it once, even if an ad blocker stopped the Pixel.
+  relay(ENGAGED_EVENT, eventId, data);
+  return { eventId };
+}

@@ -110,6 +110,23 @@ describe('browser events through the server', () => {
     expect(toPayload(meta.sent[1]).user_data).not.toHaveProperty('em');
   });
 
+  it('relays EngagedVisit with the browser’s event id, its details, and only hashed contact details', async () => {
+    const body = {
+      name: 'EngagedVisit', eventId: 'e1d2c3e4-0000-4000-8000-000000000000', url: 'https://eldenap.in/books/mathematics-today',
+      custom: { trigger: 'scroll', engaged_seconds: 7, scroll_depth: 55, page_type: 'book', content_ids: ['x'], content_name: 'Mathematics Today' },
+      user: { email: ' Asha@Example.com ', phone: '+91 98765 43210' },
+    };
+    expect((await t.call('POST', '/meta/event', { headers: accepted, body })).status).toBe(204);
+    const p = toPayload(meta.sent[0]);
+    expect(p).toMatchObject({
+      event_name: 'EngagedVisit', event_id: body.eventId,
+      custom_data: { trigger: 'scroll', engaged_seconds: 7, scroll_depth: 55, page_type: 'book', content_ids: ['x'] },
+      user_data: { em: [sha('asha@example.com')], ph: [sha('919876543210')] },
+    });
+    expect(JSON.stringify(p.user_data)).not.toMatch(/asha@|98765/i);
+    expect((await t.call('POST', '/meta/event', { headers: accepted, body: { ...body, custom: { trigger: 'click' } } })).status).toBe(400);
+  });
+
   it('refuses events it must not relay and pages from other sites', async () => {
     expect((await t.call('POST', '/meta/event', { headers: accepted, body: { ...event, name: 'Purchase' } })).status).toBe(400);
     expect((await t.call('POST', '/meta/event', { headers: accepted, body: { ...event, url: 'https://evil.example/x' } })).status).toBe(400);
