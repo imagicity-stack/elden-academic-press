@@ -5,6 +5,8 @@ import { useStoreConfig } from '../store/catalog';
 import { orderToken } from '../store/orderToken';
 import { formatList, track } from '../meta';
 import { ga, gaItem } from '../ga';
+import type { PublicShipment } from '../shared/shipping';
+import { deliveryDay } from '../store/shipping';
 
 interface OrderView {
   number: number;
@@ -29,6 +31,8 @@ interface OrderView {
   requiresShipping: boolean;
   address: { name: string; line1: string; line2: string | null; city: string; state: string; pincode: string } | null;
   tracking: { courier: string | null; number: string | null; url: string | null; shippedAt: string; deliveredAt: string | null } | null;
+  /** Live tracking from Delhivery, once the parcel is booked. */
+  shipment?: PublicShipment | null;
   invoice: string | null;
   timeline: { type: string; message: string; at: string }[];
 }
@@ -152,7 +156,7 @@ export function OrderStatus() {
             </section>
           )}
 
-          {order.tracking && (
+          {order.shipment ? <ShipmentCard s={order.shipment} /> : order.tracking && (
             <section className="order-card">
               <h2 className="order-card__title">Delivery</h2>
               <p className="body body--15">
@@ -258,5 +262,42 @@ export function Track() {
         </section>
       )}
     </div>
+  );
+}
+
+/** The parcel's journey with Delhivery: where it is now, when it should arrive, every scan. */
+function ShipmentCard({ s }: { s: PublicShipment }) {
+  const [all, setAll] = useState(false);
+  const steps = ['manifested', 'in_transit', 'out_for_delivery', 'delivered'] as const;
+  const at = s.status === 'pending' || s.status === 'ndr' ? 2 : s.status === 'rto' || s.status === 'returned' ? -1 : steps.indexOf(s.status as typeof steps[number]);
+  const when = (iso: string) => new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+  const scans = all ? s.scans : s.scans.slice(0, 4);
+  return (
+    <section className="order-card ship-card" aria-labelledby="ship-title">
+      <div className="ship-card__head">
+        <h2 className="order-card__title" id="ship-title">{s.label}</h2>
+        {s.status === 'delivered' && s.deliveredAt
+          ? <p className="ship-card__eta">Delivered {when(s.deliveredAt)}</p>
+          : s.expectedDelivery && <p className="ship-card__eta">Expected by <strong>{deliveryDay(s.expectedDelivery)}</strong></p>}
+      </div>
+      {at >= 0 && (
+        <ol className="ship-steps" aria-label="Delivery progress">
+          {['Packed', 'On its way', 'Out for delivery', 'Delivered'].map((label, i) => (
+            <li key={label} className={i <= at ? 'is-done' : ''} aria-current={i === at ? 'step' : undefined}>{label}</li>
+          ))}
+        </ol>
+      )}
+      {s.status === 'ndr' && <p className="order-card__note">The courier couldn’t deliver on the last attempt. They’ll try again; if you need to change the address or time, reply to your order email or WhatsApp us.</p>}
+      <p className="body body--15">Delhivery · tracking number <strong>{s.waybill}</strong></p>
+      {scans.length > 0 && (
+        <ol className="timeline">
+          {scans.map((x, i) => <li key={i}><span>{x.label}{x.location && <> · {x.location}</>}</span><time>{when(x.at)}</time></li>)}
+        </ol>
+      )}
+      <div className="ship-card__actions">
+        {s.scans.length > 4 && <button type="button" className="btn btn--outline btn--md" onClick={() => setAll((v) => !v)}>{all ? 'Show less' : `Show all ${s.scans.length} updates`}</button>}
+        <a className="btn btn--outline btn--md" href={s.trackingUrl} target="_blank" rel="noopener noreferrer">Track on Delhivery ↗</a>
+      </div>
+    </section>
   );
 }

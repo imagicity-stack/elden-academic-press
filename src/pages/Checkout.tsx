@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type InputHTMLAttributes } from 'react';
 import { codAdvanceFor } from '../shared/cod';
+import { pinMessage, usePinCheck } from '../store/shipping';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, api, inr } from '../store/api';
 import { formatLabel, useCatalog, useStoreConfig } from '../store/catalog';
@@ -126,6 +127,11 @@ export function Checkout() {
   }, [quote]);
   const set = (k: keyof typeof blank) => (e: { target: { value: string } }) => setD((x: typeof blank) => ({ ...x, [k]: e.target.value }));
   const needsAddress = Boolean(quote?.requiresShipping);
+  // Printed books: can the courier deliver to this PIN code, with cash on delivery, and by when?
+  const pin = usePinCheck(needsAddress ? d.pincode : '');
+  const pinNote = pinMessage(pin);
+  const pinRefused = pin.status === 'done' && pin.check?.serviceable === false;
+  const pinNoCod = pin.status === 'done' && pin.check?.serviceable === true && pin.check.cod === false;
 
   // Why cash on delivery isn't possible for this cart (the server checks the same).
   // The advance: a flat amount, or a share of this order's total (as the server works it out).
@@ -135,6 +141,7 @@ export function Checkout() {
     : quote.lines.some((l) => l.isDigital) ? 'E-books can only be paid for online.'
     : !quote.requiresShipping ? 'Only for printed books.'
     : quote.total <= codAdvance ? 'This order is small enough to pay online in full.'
+    : pinNoCod ? 'Not offered for this PIN code.'
     : null;
   const cod = payMode === 'cod' && !codWhy;
   const payNow = quote ? (cod ? codAdvance : quote.total) : 0;
@@ -298,6 +305,7 @@ export function Checkout() {
               <StateSelect value={d.state} onChange={set('state')} states={cfg?.states} />
               <Input label="PIN code" value={d.pincode} onChange={set('pincode')} autoComplete="postal-code" inputMode="numeric" maxLength={6} required />
             </div>
+            {pinNote && <p className={'co-delivery co-delivery--' + pinNote.tone} role="status" aria-live="polite">{pinNote.text}</p>}
           </fieldset>
 
           {cfg?.cod && (
@@ -367,7 +375,7 @@ export function Checkout() {
             {generalError && <div className="form-error" role="alert">{generalError}</div>}
             {notice && <div className="form-notice" role="status">{notice}</div>}
             {cfg && !cfg.payments && <div className="form-notice">Online payment isn’t switched on yet. Please <Link to="/contact">contact us</Link> to order.</div>}
-            <button type="submit" className="btn btn--accent btn--lg btn--block" disabled={busy || loading || !quote || hasIssues || !cfg?.payments}>
+            <button type="submit" className="btn btn--accent btn--lg btn--block" disabled={busy || loading || !quote || hasIssues || !cfg?.payments || pinRefused}>
               {busy ? 'Please wait…' : quote ? (cod ? `Pay ${inr(payNow)} advance` : `Pay ${inr(payNow)}`) : 'Pay'}
             </button>
             <div className="co-secure">

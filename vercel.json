@@ -42,7 +42,8 @@
     { "path": "/api/cron/expire-orders", "schedule": "*/10 * * * *" },
     { "path": "/api/cron/newsletter", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/calls", "schedule": "*/10 * * * *" },
-    { "path": "/api/cron/whatsapp", "schedule": "*/10 * * * *" }
+    { "path": "/api/cron/whatsapp", "schedule": "*/10 * * * *" },
+    { "path": "/api/cron/shipments", "schedule": "*/30 * * * *" }
   ],
   "headers": [
     {

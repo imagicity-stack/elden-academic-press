@@ -18,6 +18,7 @@ import { NotFound } from './NotFound';
 import { formatName, track } from '../meta';
 import { ga, gaItem } from '../ga';
 import { BookSchema } from '../components/BookSchema';
+import { DeliveryCheck } from '../components/DeliveryCheck';
 import { trackAddToCart } from '../trackCart';
 import { dropPrerender } from '../prerender';
 
@@ -159,6 +160,8 @@ function BookView({ book }: { book: Product }) {
                 </button>
               </div>
               {available && <button type="button" className="buy__now" onClick={() => addToCart(true)}>or buy now and go to checkout <Arrow /></button>}
+
+              {kind === 'print' && available && cfg?.deliveryCheck && <DeliveryCheck />}
 
               <p className="buy__fine">
                 Secure checkout by Razorpay (UPI, cards, net banking).

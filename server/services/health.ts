@@ -3,7 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { eq, sql } from 'drizzle-orm';
 import type { Deps } from '../deps.js';
-import { accounts, adminUsers, calls, competitionSignups, orders, popups, products, productVariants, settings, subscribers, teamApplications, whatsappMessages, competitionStats, consentStats, mcpGrants } from '../db/schema.js';
+import { accounts, adminUsers, calls, competitionSignups, orders, popups, products, productVariants, settings, subscribers, teamApplications, whatsappMessages, competitionStats, consentStats, mcpGrants, shipments } from '../db/schema.js';
 
 type Check = 'ok' | 'missing' | 'error';
 export interface Health {
@@ -132,6 +132,10 @@ export async function healthCheck(getDeps: () => Promise<Deps>, source: Record<s
       ['0023_cod_confirmation', () => db.select({ v: orders.codConfirmation }).from(orders).limit(1)],
       ['0024_mcp_connector', () => db.select({ v: mcpGrants.id }).from(mcpGrants).limit(1)],
       ['0025_consent_auto', () => db.select({ v: settings.consentAuto }).from(settings).limit(1)],
+      ['0026_delhivery_shipping', async () => {
+        await db.select({ v: shipments.id }).from(shipments).limit(1);
+        await db.select({ v: settings.delhiveryEnabled }).from(settings).limit(1);
+      }],
     ];
     checks.database = 'ok';
     for (const [file, probe] of updates) {

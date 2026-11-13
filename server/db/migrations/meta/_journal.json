@@ -183,6 +183,13 @@
       "when": 1794493282937,
       "tag": "0025_consent_auto",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794550872570,
+      "tag": "0026_delhivery_shipping",
+      "breakpoints": true
     }
   ]
 }

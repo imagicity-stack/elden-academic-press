@@ -66,6 +66,13 @@ const schema = z.object({
   /** Any long random string; typed into the app's webhook settings as the "Verify token". */
   WHATSAPP_VERIFY_TOKEN: optional,
 
+  /** Delhivery B2C API token (Delhivery One → Settings → API setup, or from Delhivery's onboarding team). Secret. */
+  DELHIVERY_API_TOKEN: optional,
+  /** 'production' (track.delhivery.com, the default) or 'staging' (staging-express.delhivery.com, needs a staging token). */
+  DELHIVERY_ENV: z.enum(['production', 'staging']).default('production'),
+  /** Any long random string: the secret part of the address Delhivery pushes status updates to (docs/DELHIVERY.md). */
+  DELHIVERY_WEBHOOK_SECRET: optional,
+
   /** The first person to sign in with this email becomes the store owner. */
   ADMIN_OWNER_EMAIL: optional,
   /** Vercel Cron sends this as a bearer token. */

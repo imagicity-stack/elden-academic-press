@@ -16,6 +16,7 @@ import { runCalls } from '../services/calls.js';
 import { runWhatsApp } from '../services/whatsapp.js';
 import { expireOrders } from '../services/orders.js';
 import { eventIdHeader, report, visitOf } from '../services/tracking.js';
+import { syncShipments } from '../services/shipping.js';
 
 /* ---------------- Enquiry forms ---------------- */
 
@@ -68,6 +69,7 @@ cron.use('*', async (c, next) => {
 });
 
 cron.get('/expire-orders', async (c) => c.json({ expired: await expireOrders(c.get('deps')) }));
+cron.get('/shipments', async (c) => c.json(await syncShipments(c.get('deps'))));
 cron.get('/newsletter', async (c) => c.json(await processNewsletter(c.get('deps'))));
 cron.get('/calls', async (c) => c.json(await runCalls(c.get('deps'))));
 cron.get('/whatsapp', async (c) => c.json(await runWhatsApp(c.get('deps'))));

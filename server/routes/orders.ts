@@ -12,6 +12,7 @@ import { stateName } from '../lib/states.js';
 import { paymentMethodLabel } from '../lib/format.js';
 import { checkOrderToken, type Order } from '../services/orders.js';
 import { downloadLimit, ebookAwaitsDelivery, fileLabel, filesForItems, libraryPath, maskEmail } from '../services/ebooks.js';
+import { currentShipment, publicShipment } from '../services/shipping.js';
 
 
 export const customerOrders = new Hono<AppEnv>();
@@ -62,6 +63,7 @@ customerOrders.get('/:number', async (c) => {
   const awaitingDelivery = ebookAwaitsDelivery(o);
   const downloadsOpen = isPaid(o) && !awaitingDelivery && (!expiry || expiry > deps.now());
   const files = await filesForItems(deps.db, items);
+  const parcel = o.requiresShipping ? await currentShipment(deps, o.id) : null;
   c.header('Cache-Control', 'no-store');
   return c.json({
     number: o.number,
@@ -95,6 +97,8 @@ customerOrders.get('/:number', async (c) => {
     requiresShipping: o.requiresShipping,
     address: o.shipLine1 ? { name: o.shipName, line1: o.shipLine1, line2: o.shipLine2, city: o.shipCity, state: stateName(o.shipState ?? ''), pincode: o.shipPincode } : null,
     tracking: o.shippedAt ? { courier: o.courier, number: o.trackingNumber, url: o.trackingUrl, shippedAt: o.shippedAt, deliveredAt: o.deliveredAt } : null,
+    // Live tracking from Delhivery (scans, expected delivery date).
+    shipment: parcel ? publicShipment(parcel) : null,
     invoice: isPaid(o) || o.paymentStatus === 'refunded' ? o.invoiceNumber : null,
     timeline: events.filter((e) => PUBLIC_EVENTS.has(e.type)).map((e) => ({ type: e.type, message: publicMessage(e, o), at: e.createdAt })),
   });

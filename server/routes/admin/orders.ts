@@ -2,18 +2,19 @@ import { Hono, type Context } from 'hono';
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppEnv } from '../../app.js';
-import { calls, customers, orderEvents, orderItems, orders, payments, refunds } from '../../db/schema.js';
+import { calls, customers, orderEvents, orderItems, orders, payments, refunds, shipments } from '../../db/schema.js';
 import { toCsv } from '../../lib/csv.js';
 import { body, HttpError, notFound, query, zText } from '../../lib/http.js';
 import { stateName } from '../../lib/states.js';
 import { getSettings } from '../../services/catalog.js';
-import { sendCodCancelled, sendEbookUnlocked, sendOrderConfirmation, sendRefundNotice, sendShipped } from '../../services/emails.js';
+import { sendCodCancelled, sendOrderConfirmation, sendRefundNotice } from '../../services/emails.js';
 import { renderPackingSlip } from '../../services/invoice.js';
 import { invoiceFileName, renderInvoicePdf } from '../../services/invoicePdf.js';
 import { cancelCodOrder, cancelUnpaid, logEvent, orderLink, refundOrder } from '../../services/orders.js';
 import { confirmCodByStaff, recallCodConfirmation, stopCodConfirmation } from '../../services/calls.js';
-import { orderWhatsApp } from '../../services/whatsapp.js';
 import { orderStatusLabel } from '../orders.js';
+import { applyFulfilment } from '../../services/fulfilment.js';
+import { autoShipLater } from '../../services/shipping.js';
 import { CHANNELS, channelLabel, classify, orderChannel, type Channel, type Touch } from '../../../src/shared/attribution.js';
 import { audit, requireRole } from './auth.js';
 
@@ -132,7 +133,7 @@ async function loadOrder(c: Context<AppEnv>) {
 adminOrders.get('/:id{[0-9a-f-]{36}}', async (c) => {
   const { db } = c.get('deps');
   const o = await loadOrder(c);
-  const [items, events, pays, refs, cust, codCalls] = await Promise.all([
+  const [items, events, pays, refs, cust, codCalls, parcels] = await Promise.all([
     db.select().from(orderItems).where(eq(orderItems.orderId, o.id)),
     db.select().from(orderEvents).where(eq(orderEvents.orderId, o.id)).orderBy(asc(orderEvents.createdAt)),
     db.select().from(payments).where(eq(payments.orderId, o.id)).orderBy(asc(payments.createdAt)),
@@ -142,6 +143,7 @@ adminOrders.get('/:id{[0-9a-f-]{36}}', async (c) => {
       id: calls.id, status: calls.status, outcome: calls.outcome, dueAt: calls.dueAt, attempts: calls.attempts, endedAt: calls.endedAt,
       note: calls.note, result: calls.result, transcript: calls.transcript, recordingUrl: calls.recordingUrl,
     }).from(calls).where(and(eq(calls.orderId, o.id), eq(calls.kind, 'cod_confirm'))) : Promise.resolve([]),
+    db.select().from(shipments).where(eq(shipments.orderId, o.id)).orderBy(desc(shipments.createdAt)),
   ]);
   const visit = (t?: Touch) => t && { ...t, ...classify(t), label: channelLabel(classify(t).channel) };
   return c.json({
@@ -150,6 +152,7 @@ adminOrders.get('/:id{[0-9a-f-]{36}}', async (c) => {
     items, events, payments: pays.map(({ raw: _raw, ...p }) => p), refunds: refs, customer: cust[0] ?? null,
     customerLink: orderLink(c.get('deps'), o),
     codCall: codCalls[0] ?? null,
+    shipments: parcels,
   });
 });
 
@@ -168,39 +171,8 @@ adminOrders.post('/:id/fulfillment', async (c) => {
   if (!['paid', 'partially_refunded'].includes(o.paymentStatus) || o.cancelledAt) throw new HttpError(409, 'Only paid, active orders can be fulfilled.');
   if (!o.requiresShipping) throw new HttpError(409, 'This order has nothing to ship.');
   if (input.status === 'shipped' && !input.trackingNumber && !o.trackingNumber) throw new HttpError(400, 'Add the tracking number before marking as shipped.');
-  // Cash on delivery: packing or shipping an order that wasn't confirmed confirms it (and stops the call).
-  if (o.paymentMode === 'cod' && input.status !== 'unfulfilled' && o.codConfirmation && o.codConfirmation !== 'confirmed') {
-    await confirmCodByStaff(deps, o.id, c.get('admin').email, `Confirmed by marking it ${input.status}`);
-  }
-  const now = deps.now();
-  const [u] = await deps.db.update(orders).set({
-    fulfillmentStatus: input.status,
-    courier: input.courier ?? o.courier,
-    trackingNumber: input.trackingNumber ?? o.trackingNumber,
-    trackingUrl: input.trackingUrl === '' ? null : input.trackingUrl ?? o.trackingUrl,
-    packedAt: input.status === 'packed' ? now : input.status === 'unfulfilled' ? null : o.packedAt ?? now,
-    shippedAt: input.status === 'shipped' ? o.shippedAt ?? now : input.status === 'delivered' ? o.shippedAt ?? now : null,
-    deliveredAt: input.status === 'delivered' ? o.deliveredAt ?? now : null,
-    // Cash on delivery: the courier collects the balance when the books are delivered.
-    codCollectedAt: o.paymentMode === 'cod' ? (input.status === 'delivered' ? o.codCollectedAt ?? now : null) : null,
-    updatedAt: sql`now()`,
-  }).where(eq(orders.id, o.id)).returning();
-  const label = { unfulfilled: 'Marked as not packed', packed: 'Packed', shipped: `Shipped${u.courier ? ` with ${u.courier}` : ''}${u.trackingNumber ? ` (${u.trackingNumber})` : ''}`, delivered: 'Delivered' }[input.status];
-  await logEvent(deps.db, o.id, input.status === 'unfulfilled' ? 'fulfillment' : input.status, label, c.get('admin').email);
+  const u = await applyFulfilment(deps, o, input, c.get('admin').email);
   await audit(c, 'order.fulfillment', 'order', o.number, input);
-  if (input.status === 'shipped' && input.notify && o.fulfillmentStatus !== 'shipped') {
-    await sendShipped(deps, u, await getSettings(deps.db));
-    await orderWhatsApp(deps, 'shipped', u).catch((e) => console.error('[whatsapp] shipped', (e as Error).message));
-  }
-  if (input.status === 'delivered' && o.fulfillmentStatus !== 'delivered' && o.paymentMode === 'cod') {
-    await logEvent(deps.db, o.id, 'cod_collected', `Cash on delivery: ₹${(o.codAmount / 100).toFixed(2)} collected`, c.get('admin').email);
-    // Their free e-book is unlocked now: send the download links.
-    const items = await deps.db.select().from(orderItems).where(eq(orderItems.orderId, o.id));
-    if (input.notify && items.some((i) => i.includesEbook)) {
-      await sendEbookUnlocked(deps, u, items, await getSettings(deps.db));
-      await orderWhatsApp(deps, 'ebook_ready', u).catch((e) => console.error('[whatsapp] e-book ready', (e as Error).message));
-    }
-  }
   return c.json({ order: u });
 });
 
@@ -232,8 +204,12 @@ adminOrders.post('/:id/cod-confirmation', async (c) => {
   const o = await loadOrder(c);
   const input = await body(c, z.object({ action: z.enum(['confirm', 'call']) }));
   const by = c.get('admin').email;
-  if (input.action === 'confirm') await confirmCodByStaff(deps, o.id, by);
-  else await recallCodConfirmation(deps, o.id, by);
+  if (input.action === 'confirm') {
+    await confirmCodByStaff(deps, o.id, by);
+    await autoShipLater(deps, o.id);
+  } else {
+    await recallCodConfirmation(deps, o.id, by);
+  }
   await audit(c, `order.cod_${input.action}`, 'order', o.number);
   const [u] = await deps.db.select().from(orders).where(eq(orders.id, o.id));
   return c.json({ order: u });

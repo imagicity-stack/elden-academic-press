@@ -12,6 +12,7 @@ import { metaHttp, type Meta } from './lib/meta.js';
 import { sarvamCalls, type CallProvider } from './lib/callProvider.js';
 import { whatsappHttp, whatsappTemplatesHttp, type WaTemplates, type WhatsApp } from './lib/whatsapp.js';
 import { razorpayHttp, razorpaySimulator, type Razorpay } from './lib/razorpay.js';
+import { delhiveryHttp, delhiverySimulator, type Delhivery } from './lib/delhivery.js';
 import { localStorage, supabaseStorage, type Storage } from './lib/storage.js';
 
 export interface Deps {
@@ -36,6 +37,8 @@ export interface Deps {
   whatsapp?: WhatsApp | null;
   /** The WhatsApp account's message templates; unset without the token and account id. */
   whatsappTemplates?: WaTemplates | null;
+  /** Delhivery's API (Admin → Shipping); a simulator in local development; unset on Vercel without a token. */
+  delhivery?: Delhivery | null;
 }
 
 // Kept on globalThis so the dev server's hot reloads reuse one database.
@@ -74,7 +77,9 @@ async function buildDeps(env: Env): Promise<Deps> {
   const calls = sarvamCallsFrom(env);
   const whatsapp = env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID ? whatsappHttp({ token: env.WHATSAPP_TOKEN, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, messagingAccountId: env.WHATSAPP_BUSINESS_ACCOUNT_ID }) : null;
   const whatsappTemplates = env.WHATSAPP_TOKEN && env.WHATSAPP_BUSINESS_ACCOUNT_ID ? whatsappTemplatesHttp({ token: env.WHATSAPP_TOKEN, businessAccountId: env.WHATSAPP_BUSINESS_ACCOUNT_ID }) : null;
-  return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, calls, whatsapp, whatsappTemplates, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task.finally(afterConnectionsClose)) : undefined };
+  const delhivery = env.DELHIVERY_API_TOKEN ? delhiveryHttp({ token: env.DELHIVERY_API_TOKEN, env: env.DELHIVERY_ENV })
+    : env.onVercel ? null : delhiverySimulator();
+  return { env, db, razorpay, mailer, storage, authUsers, authUser, meta, calls, whatsapp, whatsappTemplates, delhivery, now: () => new Date(), defer: env.onVercel ? (task) => waitUntil(task.finally(afterConnectionsClose)) : undefined };
 }
 
 /** Outgoing calls through Sarvam, once its key, workspace and both campaign ids are set; else null. */

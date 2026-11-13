@@ -4,6 +4,7 @@ import type { OrderSource } from '../../src/shared/attribution.js';
 import type { PopupAudience, PopupContent, PopupDesign, PopupFrequency, PopupTrigger } from '../../src/shared/popups.js';
 import type { CallKind, CallSettings, CallStatus, CodConfirmation } from '../../src/shared/calls.js';
 import type { WaKind, WaStatus, WhatsAppSettings } from '../../src/shared/whatsapp.js';
+import type { ShipmentScan, ShipmentStatus } from '../../src/shared/shipping.js';
 import {
   boolean, check, date, index, integer, jsonb, pgEnum, pgSequence, pgTable, primaryKey, serial, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
@@ -271,6 +272,84 @@ export const orderEvents = pgTable('order_events', {
   createdAt: timestamps.createdAt,
 }, (t) => [index('order_events_order_idx').on(t.orderId)]);
 
+/**
+ * A parcel booked with Delhivery: one waybill (AWB). An order normally has one; a cancelled
+ * shipment stays (cancelled) when a new one is booked, so the history is kept.
+ */
+export const shipments = pgTable('shipments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orderId: uuid('order_id').notNull().references(() => orders.id, { onDelete: 'cascade' }),
+  carrier: text('carrier').notNull().default('delhivery'),
+  waybill: text('waybill').notNull().unique(),
+  /** The order reference sent to Delhivery ("100023", or "100023-2" for a second shipment). */
+  reference: text('reference').notNull(),
+  /** 'staging' or 'production': which Delhivery system it was booked on. */
+  env: text('env').notNull().default('production'),
+  status: text('status').$type<ShipmentStatus>().notNull().default('manifested'),
+  /** Delhivery's own latest status, as it said it. */
+  carrierStatus: text('carrier_status').notNull().default('Manifested'),
+  carrierStatusType: text('carrier_status_type').notNull().default('UD'),
+  statusCode: text('status_code').notNull().default(''),
+  statusLocation: text('status_location').notNull().default(''),
+  statusNote: text('status_note').notNull().default(''),
+  statusAt: timestamp('status_at', { withTimezone: true }),
+  /** 'Prepaid' or 'COD'. */
+  paymentMode: text('payment_mode').notNull(),
+  /** Cash the courier collects (paise; 0 for prepaid). */
+  codAmount: integer('cod_amount').notNull().default(0),
+  /** Value of the books in the parcel (paise), as declared to Delhivery. */
+  declaredValue: integer('declared_value').notNull(),
+  weightGrams: integer('weight_grams').notNull(),
+  lengthCm: integer('length_cm').notNull(),
+  breadthCm: integer('breadth_cm').notNull(),
+  heightCm: integer('height_cm').notNull(),
+  /** 'Surface' or 'Express'. */
+  mode: text('mode').notNull(),
+  /** Delhivery's estimate when booked (paise, GST included), and the weight it charged. */
+  chargeEstimate: integer('charge_estimate'),
+  chargedWeightGrams: integer('charged_weight_grams'),
+  expectedDeliveryAt: timestamp('expected_delivery_at', { withTimezone: true }),
+  pickedUpAt: timestamp('picked_up_at', { withTimezone: true }),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+  rtoAt: timestamp('rto_at', { withTimezone: true }),
+  returnedAt: timestamp('returned_at', { withTimezone: true }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  /** Delivery attempts so far (Delhivery's DispatchCount). */
+  attempts: integer('attempts').notNull().default(0),
+  /** Every scan, oldest first. */
+  scans: jsonb('scans').$type<ShipmentScan[]>().notNull().default([]),
+  /** The last action taken on a failed delivery, and Delhivery's request id for it. */
+  ndrAction: text('ndr_action'),
+  ndrRequestId: text('ndr_request_id'),
+  ndrActionAt: timestamp('ndr_action_at', { withTimezone: true }),
+  ndrResult: text('ndr_result'),
+  /** The pickup request it went out with. */
+  pickupRequestId: integer('pickup_request_id'),
+  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+  syncError: text('sync_error'),
+  createdBy: text('created_by').notNull().default('system'),
+  ...timestamps,
+}, (t) => [
+  index('shipments_order_idx').on(t.orderId),
+  index('shipments_status_idx').on(t.status, t.lastSyncedAt),
+]);
+
+/** A courier pickup booked with Delhivery for the parcels waiting at the pickup location. */
+export const pickupRequests = pgTable('pickup_requests', {
+  id: serial('id').primaryKey(),
+  /** Delhivery's pickup id. */
+  pickupId: text('pickup_id').notNull(),
+  location: text('location').notNull(),
+  pickupDate: date('pickup_date').notNull(),
+  /** "HH:MM:SS", India time. */
+  pickupTime: text('pickup_time').notNull(),
+  packageCount: integer('package_count').notNull(),
+  /** The Delhivery centre that will come. */
+  centerName: text('center_name').notNull().default(''),
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamps.createdAt,
+}, (t) => [index('pickup_requests_date_idx').on(t.pickupDate)]);
+
 export const payments = pgTable('payments', {
   id: uuid('id').primaryKey().defaultRandom(),
   orderId: uuid('order_id').notNull().references(() => orders.id, { onDelete: 'cascade' }),
@@ -382,6 +461,27 @@ export const settings = pgTable('settings', {
    * them off from "Cookie settings". Meant until India's DPDP consent rules apply (May 2027).
    */
   consentAuto: boolean('consent_auto').notNull().default(false),
+  /** Ship printed books with Delhivery (Admin → Shipping). The API token is DELHIVERY_API_TOKEN in Vercel. */
+  delhiveryEnabled: boolean('delhivery_enabled').notNull().default(false),
+  /** The pickup location ("warehouse") exactly as registered with Delhivery: the name is case sensitive. */
+  delhiveryPickupLocation: text('delhivery_pickup_location').notNull().default(''),
+  /** PIN code books are picked up from (for delivery dates and charge estimates). */
+  delhiveryOriginPin: text('delhivery_origin_pin').notNull().default(''),
+  /** 'Surface' (cheaper, slower) or 'Express' (air). */
+  delhiveryMode: text('delhivery_mode').$type<'Surface' | 'Express'>().notNull().default('Surface'),
+  /** Create the shipment as soon as an order is paid (cash on delivery: once confirmed). Off = staff click "Ship". */
+  delhiveryAutoShip: boolean('delhivery_auto_ship').notNull().default(false),
+  /** Check the delivery PIN code at checkout: delivery date, and cash on delivery only where Delhivery collects cash. */
+  delhiveryCheckoutCheck: boolean('delhivery_checkout_check').notNull().default(true),
+  /** The usual parcel: box size in cm and the weight of the packing itself (grams), added to the books' weight. */
+  shipLengthCm: integer('ship_length_cm').notNull().default(25),
+  shipBreadthCm: integer('ship_breadth_cm').notNull().default(20),
+  shipHeightCm: integer('ship_height_cm').notNull().default(5),
+  shipPackagingGrams: integer('ship_packaging_grams').notNull().default(100),
+  /** Weight of a book with no weight set on its product (grams). */
+  shipDefaultBookGrams: integer('ship_default_book_grams').notNull().default(400),
+  /** HSN code sent to Delhivery for printed books (4901: printed books). */
+  shipHsnCode: text('ship_hsn_code').notNull().default('4901'),
   updatedAt: timestamps.updatedAt,
 }, (t) => [check('settings_singleton', sql`${t.id} = 1`)]);
 

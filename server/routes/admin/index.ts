@@ -21,6 +21,7 @@ import { adminAudience } from './audience.js';
 import { adminConsent } from './consent.js';
 import { adminPopups } from './popups.js';
 import { adminOrders } from './orders.js';
+import { adminShipping } from './shipping.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
 import { adminCategories, adminInventory, adminProducts, adminUploads } from './products.js';
 import { adminMcp } from '../mcp/oauth.js';
@@ -39,10 +40,11 @@ admin.use('*', requireAdmin());
 // After saving books, categories, files or settings, the store shows the change on the next reload.
 admin.use('*', async (c, next) => {
   await next();
-  if (c.req.method !== 'GET' && c.res.status < 400 && /\/admin\/(products|categories|inventory|uploads|resources|settings)\b/.test(c.req.path)) await clearCatalogCache();
+  if (c.req.method !== 'GET' && c.res.status < 400 && /\/admin\/(products|categories|inventory|uploads|resources|settings|shipping\/settings)\b/.test(c.req.path)) await clearCatalogCache();
 });
 
 admin.route('/orders', adminOrders);
+admin.route('/shipping', adminShipping);
 admin.route('/products', adminProducts);
 admin.route('/inventory', adminInventory);
 admin.route('/categories', adminCategories);

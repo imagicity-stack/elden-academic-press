@@ -5,6 +5,8 @@ import { adminApi, fmtDate, openPrintable, toPaise, useAdmin } from '../api';
 import { canManage, useMe } from '../AdminApp';
 import { Badge, Btn, Card, Check, ErrorBox, FulBadge, Loading, Modal, MoneyField, Page, PayBadge, SelectField, TextArea, TextField, useAction, useToast } from '../ui';
 import { CALL_STATUS_LABEL, COD_CONFIRMATION_LABEL, CONFIRMED_BY_CALL, type CallStatus, type CodConfirmation } from '../../shared/calls';
+import { SHIPMENT_LABEL, type ShipmentScan, type ShipmentStatus } from '../../shared/shipping';
+import { NdrModal, ShipBadge } from './Shipping';
 
 interface Detail {
   order: {
@@ -25,7 +27,14 @@ interface Detail {
   refunds: { id: string; amount: number; status: string; reason: string; actor: string; createdAt: string }[];
   customer: { id: string; ordersCount: number; totalSpent: number } | null;
   customerLink: string;
+  /** Delhivery parcels for this order, newest first. */
+  shipments: ShipmentRow[];
   source: { channel: string; label: string; detail: string; first?: Visit; last?: Visit };
+}
+interface ShipmentRow {
+  id: string; waybill: string; status: ShipmentStatus; carrierStatus: string; statusLocation: string; statusNote: string; statusAt: string | null; env: string;
+  paymentMode: string; codAmount: number; weightGrams: number; lengthCm: number; breadthCm: number; heightCm: number; mode: string; chargeEstimate: number | null;
+  expectedDeliveryAt: string | null; cancelledAt: string | null; ndrAction: string | null; ndrResult: string | null; syncError: string | null; scans: ShipmentScan[];
 }
 interface Visit { at: number; label: string; detail: string; source?: string; medium?: string; campaign?: string; content?: string; term?: string; ref?: string; landing?: string; click?: string }
 
@@ -114,6 +123,10 @@ export default function OrderDetail() {
             {o.fulfillmentStatus === 'delivered' && <span className="ad-muted">Delivered — nothing left to do.</span>}
           </div>
         </div>
+      )}
+
+      {active && o.requiresShipping && (
+        <DelhiveryPanel o={o} shipments={data.shipments ?? []} unconfirmedWarning={unconfirmed ? notConfirmedWarning : null} onChange={() => { reload(); refreshCounts(); }} />
       )}
 
       <div className="ad-grid-2 ad-grid-2--wide">
@@ -365,6 +378,97 @@ function EbookAccess({ orderId, email, extra, onSaved }: { orderId: string; emai
         <Btn size="sm" kind="primary" busy={busy === 'ebook'} disabled={value.trim() === (extra ?? '')} onClick={() => save(value.trim())}>Save</Btn>
         {extra && <Btn size="sm" onClick={() => { setValue(''); save(''); }}>Remove</Btn>}
       </div>
+    </Card>
+  );
+}
+
+/* ---------------- Delhivery ---------------- */
+
+interface Quote {
+  parcel: { weightGrams: number; lengthCm: number; breadthCm: number; heightCm: number; mode: 'Surface' | 'Express'; paymentMode: 'Prepaid' | 'COD'; codAmount: number; declaredValue: number; quantity: number; description: string };
+  blockers: string[]; serviceable: boolean | null; cod: boolean | null; charge: number | null; deliveryBy: string | null; warning: string | null;
+}
+
+/** Book the parcel with Delhivery, then follow it: labels, scans, cancel, failed deliveries. */
+function DelhiveryPanel({ o, shipments, unconfirmedWarning, onChange }: { o: Detail['order']; shipments: ShipmentRow[]; unconfirmedWarning: string | null; onChange: () => void }) {
+  const live = shipments.find((s) => !['cancelled', 'returned', 'lost'].includes(s.status));
+  const past = shipments.filter((s) => s !== live);
+  const { data: quote } = useAdmin<Quote>(live ? null : `/shipping/orders/${o.id}/quote`);
+  const [form, setForm] = useState<{ weightGrams: string; lengthCm: string; breadthCm: string; heightCm: string; mode: 'Surface' | 'Express' } | null>(null);
+  const [ndr, setNdr] = useState(false);
+  const [scans, setScans] = useState(false);
+  const { busy, run } = useAction();
+  const f = form ?? (quote ? { weightGrams: String(quote.parcel.weightGrams), lengthCm: String(quote.parcel.lengthCm), breadthCm: String(quote.parcel.breadthCm), heightCm: String(quote.parcel.heightCm), mode: quote.parcel.mode } : null);
+  const set = (k: 'weightGrams' | 'lengthCm' | 'breadthCm' | 'heightCm', v: string) => f && setForm({ ...f, [k]: v.replace(/\D/g, '') });
+  const book = () => {
+    if (!f || (unconfirmedWarning && !window.confirm(unconfirmedWarning))) return;
+    run('book', async () => {
+      await adminApi(`/shipping/orders/${o.id}/ship`, { body: { weightGrams: Number(f.weightGrams), lengthCm: Number(f.lengthCm), breadthCm: Number(f.breadthCm), heightCm: Number(f.heightCm), mode: f.mode } });
+      onChange();
+    }, 'Booked with Delhivery');
+  };
+  const label = (size: '4R' | 'A4') => live && run(`label${size}`, () => openPrintable(`/shipping/labels.pdf?ids=${live.id}&size=${size}`));
+  const post = (key: string, path: string, ok: string, confirm?: string) => {
+    if (!live || (confirm && !window.confirm(confirm))) return;
+    run(key, async () => { await adminApi(`/shipping/shipments/${live.id}/${path}`, { method: 'POST' }); onChange(); }, ok);
+  };
+
+  if (live) {
+    const canCancel = ['manifested', 'in_transit', 'pending', 'ndr'].includes(live.status) && !live.cancelledAt;
+    return (
+      <Card title={<>Delhivery <ShipBadge s={live.status} /></>} actions={<div className="ad-row">
+        <Btn size="sm" busy={busy === 'label4R'} onClick={() => label('4R')}>Label 4 × 6</Btn>
+        <Btn size="sm" busy={busy === 'labelA4'} onClick={() => label('A4')}>A4</Btn>
+        {!['delivered'].includes(live.status) && <Btn size="sm" kind="ghost" busy={busy === 'refresh'} onClick={() => post('refresh', 'refresh', 'Updated from Delhivery')}>Refresh</Btn>}
+      </div>}>
+        <div className="ad-stack-sm">
+          <div><a className="ad-strong ad-mono" href={`https://www.delhivery.com/track-v2/package/${live.waybill}`} target="_blank" rel="noopener noreferrer">AWB {live.waybill}</a>
+            <span className="ad-muted"> · {live.paymentMode === 'COD' ? `COD ${inr(live.codAmount)}` : 'Prepaid'} · {live.weightGrams} g · {live.lengthCm}×{live.breadthCm}×{live.heightCm} cm · {live.mode}{live.chargeEstimate ? ` · about ${inr(live.chargeEstimate)}` : ''}{live.env === 'staging' ? ' · staging' : ''}</span></div>
+          <div>{live.carrierStatus}{live.statusLocation && <> · {live.statusLocation.replace(/_/g, ' ')}</>}{live.statusAt && <span className="ad-muted"> · {fmtDate(live.statusAt, true)}</span>}
+            {live.expectedDeliveryAt && live.status !== 'delivered' && <> · expected <b>{fmtDate(live.expectedDeliveryAt)}</b></>}</div>
+          {live.statusNote && live.status !== 'manifested' && <div className="ad-muted">{live.statusNote}</div>}
+          {live.status === 'manifested' && <div className="ad-muted">Print the label, stick it on the parcel, and book a pickup in Shipping → Ready for pickup.</div>}
+          {live.cancelledAt && <div className="ad-err-text">Cancellation asked {fmtDate(live.cancelledAt, true)}: Delhivery is bringing it back.</div>}
+          {live.ndrAction && <div className="ad-small">Asked Delhivery: {live.ndrAction}{live.ndrResult ? ` · ${live.ndrResult}` : ' · waiting for its answer'}</div>}
+          {live.syncError && <div className="ad-err-text ad-small">Tracking: {live.syncError}</div>}
+          <div className="ad-row">
+            {(live.status === 'ndr' || live.status === 'pending') && <Btn kind="primary" size="sm" onClick={() => setNdr(true)}>Failed delivery: tell Delhivery…</Btn>}
+            {canCancel && <Btn kind="danger" size="sm" busy={busy === 'cancel'} onClick={() => post('cancel', 'cancel', 'Cancellation sent to Delhivery', live.status === 'manifested'
+              ? 'Cancel this Delhivery booking? The order goes back to “not packed” and can be booked again.'
+              : 'The parcel is already with Delhivery. Cancelling sends it back to you (return charges may apply). Continue?')}>Cancel shipment</Btn>}
+            {live.scans.length > 0 && <button type="button" className="ad-link" onClick={() => setScans((v) => !v)}>{scans ? 'Hide' : 'Show'} {live.scans.length} scan{live.scans.length === 1 ? '' : 's'}</button>}
+          </div>
+          {scans && (
+            <ol className="ad-ship-scans">
+              {live.scans.slice().reverse().map((x, i) => <li key={i}><time>{fmtDate(x.at, true)}</time><span><b>{x.status}</b>{x.location && ` · ${x.location.replace(/_/g, ' ')}`}{x.note && <span className="ad-muted"> · {x.note}</span>}{x.code && <span className="ad-muted ad-mono"> {x.code}</span>}</span></li>)}
+            </ol>
+          )}
+          {past.length > 0 && <div className="ad-muted ad-small">Earlier: {past.map((p) => `${p.waybill} (${SHIPMENT_LABEL[p.status].toLowerCase()})`).join(', ')}</div>}
+        </div>
+        {ndr && <NdrModal s={{ id: live.id, waybill: live.waybill, statusNote: live.statusNote, name: o.shipName || o.name, phone: o.phone }} onClose={() => setNdr(false)} onDone={() => { setNdr(false); onChange(); }} />}
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Ship with Delhivery" actions={<Btn kind="primary" busy={busy === 'book'} disabled={!quote || !f || quote.blockers.length > 0 || quote.serviceable === false} onClick={book}>Book with Delhivery</Btn>}>
+      {!quote || !f ? <Loading /> : quote.blockers.length > 0 ? (
+        <p className="ad-muted">Delhivery isn’t set up yet: {quote.blockers[0]} <Link to="/admin/shipping?tab=settings">Shipping settings</Link></p>
+      ) : (
+        <div className="ad-stack-sm">
+          <p className="ad-small">{quote.parcel.description} · {quote.parcel.paymentMode === 'COD' ? <b>collect {inr(quote.parcel.codAmount)} cash</b> : 'prepaid'} · declared value {inr(quote.parcel.declaredValue)}</p>
+          <div className="ad-row">
+            <TextField label="Weight (g)" value={f.weightGrams} inputMode="numeric" onChange={(e) => set('weightGrams', e.target.value)} />
+            <TextField label="L (cm)" value={f.lengthCm} inputMode="numeric" onChange={(e) => set('lengthCm', e.target.value)} />
+            <TextField label="W (cm)" value={f.breadthCm} inputMode="numeric" onChange={(e) => set('breadthCm', e.target.value)} />
+            <TextField label="H (cm)" value={f.heightCm} inputMode="numeric" onChange={(e) => set('heightCm', e.target.value)} />
+            <SelectField label="Speed" value={f.mode} onChange={(e) => setForm({ ...f, mode: e.target.value as 'Surface' | 'Express' })}><option value="Surface">Surface</option><option value="Express">Express</option></SelectField>
+          </div>
+          <p className="ad-small">{quote.deliveryBy && <>Expected by <b>{fmtDate(quote.deliveryBy)}</b> · </>}{quote.charge !== null && <>Delhivery’s estimate <b>{inr(quote.charge)}</b> (incl. GST)</>}</p>
+          {quote.warning && <p className="ad-err-text">{quote.warning}</p>}
+          {past.length > 0 && <p className="ad-muted ad-small">Earlier: {past.map((p) => `${p.waybill} (${SHIPMENT_LABEL[p.status].toLowerCase()})`).join(', ')}</p>}
+        </div>
+      )}
     </Card>
   );
 }

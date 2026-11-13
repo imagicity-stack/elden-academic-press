@@ -11,6 +11,7 @@ import { getSettings, loadCatalog } from '../services/catalog.js';
 import { tagCatalog } from '../lib/cdn.js';
 import { codRule, confirmRazorpayPayment, createOrder, logEvent, orderToken, quote } from '../services/orders.js';
 import { visitOf } from '../services/tracking.js';
+import { checkPin } from '../services/shipping.js';
 
 const zState = z.string().refine(isStateCode, 'Choose a state');
 const zItems = z.array(z.object({
@@ -38,6 +39,8 @@ store.get('/config', async (c) => {
     metaMinAge: env.META_MIN_AGE,
     // Cookie banner off (Admin → Settings): every visitor counts as having accepted cookies.
     consentAuto: s.consentAuto,
+    // Delhivery: the delivery date and cash on delivery are shown for a PIN code (GET /shipping/pin/:pin).
+    deliveryCheck: s.delhiveryEnabled && s.delhiveryCheckoutCheck && Boolean(c.get('deps').delhivery),
   });
 });
 
@@ -63,6 +66,21 @@ store.get('/resources', async (c) => {
       url: r.filePath ? storage.publicUrl('resources', r.filePath) : null,
     })),
   });
+});
+
+/**
+ * Can we deliver to this PIN code, with cash on delivery, and by when (Delhivery)? For checkout and
+ * the book page. { check: null } when the check is off; serviceable null when Delhivery can't be asked.
+ */
+store.get('/shipping/pin/:pin', async (c) => {
+  const pin = c.req.param('pin');
+  if (!/^[1-9]\d{5}$/.test(pin)) throw new HttpError(400, 'Enter a 6-digit PIN code.', 'invalid');
+  const deps = c.get('deps');
+  await rateLimit(deps.db, `pin:${c.get('ip')}`, 60, 600);
+  const check = await checkPin(deps, pin);
+  // The same answer for everyone: the edge keeps it for an hour (Delhivery's list changes rarely).
+  c.header('Cache-Control', check && check.serviceable !== null ? 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400' : 'no-store');
+  return c.json({ pin, check });
 });
 
 store.post('/cart/quote', async (c) => {
