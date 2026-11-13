@@ -22,7 +22,7 @@ const settingsView = (s: typeof settings.$inferSelect) => ({
 });
 
 /** Paid orders with printed books that have no live Delhivery parcel yet. */
-const toShipWhere = and(
+const toShipWhere = () => and(
   inArray(orders.paymentStatus, ['paid', 'partially_refunded']),
   isNull(orders.cancelledAt),
   eq(orders.requiresShipping, true),
@@ -30,29 +30,56 @@ const toShipWhere = and(
   notExists(sql`(select 1 from ${shipments} where ${shipments.orderId} = ${orders.id} and ${shipments.status} not in ('cancelled', 'returned', 'lost'))`),
 );
 
+/**
+ * One part of the Shipping page, given at most `ms`: a stuck part is logged with its timing and
+ * left empty, so the page still loads (the answer lists it under `problems`).
+ */
+async function part<T>(name: string, run: () => PromiseLike<T>, fallback: T, problems: string[], ms = 5000): Promise<T> {
+  const t0 = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const out = await Promise.race([
+      Promise.resolve().then(run),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer in ${ms} ms`)), ms); }),
+    ]);
+    const took = Date.now() - t0;
+    if (took > 1500) console.warn(`[shipping] overview: ${name} took ${took} ms`);
+    return out;
+  } catch (e) {
+    console.error(`[shipping] overview: ${name} failed after ${Date.now() - t0} ms: ${(e as Error).message}${(e as { cause?: Error }).cause ? ` (${(e as { cause?: Error }).cause!.message})` : ''}`);
+    problems.push(name);
+    return fallback;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 adminShipping.get('/', async (c) => {
   const deps = c.get('deps');
+  const t0 = Date.now();
+  const problems: string[] = [];
+  console.info('[shipping] overview: start');
   const s = await getSettings(deps.db);
   const status = c.req.query('status');
   const shipWhere = status && (SHIPMENT_STATUSES as readonly string[]).includes(status) ? eq(shipments.status, status as typeof SHIPMENT_STATUSES[number]) : undefined;
-  const [counts, toShip, list, pickups, waiting] = await Promise.all([
-    deps.db.select({ status: shipments.status, n: count() }).from(shipments).groupBy(shipments.status),
-    deps.db.select({
-      id: orders.id, number: orders.number, name: orders.name, city: orders.shipCity, pincode: orders.shipPincode, total: orders.total,
-      paymentMode: orders.paymentMode, codAmount: orders.codAmount, codConfirmation: orders.codConfirmation, paidAt: orders.paidAt,
-      fulfillmentStatus: orders.fulfillmentStatus, needsAttention: orders.needsAttention, attentionReason: orders.attentionReason,
-    }).from(orders).where(toShipWhere).orderBy(asc(orders.paidAt)).limit(200),
-    deps.db.select({
-      id: shipments.id, waybill: shipments.waybill, status: shipments.status, carrierStatus: shipments.carrierStatus, statusLocation: shipments.statusLocation,
-      statusNote: shipments.statusNote, statusAt: shipments.statusAt, paymentMode: shipments.paymentMode, codAmount: shipments.codAmount,
-      weightGrams: shipments.weightGrams, mode: shipments.mode, chargeEstimate: shipments.chargeEstimate, expectedDeliveryAt: shipments.expectedDeliveryAt,
-      attempts: shipments.attempts, ndrAction: shipments.ndrAction, ndrResult: shipments.ndrResult, pickupRequestId: shipments.pickupRequestId,
-      syncError: shipments.syncError, lastSyncedAt: shipments.lastSyncedAt, createdAt: shipments.createdAt, env: shipments.env,
-      orderId: orders.id, orderNumber: orders.number, name: orders.name, city: orders.shipCity, pincode: orders.shipPincode, phone: orders.phone,
-    }).from(shipments).innerJoin(orders, eq(orders.id, shipments.orderId)).where(shipWhere).orderBy(desc(shipments.createdAt)).limit(300),
-    deps.db.select().from(pickupRequests).orderBy(desc(pickupRequests.createdAt)).limit(10),
-    awaitingPickup(deps),
-  ]);
+  // One after another (not all at once), each with its own time limit.
+  const counts = await part('counts', () => deps.db.select({ status: shipments.status, n: count() }).from(shipments).groupBy(shipments.status), [], problems);
+  const toShip = await part('to book', () => deps.db.select({
+    id: orders.id, number: orders.number, name: orders.name, city: orders.shipCity, pincode: orders.shipPincode, total: orders.total,
+    paymentMode: orders.paymentMode, codAmount: orders.codAmount, codConfirmation: orders.codConfirmation, paidAt: orders.paidAt,
+    fulfillmentStatus: orders.fulfillmentStatus, needsAttention: orders.needsAttention, attentionReason: orders.attentionReason,
+  }).from(orders).where(toShipWhere()).orderBy(asc(orders.paidAt)).limit(200), [], problems);
+  const list = await part('parcels', () => deps.db.select({
+    id: shipments.id, waybill: shipments.waybill, status: shipments.status, carrierStatus: shipments.carrierStatus, statusLocation: shipments.statusLocation,
+    statusNote: shipments.statusNote, statusAt: shipments.statusAt, paymentMode: shipments.paymentMode, codAmount: shipments.codAmount,
+    weightGrams: shipments.weightGrams, mode: shipments.mode, chargeEstimate: shipments.chargeEstimate, expectedDeliveryAt: shipments.expectedDeliveryAt,
+    attempts: shipments.attempts, ndrAction: shipments.ndrAction, ndrResult: shipments.ndrResult, pickupRequestId: shipments.pickupRequestId,
+    syncError: shipments.syncError, lastSyncedAt: shipments.lastSyncedAt, createdAt: shipments.createdAt, env: shipments.env,
+    orderId: orders.id, orderNumber: orders.number, name: orders.name, city: orders.shipCity, pincode: orders.shipPincode, phone: orders.phone,
+  }).from(shipments).innerJoin(orders, eq(orders.id, shipments.orderId)).where(shipWhere).orderBy(desc(shipments.createdAt)).limit(300), [], problems);
+  const pickups = await part('pickups', () => deps.db.select().from(pickupRequests).orderBy(desc(pickupRequests.createdAt)).limit(10), [], problems);
+  const waiting = await part('awaiting pickup', () => awaitingPickup(deps), [], problems);
+  console.info(`[shipping] overview: done in ${Date.now() - t0} ms${problems.length ? `, problems: ${problems.join(', ')}` : ''}`);
   const site = deps.env.SITE_URL.replace(/\/$/, '');
   return c.json({
     settings: settingsView(s),
@@ -66,6 +93,7 @@ adminShipping.get('/', async (c) => {
     shipments: list,
     pickups,
     awaitingPickup: { total: waiting.length, unrequested: waiting.filter((w) => !w.pickupRequestId).length },
+    problems,
   });
 });
 

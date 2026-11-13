@@ -27,6 +27,8 @@ interface Overview {
   settings: ShippingSettings; blockers: string[]; connected: boolean; env: 'staging' | 'production' | null; simulator: boolean; webhook: string | null;
   counts: Partial<Record<ShipmentStatus, number>>; toShip: ToShip[]; shipments: ShipRow[]; pickups: Pickup[];
   awaitingPickup: { total: number; unrequested: number };
+  /** Parts of the page the server couldn't load in time (they show empty). */
+  problems?: string[];
 }
 
 export const SHIP_TONE: Record<ShipmentStatus, 'grey' | 'amber' | 'green' | 'red' | 'blue'> = {
@@ -60,6 +62,9 @@ export default function Shipping() {
     <Page title="Shipping" subtitle={data?.env ? <>Delhivery {data.simulator ? 'simulator (local development)' : data.env === 'staging' ? 'test system (staging)' : 'live'}</> : 'Delhivery'}
       actions={<Btn busy={busy === 'sync'} onClick={sync} disabled={!data?.connected}>Refresh tracking</Btn>}>
       {error ? <ErrorBox error={error} retry={reload} /> : !data ? <Loading /> : <>
+        {(data.problems?.length ?? 0) > 0 && (
+          <div className="ad-note ad-note--warn"><b>Some of this page didn’t load in time:</b> {data.problems!.join(', ')}. Refresh in a minute; if it keeps happening, the server logs say why.</div>
+        )}
         {data.blockers.length > 0 && tab.key !== 'settings' && (
           <div className="ad-note ad-note--warn">
             <b>Delhivery isn’t ready to book parcels yet.</b>
