@@ -135,3 +135,14 @@ describe('competition pages', () => {
     expect(html.indexOf('id="prerender"')).toBeLessThan(html.indexOf('<div id="root"></div>'));
   });
 });
+
+describe('the ready-made book page does not jump (CLS)', () => {
+  it('keeps the cover’s space before it loads, and has the site’s body margin from the start', async () => {
+    const [book] = await t.db.select().from(products).limit(1);
+    await t.db.update(products).set({ coverPath: '2026/abc/cover.png' }).where(eq(products.id, book.id));
+    const { html } = await page(`/books/${book.slug}`);
+    expect(html).toMatch(/<div class="pr-cover"><img [^>]*width="360" height="498"/);
+    expect(html).toContain('.pr-cover img{aspect-ratio:3/4.15;object-fit:cover');
+    expect(html).toContain('body{margin:0}');
+  });
+});
