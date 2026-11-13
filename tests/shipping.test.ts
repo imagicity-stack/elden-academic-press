@@ -114,6 +114,9 @@ describe('Delhivery API client', () => {
   it('turns a refused booking and a bad token into clear errors', async () => {
     const refuse = (async () => new Response(JSON.stringify({ success: false, packages: [{ status: 'Fail', refnum: '100023', remarks: ['Duplicate order id'] }], rmk: '' }))) as unknown as typeof fetch;
     await expect(delhiveryHttp({ token: 'x', env: 'staging', fetch: refuse }).create('W', [parcel])).rejects.toThrow(/Duplicate order id/);
+    const noWarehouse = (async () => new Response(JSON.stringify({ success: false, packages: [], rmk: 'ClientWarehouse matching query does not exist.' }))) as unknown as typeof fetch;
+    await expect(delhiveryHttp({ token: 'x', env: 'production', fetch: noWarehouse }).create('Elden Ranchi', [parcel]))
+      .rejects.toThrow(/no pickup location called "Elden Ranchi" .*\(production\).*copy the name exactly/);
     const denied = (async () => new Response('Login or API Key Required', { status: 401 })) as unknown as typeof fetch;
     await expect(delhiveryHttp({ token: 'x', env: 'staging', fetch: denied }).pincode('825301')).rejects.toThrow(/refused the API token/);
   });

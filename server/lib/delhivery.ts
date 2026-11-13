@@ -305,7 +305,11 @@ export function delhiveryHttp(opts: { token: string; env: DelhiveryEnv; fetch?: 
       const failed = packages.filter((p) => !/success/i.test(str(p.status)) || !str(p.waybill));
       if (!packages.length || failed.length || r?.success === false) {
         const why = failed.length ? failed.map((p) => `${str(p.refnum)}: ${reason({ remarks: p.remarks }, 'rejected')}`).join('; ') : reason(r, 'Delhivery did not book the parcel');
-        throw new DelhiveryError(`Delhivery didn't book it: ${why}`, 200, r);
+        // Delhivery's way of saying the pickup location name isn't one of this account's warehouses.
+        const hint = /ClientWarehouse/i.test(why)
+          ? ` Delhivery has no pickup location called "${pickupLocation}" on the account this API token belongs to (${opts.env}). In Delhivery One → Settings → Pickup locations, copy the name exactly (capitals, spaces, dots) into Admin → Shipping → Settings. A staging token only knows warehouses made on staging.`
+          : '';
+        throw new DelhiveryError(`Delhivery didn't book it: ${why}${hint}`, 200, r);
       }
       return packages.map((p) => ({ reference: str(p.refnum), waybill: str(p.waybill) }));
     },
