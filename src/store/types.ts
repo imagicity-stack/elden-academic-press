@@ -55,6 +55,8 @@ export interface StoreConfig {
   metaMinAge?: number;
   /** Cookie banner off: every visitor counts as having accepted cookies (Admin → Settings). */
   consentAuto?: boolean;
+  /** Delhivery is on: show the delivery date for a PIN code (book page, checkout). */
+  deliveryCheck?: boolean;
 }
 
 export type LineIssue = { code: 'unavailable' } | { code: 'out_of_stock' } | { code: 'insufficient_stock'; available: number };

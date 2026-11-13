@@ -608,3 +608,15 @@ a.ad-stat:hover { border-color: var(--ad-navy); }
 .db-chart-head .ad-chart__readout { margin: 0; }
 .db-note { margin: 6px 0 0; font-size: 12.5px; }
 @media (max-width: 700px) { .db-cod-head { grid-template-columns: 1fr; } }
+
+/* Shipping (Delhivery) */
+.ad-note { margin: 12px 18px; padding: 12px 14px; border-radius: 6px; background: #F3F1EC; font-size: 13.5px; line-height: 1.5; }
+.ad-note p { margin: 0 0 4px; }
+.ad-note ul { margin: 6px 0; padding-left: 18px; }
+.ad-note--warn { background: #FFF6D6; border: 1px solid #F0D98A; margin: 0 0 16px; }
+.ad-small { font-size: 12px; line-height: 1.4; }
+.ad-err-text { color: #A3321F; font-weight: 500; margin: 0; }
+.ad-tab__n { display: inline-block; min-width: 18px; margin-left: 6px; padding: 1px 6px; border-radius: 9px; background: var(--ad-navy); color: #FFFFFF; font-size: 11px; font-weight: 600; text-align: center; }
+.ad-ship-scans { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow: auto; border-top: 1px solid var(--ad-line2); }
+.ad-ship-scans li { display: grid; grid-template-columns: 118px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--ad-line2); font-size: 12.5px; }
+.ad-ship-scans time { color: var(--ad-muted); }

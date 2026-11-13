@@ -120,8 +120,8 @@ adminShipping.get('/orders/:id/quote', async (c) => {
   const items = await deps.db.select().from(orderItems).where(eq(orderItems.orderId, o.id));
   const parcel = parcelFor(o, items, s);
   const pin = o.shipPincode ?? '';
-  const out: { parcel: typeof parcel; serviceable: boolean | null; cod: boolean | null; charge: number | null; deliveryBy: string | null; warning: string | null } = {
-    parcel, serviceable: null, cod: null, charge: null, deliveryBy: null, warning: null,
+  const out: { parcel: typeof parcel; blockers: string[]; serviceable: boolean | null; cod: boolean | null; charge: number | null; deliveryBy: string | null; warning: string | null } = {
+    parcel, blockers: shippingBlockers(deps, s), serviceable: null, cod: null, charge: null, deliveryBy: null, warning: null,
   };
   if (deps.delhivery && /^[1-9]\d{5}$/.test(pin)) {
     const [info, charge, tat] = await Promise.allSettled([

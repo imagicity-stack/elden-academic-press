@@ -39,6 +39,8 @@ store.get('/config', async (c) => {
     metaMinAge: env.META_MIN_AGE,
     // Cookie banner off (Admin → Settings): every visitor counts as having accepted cookies.
     consentAuto: s.consentAuto,
+    // Delhivery: the delivery date and cash on delivery are shown for a PIN code (GET /shipping/pin/:pin).
+    deliveryCheck: s.delhiveryEnabled && s.delhiveryCheckoutCheck && Boolean(c.get('deps').delhivery),
   });
 });
 

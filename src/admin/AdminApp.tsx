@@ -13,6 +13,7 @@ loadGoogleFonts();
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Orders = lazy(() => import('./pages/Orders'));
 const OrderDetail = lazy(() => import('./pages/OrderDetail'));
+const Shipping = lazy(() => import('./pages/Shipping'));
 const Products = lazy(() => import('./pages/Products'));
 const ProductEditor = lazy(() => import('./pages/ProductEditor'));
 const Inventory = lazy(() => import('./pages/Inventory'));
@@ -219,6 +220,7 @@ function SetPassword({ onDone }: { onDone: () => void }) {
 const NAV: { to: string; label: string; icon: string; count?: keyof Counts; owner?: boolean; manage?: boolean; end?: boolean }[] = [
   { to: '/admin', label: 'Dashboard', icon: 'M3 12h7V3H3zM14 21h7v-9h-7zM14 3v5h7V3zM3 21h7v-5H3z', end: true },
   { to: '/admin/orders', label: 'Orders', icon: 'M6 2h12l2 5v14H4V7zM4 7h16M9 11h6', count: 'toFulfil' },
+  { to: '/admin/shipping', label: 'Shipping', icon: 'M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z' },
   { to: '/admin/products', label: 'Products', icon: 'M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3zM18 20V7M8 8h6' },
   { to: '/admin/inventory', label: 'Inventory', icon: 'M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10' },
   { to: '/admin/customers', label: 'Customers', icon: 'M16 19a4 4 0 0 0-8 0M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19a3 3 0 0 0-3-3M4 19a3 3 0 0 1 3-3' },
@@ -285,6 +287,7 @@ function Shell({ me }: { me: Me }) {
               <Route path="/admin" element={<Dashboard />} />
               <Route path="/admin/orders" element={<Orders />} />
               <Route path="/admin/orders/:id" element={<OrderDetail />} />
+              <Route path="/admin/shipping" element={<Shipping />} />
               <Route path="/admin/products" element={<Products />} />
               <Route path="/admin/products/new" element={<ProductEditor />} />
               <Route path="/admin/products/:id" element={<ProductEditor />} />
