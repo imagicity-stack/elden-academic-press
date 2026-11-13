@@ -21,6 +21,7 @@ import { adminAudience } from './audience.js';
 import { adminConsent } from './consent.js';
 import { adminPopups } from './popups.js';
 import { adminOrders } from './orders.js';
+import { adminShipping } from './shipping.js';
 import { adminCoupons, adminCustomers, adminEnquiries, adminResources } from './people.js';
 import { adminCategories, adminInventory, adminProducts, adminUploads } from './products.js';
 import { adminMcp } from '../mcp/oauth.js';
@@ -43,6 +44,7 @@ admin.use('*', async (c, next) => {
 });
 
 admin.route('/orders', adminOrders);
+admin.route('/shipping', adminShipping);
 admin.route('/products', adminProducts);
 admin.route('/inventory', adminInventory);
 admin.route('/categories', adminCategories);

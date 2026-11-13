@@ -132,6 +132,11 @@ export async function createOrder(deps: Deps, input: CheckoutInput, ip: string) 
     const why = codUnavailable(q, s);
     if (why) throw new HttpError(400, why, 'cod_unavailable');
   }
+  // Printed books: Delhivery must deliver to this PIN code (and collect cash, for cash on delivery).
+  if (q.requiresShipping) {
+    const { assertDeliverable } = await import('./shipping.js');
+    await assertDeliverable(deps, input.shipping.pincode, cod);
+  }
 
   if (q.coupon) {
     const [c] = await db.select().from(coupons).where(eq(coupons.code, q.coupon.code));
@@ -361,6 +366,10 @@ export async function markPaid(deps: Deps, orderId: string, payment: Pick<RzpPay
     }
     // The same tick allows a WhatsApp confirmation (if switched on in Admin → WhatsApp).
     await orderWhatsApp(deps, 'order_confirmed', result.order).catch((e) => console.error('[whatsapp] order confirmed', (e as Error).message));
+    // Paid online: book the parcel with Delhivery now, if "Book automatically" is on (cash on delivery waits for confirmation).
+    if (result.order.paymentMode !== 'cod' && result.order.requiresShipping) {
+      await (await import('./shipping.js')).autoShipLater(deps, result.order.id);
+    }
     // The buyer ticked "Email me about new books and offers" at checkout.
     const o = result.order;
     if (o.newsletterOptIn) {

@@ -614,6 +614,8 @@ async function codCallResult(deps: Deps, c: Call, v: Record<string, unknown>) {
         ...(o.needsAttention && o.attentionReason?.startsWith(COD_ATTENTION) ? { needsAttention: false } : {}), updatedAt: now(),
       }).where(eq(orders.id, o.id));
       await logEvent(db, o.id, 'cod_confirmed', 'Confirmed by the customer on the confirmation call', 'call', { callId: c.id });
+      // Confirmed: book the parcel with Delhivery now, if "Book automatically" is on (not when they asked for a change).
+      if (!change) await (await import('./shipping.js')).autoShipLater(deps, o.id);
     }
     if (change) {
       const reason = `${COD_ATTENTION} confirmed on the call, but asked for a change: ${change}`.slice(0, 500);
