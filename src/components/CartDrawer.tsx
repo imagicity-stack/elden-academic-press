@@ -62,7 +62,7 @@ export function CartDrawer() {
                       return (
                         <motion.li layout key={l.productId + l.kind} className="cart-line"
                           initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0, transition: { duration: 0.4, ease: EASE, delay: 0.1 + i * 0.05 } }} exit={{ opacity: 0, x: 40, height: 0, paddingTop: 0, paddingBottom: 0 }}>
-                          <div className="cart-line__cover">{p ? <BookCover book={p} /> : <div className="cover" />}</div>
+                          <div className="cart-line__cover">{p ? <BookCover book={p} size="mini" /> : <div className="cover" />}</div>
                           <div className="cart-line__body">
                             <Link to={p ? '/books/' + p.slug : '/catalogue'} className="cart-line__title" onClick={cart.closeDrawer}>{p?.title ?? q?.title ?? 'Item'}</Link>
                             <div className="cart-line__fmt">{formatLabel(p, l.kind)}</div>

@@ -2,6 +2,7 @@
 // cookies: the cookie banner sets elden_consent=all, which every request carries.
 import type { Context } from 'hono';
 import { getCookie } from 'hono/cookie';
+import { isIP } from 'node:net';
 import type { AppEnv } from '../app.js';
 import type { Deps } from '../deps.js';
 import { canMatch, type MetaEvent } from '../lib/meta.js';
@@ -48,11 +49,23 @@ function geoOf(c: Context<AppEnv>): Visit['geo'] {
 
 const metaCookie = (v: string | undefined) => (v && v.length < 400 && /^fb\.\d+\.\d+\.\S+$/.test(v) ? v : null);
 
+/**
+ * The visitor's own address from Meta's Parameter Builder (the _fbi cookie: "<ip>.<suffix>"), IPv6 where
+ * they have it. Our server is only reached over IPv4, and Meta matches IPv6 visitors better on IPv6.
+ */
+export function fbiAddress(v: string | undefined): string | null {
+  if (!v || v.length > 200) return null;
+  if (isIP(v)) return v.toLowerCase();
+  const cut = v.lastIndexOf('.');
+  const ip = cut > 0 ? v.slice(0, cut) : '';
+  return isIP(ip) ? ip.toLowerCase() : null;
+}
+
 /** What this request tells us: ad consent, and Meta's browser cookies. */
 export function visitOf(c: Context<AppEnv>): Visit {
   return {
     consent: getCookie(c, 'elden_consent') === 'all',
-    ip: c.get('ip') || null,
+    ip: fbiAddress(getCookie(c, '_fbi')) ?? (c.get('ip') || null),
     userAgent: c.req.header('user-agent')?.slice(0, 500) ?? null,
     fbp: metaCookie(getCookie(c, '_fbp')),
     fbc: metaCookie(getCookie(c, '_fbc')),

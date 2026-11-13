@@ -67,12 +67,22 @@ export interface AccountData {
 }
 
 let client: Promise<SupabaseClient> | undefined;
+/** Sign-in listeners waiting for the client (it's only downloaded when someone is, or is getting, signed in). */
+const pending = new Set<(sb: SupabaseClient) => void>();
 function authClient() {
-  client ??= import('@supabase/supabase-js').then(({ createClient }) => createClient(url!, anonKey!, {
-    auth: { storageKey: STORAGE_KEY, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
-  }));
+  if (!client) {
+    client = import('@supabase/supabase-js').then(({ createClient }) => createClient(url!, anonKey!, {
+      auth: { storageKey: STORAGE_KEY, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
+    }));
+    client.then((sb) => { for (const fn of pending) fn(sb); pending.clear(); }, () => {});
+  }
   return client;
 }
+
+/** Coming back from Google's redirect sign-in (supabase-js reads these from the address). */
+const returningFromSignIn = () => /[?&#](code|access_token|error_description)=/.test(location.search + location.hash);
+/** Is there anything for supabase-js to do on this page? Most visitors never signed in: don't download it for them. */
+const mayHaveSession = () => hasAccountSession() || returningFromSignIn();
 
 /** Cheap check (no network): is someone signed in on this browser? */
 export function hasAccountSession() {
@@ -84,7 +94,7 @@ export async function accountToken(): Promise<string | null> {
     const email = localStorage.getItem(DEV_KEY);
     return email ? `dev-customer:${email}` : null;
   }
-  if (!accountsEnabled) return null;
+  if (!accountsEnabled || !mayHaveSession()) return null;
   const { data } = await (await authClient()).auth.getSession();
   return data.session?.access_token ?? null;
 }
@@ -156,11 +166,14 @@ export function onAuthChange(fn: () => void): () => void {
   if (!accountsEnabled) return () => {};
   let unsub = () => {};
   let live = true;
-  authClient().then((sb) => {
+  const attach = (sb: SupabaseClient) => {
     if (!live) return;
     unsub = sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') fn(); }).data.subscription.unsubscribe;
-  });
-  return () => { live = false; unsub(); };
+  };
+  // Signed out: listen once the client exists (every sign-in creates it), without downloading it now.
+  if (client || mayHaveSession()) authClient().then(attach);
+  else pending.add(attach);
+  return () => { live = false; pending.delete(attach); unsub(); };
 }
 
 export async function signOut() {

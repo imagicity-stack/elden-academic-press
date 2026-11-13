@@ -13,3 +13,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Meta's Parameter Builder ships plain JavaScript (src/meta.ts types the one call it uses). */
+declare module 'meta-capi-param-builder-clientjs';

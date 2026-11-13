@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
+import { COVER_SIZES, sizedSrc, sizedSrcSet } from '../shared/img';
+import { RESIZE_IMAGES } from '../lib/img';
 
 export interface Photo { url: string; alt: string }
 
@@ -17,7 +19,8 @@ export function BookPhotos({ photos, title }: { photos: Photo[]; title: string }
           <li key={p.url}>
             <button type="button" className="pd__thumb" aria-label={`Open photo ${i + 1} of ${photos.length}${p.alt ? `: ${p.alt}` : ''}`}
               onClick={(e) => { opener.current = e.currentTarget; setOpen(i); }}>
-              <img src={p.url} alt="" loading="lazy" decoding="async" />
+              <img src={sizedSrc(p.url, 256, RESIZE_IMAGES)} srcSet={sizedSrcSet(p.url, COVER_SIZES.thumb.widths, RESIZE_IMAGES)}
+                sizes={RESIZE_IMAGES ? COVER_SIZES.thumb.sizes : undefined} alt="" loading="lazy" decoding="async" />
             </button>
           </li>
         ))}
@@ -58,7 +61,13 @@ function PhotoViewer({ photos, title, start, onClose }: { photos: Photo[]; title
 
   // Load the next and previous photos ahead, so arrows feel instant.
   useEffect(() => {
-    for (const k of [i + 1, i - 1]) { const img = new Image(); img.src = photos[(k + n) % n].url; }
+    for (const k of [i + 1, i - 1]) {
+      const img = new Image();
+      const url = photos[(k + n) % n].url;
+      const set = sizedSrcSet(url, COVER_SIZES.full.widths, RESIZE_IMAGES);
+      if (set) { img.sizes = COVER_SIZES.full.sizes; img.srcset = set; }
+      img.src = sizedSrc(url, 1600, RESIZE_IMAGES);
+    }
   }, [i, n, photos]);
 
   const p = photos[i];
@@ -78,7 +87,8 @@ function PhotoViewer({ photos, title, start, onClose }: { photos: Photo[]; title
           if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
         }}>
         <AnimatePresence mode="wait" initial={false}>
-          <motion.img key={p.url} src={p.url} alt={p.alt || `${title}, photo ${i + 1}`} draggable={false}
+          <motion.img key={p.url} src={sizedSrc(p.url, 1600, RESIZE_IMAGES)} srcSet={sizedSrcSet(p.url, COVER_SIZES.full.widths, RESIZE_IMAGES)}
+            sizes={RESIZE_IMAGES ? COVER_SIZES.full.sizes : undefined} alt={p.alt || `${title}, photo ${i + 1}`} draggable={false}
             initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} />
         </AnimatePresence>
         {p.alt && <figcaption>{p.alt}</figcaption>}

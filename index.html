@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- Google Tag Manager (GTM-P38DZ6G5) and Google Analytics (G-0TR5TFH9KP). Not loaded on the admin or the local dev server.
+    <!-- Google Analytics (G-0TR5TFH9KP), loaded with gtag.js. Not loaded on the admin or the local dev server.
+         It starts once the page has loaded (or after 2.5 s, whichever is first; at once for a Google ad click), so on slow
+         phone data the page itself and the Meta Pixel aren't stuck behind Google's 180 KB. (Google Tag Manager was removed: its only tag loaded this same GA.)
          A private order link's token (/order/123?t=…) is moved out of the address bar first,
          so it never reaches analytics. Consent Mode: until the visitor accepts cookies (the banner,
          src/consent.ts), Google stores no cookies. vercel.json's CSP lists this script's SHA-256 hash. -->
@@ -27,15 +29,23 @@
         var staff = false;
         try { staff = !!localStorage.getItem('elden-admin-auth') && !/[?&]meta-test/.test(l.search) && sessionStorage.getItem('elden-meta-test') !== '1'; } catch (e) {}
         w.gtag('config', 'G-0TR5TFH9KP', staff ? { traffic_type: 'internal' } : {});
-        ['gtm.js?id=GTM-P38DZ6G5', 'gtag/js?id=G-0TR5TFH9KP'].forEach(function (src) {
+        var started = false;
+        function start() {
+          if (started) return;
+          started = true;
           var s = d.createElement('script');
           s.async = true;
-          s.src = 'https://www.googletagmanager.com/' + src;
+          s.src = 'https://www.googletagmanager.com/gtag/js?id=G-0TR5TFH9KP';
           d.head.appendChild(s);
-        });
+        }
+        // Arriving from a Google ad: start now, so the click id is read before the visitor moves on.
+        if (d.readyState === 'complete' || /[?&](gclid|gbraid|wbraid)=/.test(l.search)) start(); else w.addEventListener('load', start);
+        setTimeout(start, 2500);
       })(window, document, location);
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Meta's Pixel script comes from here early on every page: open the connection now. -->
+    <link rel="preconnect" href="https://connect.facebook.net" />
     <title>Elden Academic Press</title>
     <meta name="description" content="Textbooks, reference books, practice papers and journals for classrooms across India." />
     <meta property="og:type" content="website" />
@@ -68,6 +78,7 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Small on purpose: starts the Meta Pixel (src/early.ts), then the app (src/boot.tsx). -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

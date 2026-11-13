@@ -7,9 +7,14 @@
 import type { Deps } from '../deps.js';
 import { esc, inr } from '../lib/format.js';
 import { loadCatalog, type CatalogItem } from '../services/catalog.js';
-import { findCompetition } from '../../src/shared/competitions.js';
+import { findCompetition, imageSrcSet, type Competition } from '../../src/shared/competitions.js';
+import { dayLabel } from '../../src/shared/teams.js';
 import { bookDescription, bookImages, bookSchema, bookUrl, jsonLd } from '../../src/shared/bookSchema.js';
 import { LV, PAL } from '../../src/data.js';
+import { COVER_SIZES, sizedSrc, sizedSrcSet } from '../../src/shared/img.js';
+
+/** Vercel's image resizing exists only on Vercel (see src/shared/img.ts). */
+const resizeImages = () => Boolean(process.env.VERCEL);
 
 let cached: { at: number; origin: string; html: string } | null = null;
 
@@ -68,8 +73,50 @@ export async function competitionPage(deps: Deps, slug: string, requestOrigin: s
   html = html.replace('</head>', `    <link rel="canonical" href="${esc(url)}" />\n  </head>`);
   // A team competition's page asks for its live details first thing: start that now, alongside the scripts.
   if (comp.team) html = html.replace('</head>', `    <link rel="preload" href="/api/competition-info/${comp.slug}" as="fetch" crossorigin />\n  </head>`);
-  return html;
+  // Its banner is the page's biggest picture: start it now (same sizes as the app's, so it's one download).
+  const art = compArt(comp);
+  if (art) html = addToHead(html, `    <link rel="preload" as="image" href="${esc(art.src)}"${art.srcset ? ` imagesrcset="${esc(art.srcset)}" imagesizes="${esc(art.sizes)}"` : ''} fetchpriority="high" />`);
+  // The top of the page, before the app's script runs (ads land here on slow phone data); the app removes it when ready.
+  html = addToHead(html, `    <style>${PRERENDER_CSS}${PRERENDER_COMP_CSS}</style>`);
+  return html.replace('<div id="root"></div>', `${prerenderCompetition(comp, art)}\n    <div id="root"></div>`);
 }
+
+/** The banner as the app shows it (DoomsdayPage's Banner, or the plain competition page's picture). */
+function compArt(c: Competition) {
+  if (!c.image) return null;
+  return { src: c.image, srcset: c.team ? imageSrcSet(c) : undefined, sizes: '(min-width: 960px) 46vw, calc(100vw - 2rem)' };
+}
+
+function prerenderCompetition(c: Competition, art: ReturnType<typeof compArt>): string {
+  const t = c.team;
+  const facts: [string, string][] = t
+    ? [['Ages', `${t.minAge} to ${t.maxAge}`], ['Teams', `${t.minMembers} to ${t.maxMembers} members`], ['Entry', 'Free'], ['Deadline', `${dayLabel(t.submissionDeadline.slice(0, 10))}, 11:59 PM IST`]]
+    : (c.facts ?? []).slice(0, 4);
+  const img = art
+    ? `<img class="pr-comp__art" src="${esc(art.src)}"${art.srcset ? ` srcset="${esc(art.srcset)}" sizes="${esc(art.sizes)}"` : ''} width="1400" height="1050" alt="${esc(c.title)}" fetchpriority="high" />`
+    : '';
+  return `<div id="prerender" data-path="/competitions/${esc(encodeURIComponent(c.slug))}">
+      <header class="pr-head"><a href="/" class="pr-brand"><img src="/assets/elden-mark-sm.png" width="22" height="29" alt="" />Elden Academic Press</a><nav><a href="/competitions">Competitions</a><a href="/contact">Contact</a></nav></header>
+      <main class="pr-main pr-comp">
+        <div class="pr-comp__text">
+          <p class="pr-tags">Elden Academic Press presents</p>
+          <h1>${esc(c.title)}</h1>
+          <p class="pr-blurb">${esc(c.tagline)}</p>
+          <a class="pr-cta" href="#${t ? 'team' : 'register'}">${t ? 'Register your team' : 'Register'}</a>
+          ${facts.length ? `<dl class="pr-comp__facts">${facts.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : ''}
+        </div>
+        ${img}
+      </main>
+    </div>`;
+}
+
+const PRERENDER_COMP_CSS = [
+  '.pr-comp{display:grid;gap:28px;align-items:center;padding-top:8px}@media(min-width:960px){.pr-comp{grid-template-columns:1fr 46vw;gap:48px}}',
+  '.pr-comp__art{display:block;width:100%;height:auto;border-radius:10px}',
+  '.pr-cta{display:inline-block;margin:0 0 22px;padding:14px 22px;border-radius:999px;background:#0B1220;color:#fff!important;font-weight:700;text-decoration:none}',
+  '.pr-comp__facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}',
+  '.pr-comp__facts div{padding:10px 12px;background:#fff;border:1px solid #E4E0D8;border-radius:10px}.pr-comp__facts dt{font-size:12px;color:#576072}.pr-comp__facts dd{margin:0;font-weight:700}',
+].join('');
 
 const addToHead = (html: string, tags: string) => html.replace('</head>', `${tags}\n  </head>`);
 
@@ -108,9 +155,21 @@ export async function bookPage(deps: Deps, slug: string, requestOrigin: string):
   // The same id as the product feed and the Pixel's content_ids, so Meta ties the page to the catalogue item.
   html = setMeta(html, 'property', 'product:retailer_item_id', book.id);
   html = setMeta(html, 'name', 'twitter:card', image ? 'summary_large_image' : 'summary');
-  html = addToHead(html, `    <link rel="canonical" href="${esc(url)}" />\n    <style>${PRERENDER_CSS}</style>`);
+  // The cover is the page's biggest picture: start it now, at the size the visitor's screen needs.
+  const cover = book.coverUrl ? coverImg(book.coverUrl) : null;
+  const preload = cover?.srcset
+    ? `\n    <link rel="preload" as="image" href="${esc(cover.src)}" imagesrcset="${esc(cover.srcset)}" imagesizes="${esc(cover.sizes)}" fetchpriority="high" />`
+    : cover ? `\n    <link rel="preload" as="image" href="${esc(cover.src)}" fetchpriority="high" />` : '';
+  html = addToHead(html, `    <link rel="canonical" href="${esc(url)}" />${preload}\n    <style>${PRERENDER_CSS}</style>`);
   // The page itself, before the app's script runs; the app removes it when its own page is ready.
-  return { status: 200, html: html.replace('<div id="root"></div>', `${prerenderBook(book, image)}\n    <div id="root"></div>`) };
+  return { status: 200, html: html.replace('<div id="root"></div>', `${prerenderBook(book, cover)}\n    <div id="root"></div>`) };
+}
+
+/** The book page's cover, sized exactly as the app's own (COVER_SIZES.detail), so the app reuses this download. */
+function coverImg(url: string) {
+  const { widths, sizes } = COVER_SIZES.detail;
+  const on = resizeImages();
+  return { src: sizedSrc(url, widths[widths.length - 1], on), srcset: sizedSrcSet(url, widths, on), sizes };
 }
 
 function stockNote(kind: 'print' | 'digital', f: { available: boolean; lowStock: number | null }) {
@@ -120,7 +179,7 @@ function stockNote(kind: 'print' | 'digital', f: { available: boolean; lowStock:
 }
 
 /** The book's page as plain HTML: what search engines read, and what a visitor sees until the app loads. */
-function prerenderBook(b: CatalogItem, image: string | undefined): string {
+function prerenderBook(b: CatalogItem, image: ReturnType<typeof coverImg> | null): string {
   const formats = ([['print', b.formats.print?.includesEbook ? 'Printed book + free e-book (PDF)' : 'Printed book'], ['digital', 'E-book (PDF)']] as const)
     .flatMap(([k, label]) => {
       const f = b.formats[k];
@@ -136,7 +195,7 @@ function prerenderBook(b: CatalogItem, image: string | undefined): string {
   const tags = [b.category?.name, LV[b.level as keyof typeof LV], b.isNew ? 'New' : ''].filter(Boolean);
   const by = [b.author ? `by <b>${esc(b.author)}</b>` : '', esc([b.classLabel, b.boards.join(', ')].filter(Boolean).join(' · '))].filter(Boolean).join(' · ');
   const cover = image
-    ? `<img src="${esc(image)}" alt="Cover of ${esc(b.title)}" />`
+    ? `<img src="${esc(image.src)}"${image.srcset ? ` srcset="${esc(image.srcset)}" sizes="${esc(image.sizes)}"` : ''} alt="Cover of ${esc(b.title)}" fetchpriority="high" />`
     : (() => {
       // No uploaded cover: the app draws one in the book's colours; this is a plain version of it.
       const c = PAL[b.palette] ?? PAL[0];

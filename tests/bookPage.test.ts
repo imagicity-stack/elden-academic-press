@@ -121,3 +121,17 @@ describe('competition pages', () => {
     expect(metas(html, 'og:image')).toEqual(['https://eldenap.in/assets/competitions/doomsday-diaries-share.jpg']);
   });
 });
+
+describe('competition pages', () => {
+  it('arrive with the top of the page and the banner already in the HTML (ads land here)', async () => {
+    const { status, html } = await page('/competitions/doomsday-diaries');
+    expect(status).toBe(200);
+    expect(html).toContain('<div id="prerender" data-path="/competitions/doomsday-diaries">');
+    expect(html).toMatch(/<h1>DoomsDay Diaries<\/h1>/);
+    expect(html).toContain('href="#team">Register your team</a>');
+    expect(html).toMatch(/<link rel="preload" as="image" href="\/assets\/competitions\/doomsday-diaries\.webp" imagesrcset="[^"]*-800\.webp 800w/);
+    expect(html).toContain('#prerender~#root{display:none}');
+    // The app's own copy of the page comes after it, untouched.
+    expect(html.indexOf('id="prerender"')).toBeLessThan(html.indexOf('<div id="root"></div>'));
+  });
+});

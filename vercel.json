@@ -1,6 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["cdg1"],
+  "images": {
+    "sizes": [160, 256, 384, 512, 640, 828, 1080, 1600],
+    "qualities": [70],
+    "formats": ["image/avif", "image/webp"],
+    "minimumCacheTTL": 2678400,
+    "remotePatterns": [
+      { "protocol": "https", "hostname": "zrnmeisgzobjfygkouue.supabase.co", "pathname": "^/storage/v1/object/public/.*$" }
+    ]
+  },
   "functions": {
     "api/index.ts": {
       "maxDuration": 30,
@@ -26,7 +35,7 @@
     { "source": "/.well-known/oauth-authorization-server", "destination": "/api" },
     { "source": "/.well-known/oauth-authorization-server/(.*)", "destination": "/api" },
     { "source": "/.well-known/openid-configuration", "destination": "/api" },
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|_vercel/).*)", "destination": "/index.html" }
   ],
   "crons": [
     { "path": "/api/cron/expire-orders", "schedule": "*/10 * * * *" },
@@ -45,7 +54,7 @@
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'sha256-notc2Jabz4u3lwnyw6KjcoAeW/fDGZalKxHs6x3h1ao=' https://accounts.google.com https://*.razorpay.com https://www.googletagmanager.com https://connect.facebook.net https://www.googleadservices.com https://googleads.g.doubleclick.net https://www.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://eldenap.in https://www.eldenap.in https://*.supabase.co https://*.razorpay.com https://*.googleusercontent.com https://*.google-analytics.com https://*.googletagmanager.com https://www.facebook.com https://*.doubleclick.net https://www.googleadservices.com https://www.google.com https://www.google.co.in; connect-src 'self' https://accounts.google.com https://*.supabase.co https://*.razorpay.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://www.facebook.com https://connect.facebook.net https://*.doubleclick.net https://www.googleadservices.com https://www.google.com https://www.google.co.in; frame-src https://accounts.google.com https://*.razorpay.com https://www.googletagmanager.com https://*.doubleclick.net; form-action 'self' https://*.razorpay.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; upgrade-insecure-requests; report-uri /api/csp-report; report-to csp"
+          "value": "default-src 'self'; script-src 'self' 'sha256-A7cHYS2Fsg7USXxB3CGYggv9lqyBjRULCCCy9OSJzuA=' https://accounts.google.com https://*.razorpay.com https://www.googletagmanager.com https://connect.facebook.net https://www.googleadservices.com https://googleads.g.doubleclick.net https://www.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://eldenap.in https://www.eldenap.in https://*.supabase.co https://*.razorpay.com https://*.googleusercontent.com https://*.google-analytics.com https://*.googletagmanager.com https://www.facebook.com https://*.doubleclick.net https://www.googleadservices.com https://www.google.com https://www.google.co.in; connect-src 'self' https://api64.ipify.org https://accounts.google.com https://*.supabase.co https://*.razorpay.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://www.facebook.com https://connect.facebook.net https://*.doubleclick.net https://www.googleadservices.com https://www.google.com https://www.google.co.in; frame-src https://accounts.google.com https://*.razorpay.com https://www.googletagmanager.com https://*.doubleclick.net; form-action 'self' https://*.razorpay.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; upgrade-insecure-requests; report-uri /api/csp-report; report-to csp"
         },
         { "key": "Reporting-Endpoints", "value": "csp=\"/api/csp-report\"" },
         { "key": "X-Permitted-Cross-Domain-Policies", "value": "none" }
