@@ -26,6 +26,15 @@ describe('security headers (vercel.json)', () => {
     expect(scripts.length).toBeGreaterThan(0);
     for (const [, , body] of scripts) expect(csp).toContain(`'sha256-${createHash('sha256').update(body).digest('base64')}'`);
   });
+
+  it("lets the Meta Pixel reach this pixel's Conversions API Gateway hosts, by exact name only", () => {
+    // The Pixel (connect.facebook.net) also posts each event to these Meta-run gateway hosts. Exact
+    // names, never *.run.app or *.on.aws: those would let any app on Google Cloud or AWS receive data.
+    const connect = header('Content-Security-Policy')!.match(/connect-src([^;]*)/)![1].split(/\s+/);
+    expect(connect).toContain('https://mpc2-prod-23-is5qnl632q-ue.a.run.app');
+    expect(connect).toContain('https://e5-cce25cf3b4a5476fbb3aaa2312efbe1a.ecs.us-east-2.on.aws');
+    expect(connect.filter((s) => /\*\.(a\.)?run\.app|\*\.([\w-]+\.)*on\.aws/.test(s))).toEqual([]);
+  });
 });
 
 describe('CSP reports', () => {
