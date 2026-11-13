@@ -5,6 +5,8 @@ import { getConsent, isMetaOff, isStaff, metaTestMode, syncConsent } from './con
 import { knownUser, phoneDigits, type MatchUser } from './visitor';
 import { fireOnce, registrationEventId, registrationParams, SIGNUP_EVENT, signupParams } from './shared/metaEvents';
 import { ENGAGED_EVENT } from './engagement';
+import { pixelLog } from './pixelDebug';
+import { ipFromFbi } from './shared/fbi';
 
 export { rememberUser } from './visitor';
 
@@ -87,31 +89,67 @@ function setMetaCookies() {
 
 /**
  * Meta's Parameter Builder (meta-capi-param-builder-clientjs), once per page. It keeps _fbc and _fbp
- * right and finds the ad click inside Facebook's and Instagram's own browsers when the address
- * doesn't carry it (where most ad visitors are), and stores the visitor's IPv6 address in _fbi for
- * the server's events (our server is only ever reached over IPv4; Meta matches IPv6 visitors better
- * on IPv6). Nothing shows on the page and it never delays an event: the server's copy of the first
- * page view waits for it at most PARAMS_WAIT_MS.
+ * right, finds the ad click inside Facebook's and Instagram's own browsers when the address doesn't
+ * carry it (where most ad visitors are), and stores the visitor's IPv6 address in _fbi for the
+ * server's events (our server is only ever reached over IPv4; Meta matches IPv6 visitors better on
+ * IPv6 and flags server events that carry IPv4 when the Pixel saw IPv6).
+ *
+ * So every server copy (relay) waits until those cookies are ready, at most PARAMS_WAIT_MS, and goes
+ * at once if the visitor leaves first. The IPv6 lookup starts the moment the Pixel loads, alongside
+ * the builder's download, and an IPv6 address saved earlier (the _fbi cookie, a day) is used straight away.
  */
-const PARAMS_WAIT_MS = 1500;
+const PARAMS_WAIT_MS = 3500;
 /** The visitor's public address as seen from outside, IPv6 where they have it (IPv4 otherwise). */
 export const IP_LOOKUP = 'https://api64.ipify.org';
-async function clientIp(): Promise<string> {
-  const res = await fetch(IP_LOOKUP, { signal: AbortSignal.timeout(2500), credentials: 'omit', cache: 'no-store' });
-  return res.ok ? (await res.text()).trim().slice(0, 64) : '';
+
+let ipLookup: Promise<string> | undefined;
+function startIpLookup(): Promise<string> {
+  ipLookup ??= (async () => {
+    const saved = ipFromFbi(readCookie('_fbi'));
+    if (saved.includes(':')) { pixelLog('IPv6 address already saved for this browser: server copies use it'); return saved; }
+    const t0 = performance.now();
+    try {
+      const res = await fetch(IP_LOOKUP, { signal: AbortSignal.timeout(3000), credentials: 'omit', cache: 'no-store' });
+      const ip = res.ok ? (await res.text()).trim().slice(0, 64) : '';
+      const ms = Math.round(performance.now() - t0);
+      pixelLog(ip.includes(':') ? `IPv6 address found in ${ms} ms` : ip ? `only IPv4 here (this network has no IPv6) · ${ms} ms` : `IP lookup answered without an address (${res.status}) · ${ms} ms`);
+      return ip || saved;
+    } catch (e) {
+      pixelLog(`IP lookup failed after ${Math.round(performance.now() - t0)} ms (${(e as Error).name}): server copies use the server's IPv4`);
+      return saved;
+    }
+  })();
+  return ipLookup;
 }
+
 type ParamBuilder = { processAndCollectAllParams(url?: string | null, getIpFn?: () => Promise<string>): Promise<unknown> };
 let params: Promise<void> | undefined;
+/** Server copies waiting for the cookies (sent when they're ready, after PARAMS_WAIT_MS, or when the visitor leaves). */
+let paramsReady = false;
+const waiting: (() => void)[] = [];
+function releaseWaiting(why: string) {
+  if (!waiting.length) { paramsReady = true; return; }
+  pixelLog(`${waiting.length} server cop${waiting.length === 1 ? 'y' : 'ies'} sent (${why}); _fbi ${ipFromFbi(readCookie('_fbi')).includes(':') ? 'has IPv6' : 'has no IPv6'}`);
+  paramsReady = true;
+  while (waiting.length) waiting.shift()!();
+}
 function collectParams(): Promise<void> {
-  params ??= import('meta-capi-param-builder-clientjs')
+  if (params) return params;
+  startIpLookup();
+  const t0 = performance.now();
+  params = import('meta-capi-param-builder-clientjs')
     .then((m) => {
       const pb = ((m as { default?: ParamBuilder }).default ?? m) as ParamBuilder;
-      return pb.processAndCollectAllParams(location.href, clientIp);
+      return pb.processAndCollectAllParams(location.href, startIpLookup);
     })
-    .then(() => {}, () => {});
+    .then(() => {}, () => {})
+    .then(() => { pixelLog(`Meta cookies ready in ${Math.round(performance.now() - t0)} ms`); releaseWaiting('cookies ready'); });
+  setTimeout(() => { if (!paramsReady) releaseWaiting(`waited ${PARAMS_WAIT_MS / 1000} s`); }, PARAMS_WAIT_MS);
+  // Leaving (closing the tab, going to another app): send what's waiting now, rather than lose it.
+  addEventListener('pagehide', () => releaseWaiting('visitor leaving'));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') releaseWaiting('tab hidden'); });
   return params;
 }
-const paramsOrTimeout = () => Promise.race([collectParams(), new Promise<void>((r) => setTimeout(r, PARAMS_WAIT_MS))]);
 
 /** The Pixel's "advanced matching" fields, normalised the way Meta asks (it hashes them). */
 function pixelMatch(u: MatchUser | null): Record<string, string> {
@@ -157,8 +195,9 @@ function load() {
 function relay(name: Relayed | typeof ENGAGED_EVENT, eventId: string, custom: Record<string, unknown>) {
   const url = location.origin + location.pathname;
   const user = knownUser() ?? undefined;
-  // The first page view's server copy waits (briefly) for the Parameter Builder's click id and IPv6 cookies.
-  (name === 'PageView' ? paramsOrTimeout() : Promise.resolve()).then(() => send(name, eventId, custom, url, user));
+  const go = () => send(name, eventId, custom, url, user);
+  // Until the Parameter Builder's cookies (click id, IPv6) are ready, server copies wait (see collectParams).
+  if (paramsReady || !params) go(); else waiting.push(go);
 }
 
 function send(name: Relayed | typeof ENGAGED_EVENT, eventId: string, custom: Record<string, unknown>, url: string, user: MatchUser | undefined) {
