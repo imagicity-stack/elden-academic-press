@@ -6,8 +6,7 @@
          It starts once the page has loaded (or after 2.5 s, whichever is first; at once for a Google ad click), so on slow
          phone data the page itself and the Meta Pixel aren't stuck behind Google's 180 KB. (Google Tag Manager was removed: its only tag loaded this same GA.)
          A private order link's token (/order/123?t=…) is moved out of the address bar first,
-         so it never reaches analytics. Consent Mode: until the visitor accepts cookies (the banner,
-         src/consent.ts), Google stores no cookies. vercel.json's CSP lists this script's SHA-256 hash. -->
+         so it never reaches analytics. vercel.json's CSP lists this script's SHA-256 hash. -->
     <script>
       (function (w, d, l) {
         var p = l.pathname, m = /[?&]t=([^&#]+)/.exec(l.search);
@@ -20,10 +19,8 @@
         try { if (localStorage.getItem('elden-student') === '1') return; } catch (e) {}
         w.dataLayer = w.dataLayer || [];
         w.gtag = function () { w.dataLayer.push(arguments); };
-        var c = null;
-        try { c = localStorage.getItem('elden-consent'); } catch (e) {}
-        var g = c === 'all' ? 'granted' : 'denied';
-        w.gtag('consent', 'default', { ad_storage: g, ad_user_data: g, ad_personalization: g, analytics_storage: g });
+        // No cookie choice on this site (src/consent.ts): Google may store its cookies for every visitor.
+        w.gtag('consent', 'default', { ad_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted', analytics_storage: 'granted' });
         w.gtag('js', new Date());
         // Staff signed in to the admin show up as internal traffic (filtered out in GA4).
         var staff = false;

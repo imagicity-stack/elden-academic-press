@@ -1,7 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { catalogueHref } from '../catalogue';
 import { config } from '../config';
-import { openConsent } from '../consent';
 import { LEGAL } from '../legal';
 import { CompanyLine } from '../pages/Legal';
 import { useSite, type ModalKind } from '../site';
@@ -83,7 +82,6 @@ export function Footer() {
           <span>© 2026 Elden Academic Press · <a href={`mailto:${config.contactEmail}`}>{config.contactEmail}</a></span>
           <nav className="footer__legal" aria-label="Policies">
             {LEGAL.map((d) => <Link key={d.key} to={d.path}>{d.short}</Link>)}
-            <button type="button" onClick={openConsent}>Cookie settings</button>
           </nav>
         </div>
         <CompanyLine className="footer__company" />

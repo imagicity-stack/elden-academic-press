@@ -1,8 +1,8 @@
-// Meta Pixel. Loads only after the visitor accepts cookies, never on the admin or for staff.
+// Meta Pixel. Loads on every page for every visitor (no cookie choice on this site), never on the admin or for staff.
 // Each event has an id; the server sends the same event with the same id (Conversions API),
 // so Meta counts it once even when one of the two is blocked.
-import { getConsent, isMetaOff, isStaff, metaTestMode, syncConsent, type Consent } from './consent';
-import { forgetUser, knownUser, phoneDigits, type MatchUser } from './visitor';
+import { getConsent, isMetaOff, isStaff, metaTestMode, syncConsent } from './consent';
+import { knownUser, phoneDigits, type MatchUser } from './visitor';
 import { fireOnce, registrationEventId, registrationParams, SIGNUP_EVENT, signupParams } from './shared/metaEvents';
 
 export { rememberUser } from './visitor';
@@ -74,11 +74,12 @@ function setMetaCookies() {
 }
 
 /**
- * Meta's Parameter Builder (meta-capi-param-builder-clientjs), once per page after consent. It keeps
- * _fbc and _fbp right, finds the ad click inside Facebook's and Instagram's own browsers when the
- * address doesn't carry it (where most ad visitors are), and stores the visitor's IPv6 address in
- * _fbi for the server's events (our server is only ever reached over IPv4). It never delays an event:
- * the server's copy of the first page view waits for it at most PARAMS_WAIT_MS.
+ * Meta's Parameter Builder (meta-capi-param-builder-clientjs), once per page. It keeps _fbc and _fbp
+ * right and finds the ad click inside Facebook's and Instagram's own browsers when the address
+ * doesn't carry it (where most ad visitors are), and stores the visitor's IPv6 address in _fbi for
+ * the server's events (our server is only ever reached over IPv4; Meta matches IPv6 visitors better
+ * on IPv6). Nothing shows on the page and it never delays an event: the server's copy of the first
+ * page view waits for it at most PARAMS_WAIT_MS.
  */
 const PARAMS_WAIT_MS = 1500;
 /** The visitor's public address as seen from outside, IPv6 where they have it (IPv4 otherwise). */
@@ -213,21 +214,7 @@ document.addEventListener('click', (e) => {
   track('Contact', { content_name: href.startsWith('mailto:') ? 'email' : href.startsWith('tel:') ? 'phone' : 'whatsapp' });
 }, true);
 
-// Start-up, and changes of mind.
+// Start-up: everyone is counted (no cookie choice on this site), except staff, the admin and
+// signed-in students under Meta's minimum age (see active()).
 syncConsent();
 if (active()) load();
-window.addEventListener('elden:consent', (e) => {
-  const c = (e as CustomEvent<Consent>).detail;
-  if (c === 'all') {
-    if (loaded) window.fbq?.('consent', 'grant'); // changed their mind back
-    track('PageView'); // the page they're on
-  } else if (loaded) {
-    lastPageView = '';
-    window.fbq?.('consent', 'revoke');
-    forgetUser();
-    for (const name of ['_fbp', '_fbc', '_fbi']) {
-      document.cookie = `${name}=; Path=/; Max-Age=0`;
-      document.cookie = `${name}=; Path=/; Max-Age=0${cookieDomain()}`;
-    }
-  }
-});
