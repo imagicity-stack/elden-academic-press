@@ -322,7 +322,7 @@ describe('MCP server', () => {
     expect(page.data).toContain('the link opened a web page');
     expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover', source_url: 'https://example.com/book.pdf' })).data).toContain('isn’t a JPG, PNG or WebP image');
     expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'ebook_file', source_url: 'https://example.com/inside.jpg' })).data).toContain('isn’t a PDF or EPUB');
-    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover' })).data).toContain('one of the two');
+    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover' })).data).toContain('Give the file one way');
     expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover', data_base64: 'abc' })).data).toContain('file_name');
 
     // Logged as via Claude; staff don't get the tool.
@@ -330,6 +330,49 @@ describe('MCP server', () => {
     expect(log.filter((l) => l.action === 'file.upload').map((l) => l.actor)).toEqual(Array(5).fill('owner@eldenap.in (via Claude)'));
     const { access_token: staff } = await connect(STAFF);
     expect((await rpc(staff, 'tools/list')).json.result.tools.map((x: { name: string }) => x.name)).not.toContain('upload_product_file');
+  });
+
+  it('uploads straight from this computer: an upload link and its curl command, then checked and attached', async () => {
+    const seg = (marker: number, payload: number[]) => [0xff, marker, (payload.length + 2) >> 8, (payload.length + 2) & 0xff, ...payload];
+    const enc = (x: string) => [...new TextEncoder().encode(x)];
+    const jpeg = Uint8Array.from([0xff, 0xd8, ...seg(0xe1, [...enc('Exif\0\0'), ...enc('GPSLatitude 23.99 N')]), ...seg(0xc0, [8, 0, 10, 0, 20, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]), ...seg(0xda, [3, 1, 0, 2, 0x11, 3, 0x11, 0, 0x3f, 0]), 1, 2, 3, 0xff, 0xd9]);
+    const pdf = new Uint8Array(200_000);
+    pdf.set(new TextEncoder().encode('%PDF-1.7\n'));
+    const { access_token: tok } = await connect();
+    const p = (await tool(tok, 'create_product', { title: 'Board Booster Class X Maths', level: 'S', ebook: { price_inr: 199 } })).data.created;
+    // "What the curl command does": put the bytes at the upload link's path.
+    const curl = async (uploadId: string, bytes: Uint8Array) => { const [bucket, ...rest] = uploadId.split('/'); await t.deps.storage.write(bucket as 'covers', rest.join('/'), bytes); };
+
+    // The e-book PDF.
+    const link = (await tool(tok, 'get_upload_link', { product: p.slug, kind: 'ebook_file', file_name: 'Class 10 Maths.pdf', size_bytes: pdf.length })).data;
+    expect(link.upload_id).toMatch(/^ebooks\/\d{4}\/[0-9a-f-]{36}\/class-10-maths\.pdf$/);
+    expect(link.command).toContain('-X PUT -H "Content-Type: application/pdf"');
+    expect(link.command).toContain('--data-binary @"<path to Class 10 Maths.pdf>"');
+    expect(link.expires_in_minutes).toBe(120);
+    const early = await tool(tok, 'upload_product_file', { product: p.id, kind: 'ebook_file', upload_id: link.upload_id });
+    expect(early.data).toContain('Nothing has been uploaded');
+    await curl(link.upload_id, pdf);
+    const done = await tool(tok, 'upload_product_file', { product: p.id, kind: 'ebook_file', upload_id: link.upload_id, title: 'Full book' });
+    expect(done.data.uploaded).toMatchObject({ kind: 'ebook_file', type: 'application/pdf', sizeKb: 195 });
+    expect(done.data.product.formats.ebook.files).toEqual(['Full book']);
+
+    // The cover, from a phone photo: its GPS location removed in storage.
+    const c = (await tool(tok, 'get_upload_link', { product: p.id, kind: 'cover', file_name: 'IMG_2041.JPG' })).data;
+    expect(c.command).toContain('Content-Type: image/jpeg');
+    await curl(c.upload_id, jpeg);
+    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover', upload_id: c.upload_id })).data.product.hasCover).toBe(true);
+    const [row] = await t.db.select().from(products).where(eq(products.id, p.id));
+    expect(new TextDecoder().decode(await t.deps.storage.read('covers', row.coverPath!))).not.toContain('GPSLatitude');
+
+    // Refused: wrong types, a web page saved as .jpg (removed), an upload for another kind, a made-up id.
+    expect((await tool(tok, 'get_upload_link', { product: p.id, kind: 'cover', file_name: 'book.pdf' })).data).toContain('Images must be');
+    expect((await tool(tok, 'get_upload_link', { product: p.id, kind: 'ebook_file', file_name: 'book.docx' })).data).toContain('.pdf or .epub');
+    expect((await tool(tok, 'get_upload_link', { product: p.id, kind: 'cover', file_name: 'big.jpg', size_bytes: 9 * 1048576 })).data).toContain('up to 5 MB');
+    const fake = (await tool(tok, 'get_upload_link', { product: p.id, kind: 'photo', file_name: 'page.jpg' })).data;
+    await curl(fake.upload_id, new TextEncoder().encode('<html>not an image</html>'));
+    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'photo', upload_id: fake.upload_id })).data).toContain('isn’t a JPG, PNG or WebP image');
+    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'ebook_file', upload_id: c.upload_id })).data).toContain('is for an image (cover or photo), so it can’t be used as an e-book file');
+    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover', upload_id: 'covers/../../secrets.txt' })).data).toContain('isn’t one from get_upload_link');
   });
 
   it('downloads only public https links, within the size limit; share links become downloads', async () => {

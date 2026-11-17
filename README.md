@@ -73,9 +73,12 @@ The store is also a remote MCP server at **`https://eldenap.in/api/mcp`**, so Cl
 - **Reads everything:** sales and sales by source/UTM campaign (to compare with the Meta Ads connector), orders with refunds and cancellations, products, stock, customers, coupons, enquiries, WhatsApp (inbox, conversations, send log, templates, opt-outs), voice-agent calls (stats, transcripts, abandoned-checkout leads, do-not-call), newsletter (subscribers, accounts, campaigns), audience, popups, cookie consent, Study Hub, competitions (registrations, teams, notices, dates), store settings, staff and the activity log.
 - **Acts on:** products (create, edit, publish, stock, and uploading the cover, photos and e-book files with `upload_product_file`), categories, coupons, order fulfilment and notes, enquiries, WhatsApp replies and new-book sends, newsletter campaigns (draft, test, schedule, send, stop), voice-agent calls (call now, skip, resolve, fetch result, do-not-call), popup status, Study Hub publishing, customer notes.
 - **Never tools:** refunds, cancellations, competition decisions (review, results, notices), settings, staff, deleting. Their data is readable.
-- **Uploads:** `upload_product_file` (managers and the owner) takes a public https link (Google Drive and Dropbox share links are turned into downloads) or, for files up to 3 MB, the bytes as base64.
-  - **Limits:** images are JPG, PNG or WebP up to 5 MB; e-book files are PDF or EPUB up to 100 MB by link.
-  - **Checks:** the type is checked from the file's first bytes, and photos lose hidden metadata (such as GPS location).
+- **Uploads:** `upload_product_file` (managers and the owner) adds a book's cover, photos and e-book files, taking the file one of three ways:
+  - **From the user's computer** (Claude Code, or Cowork in Claude Desktop): `get_upload_link` returns a one-time storage link (2 hours) and a `curl` command. Claude runs the command on the file, then calls `upload_product_file` with the `upload_id`. The file goes straight to storage, so large e-books work too.
+  - **A public https link:** Google Drive and Dropbox share links are turned into downloads.
+  - **The bytes as base64:** tiny files only.
+  - **Limits:** images are JPG, PNG or WebP up to 5 MB; e-book files are PDF or EPUB, up to 300 MB uploaded or 100 MB by link.
+  - **Checks:** the type is checked from the file's first bytes (for large uploads only the start is read). A file that isn't what it claims is deleted. Photos lose hidden metadata (such as GPS location).
   - **Links:** the store fetches only public addresses: no private-network IPs, redirects included (`server/lib/remoteFile.ts`).
 - **Privacy:** children's dates of birth, guardians' and students' contact details, and competition ID documents are left out of what Claude sees.
 - **Connect:** in Claude, Settings → Connectors → Add custom connector → paste the address above → Connect. Claude registers itself and opens `/admin/connect`, where a signed-in team member (with two-step verification) chooses **Allow**. The steps are also under Admin → Settings → Claude, with the list of connections and a Disconnect button.

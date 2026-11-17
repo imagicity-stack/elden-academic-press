@@ -25,6 +25,7 @@ export function memoryStorage(): Storage & { files: Map<string, Uint8Array> } {
     remove: async () => {},
     read: async (b, p) => files.get(`${b}/${p}`) ?? new TextEncoder().encode('%PDF-1.4 sample e-book'),
     write: async (b, p, data) => { files.set(`${b}/${p}`, data); },
+    head: async (b, p, n) => { const f = files.get(`${b}/${p}`); return f ? { bytes: f.subarray(0, n), size: f.length } : null; },
     files,
   } as Storage & { files: Map<string, Uint8Array> };
 }

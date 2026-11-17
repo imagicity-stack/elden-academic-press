@@ -38,6 +38,15 @@ export interface Tool {
 
 /* ---------------- Helpers ---------------- */
 
+/** File types the connector's uploads accept, by extension, and back. */
+const UPLOAD_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf', epub: 'application/epub+zip' };
+const EBOOK_TYPES = ['application/pdf', 'application/epub+zip'];
+const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf', 'application/epub+zip': 'epub' };
+/** What a file really is, from its first bytes (an EPUB is a zip that says so near its start). */
+function sniffFile(b: Uint8Array): string | null {
+  return sniff(b) ?? (b[0] === 0x50 && b[1] === 0x4b && String.fromCharCode(...b.subarray(0, 80)).includes('application/epub+zip') ? 'application/epub+zip' : null);
+}
+
 /** Paise to rupees. */
 export const inr = (p: number | null | undefined) => (p == null ? null : Math.round(p) / 100);
 /** Rupees to paise. */
@@ -505,7 +514,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'create_product',
     title: 'Create a product',
-    description: 'Adds a book as a draft (not on sale yet). Turn on at least one format: print, ebook, or both (bundle needs both). Prices are in rupees, GST included. Then add the cover, photos and e-book files with upload_product_file, and publish with set_product_status.',
+    description: 'Adds a book as a draft (not on sale yet). Turn on at least one format: print, ebook, or both (bundle needs both). Prices are in rupees, GST included. Then add the cover, photos and e-book files (get_upload_link for files on this computer, then upload_product_file), and publish with set_product_status.',
     role: 'manager',
     input: z.object({ ...zProductFields }),
     async run(ctx, a) {
@@ -548,79 +557,146 @@ export const TOOLS: Tool[] = [
     },
   },
   {
-    name: 'upload_product_file',
-    title: 'Upload a cover, photo or e-book file',
-    description: 'Adds a file to a book: its cover (replaces the old one), another photo (inside pages, back cover; shown after the cover), or an e-book file (PDF or EPUB; added after the existing files, or replacing them all with replace_ebook_files). '
-      + 'Give the file as source_url: a public https link (Google Drive and Dropbox share links work when shared as "anyone with the link"; the store downloads it). '
-      + 'Or, for a small file whose bytes you have, as data_base64 with file_name (up to 3 MB). Images: JPG, PNG or WebP up to 5 MB. E-book files: up to 100 MB by link. '
-      + 'If you can only see the file (e.g. an image pasted in chat) and have neither a link nor its bytes, ask the user for a link or point them to eldenap.in/admin → Products.',
+    name: 'get_upload_link',
+    title: 'Get a link to upload a file from this computer',
+    description: 'Step 1 of uploading a file that is on the user\'s computer (a cover, photo, or e-book PDF/EPUB) when you can run commands there (Claude Code, Cowork): returns a one-time upload link and the exact curl command. '
+      + 'Run the command with the real path to the file, then call upload_product_file with the upload_id (same product and kind) to check it and add it to the book. The link works for 2 hours. '
+      + 'Images: JPG, PNG or WebP up to 5 MB; e-book files up to 300 MB.',
     role: 'manager',
     input: z.object({
       product: z.string().trim().min(1).max(200).describe('Product id, slug or exact title'),
       kind: z.enum(['cover', 'photo', 'ebook_file']),
+      file_name: z.string().trim().min(3).max(200).describe('The file\'s name with its extension, e.g. "cover.jpg" or "class-10-science.pdf"'),
+      size_bytes: z.number().int().positive().max(400 * 1048576).optional().describe('The file\'s size, if known (checked against the limit now)'),
+    }),
+    async run(ctx, a) {
+      const ext = (a.file_name.split('.').pop() ?? '').toLowerCase();
+      const type = UPLOAD_TYPES[ext];
+      const ebook = a.kind === 'ebook_file';
+      if (!type || (ebook ? !EBOOK_TYPES.includes(type) : !isImage(type))) {
+        throw new ToolError(ebook ? 'E-book files must be .pdf or .epub.' : 'Images must be .jpg, .jpeg, .png or .webp.');
+      }
+      const id = await productId(ctx, a.product);
+      const bucket = ebook ? 'ebooks' : 'covers';
+      const up = await ctx.api<{ url: string; path: string }>('POST', '/uploads', { bucket, fileName: a.file_name, contentType: type, size: a.size_bytes ?? 1 });
+      return {
+        upload_id: `${bucket}/${up.path}`,
+        product: id,
+        kind: a.kind,
+        expires_in_minutes: 120,
+        command: `curl -sS --fail -X PUT -H "Content-Type: ${type}" -H "x-upsert: true" --data-binary @"<path to ${a.file_name}>" "${up.url}"`,
+        next: `Replace <path to ${a.file_name}> with the file's full path and run the command (it prints nothing, or a small JSON, when it works). Then call upload_product_file with upload_id "${bucket}/${up.path}", product and kind "${a.kind}".`,
+      };
+    },
+  },
+  {
+    name: 'upload_product_file',
+    title: 'Add a cover, photo or e-book file to a book',
+    description: 'Adds a file to a book: its cover (replaces the old one), another photo (inside pages, back cover; shown after the cover), or an e-book file (PDF or EPUB; added after the existing files, or replacing them all with replace_ebook_files). Give the file one of three ways: '
+      + '(1) upload_id: for a file on the user\'s computer, first call get_upload_link, run its command, then pass its upload_id here (best for any size); '
+      + '(2) source_url: a public https link (Google Drive and Dropbox share links work when shared as "anyone with the link"); '
+      + '(3) data_base64 with file_name, only for tiny files whose bytes you already have. '
+      + 'Images: JPG, PNG or WebP up to 5 MB. E-book files: up to 300 MB uploaded, 100 MB by link.',
+    role: 'manager',
+    input: z.object({
+      product: z.string().trim().min(1).max(200).describe('Product id, slug or exact title'),
+      kind: z.enum(['cover', 'photo', 'ebook_file']),
+      upload_id: z.string().trim().max(400).optional().describe('From get_upload_link, after its command was run'),
       source_url: z.string().trim().url().max(2000).optional().describe('Public https link to the image or PDF'),
-      data_base64: z.string().max(4_200_000).optional().describe('The file itself, base64-encoded (up to 3 MB)'),
+      data_base64: z.string().max(4_200_000).optional().describe('The file itself, base64-encoded (tiny files only)'),
       file_name: z.string().trim().min(1).max(200).optional().describe('e.g. "class-10-science.pdf" (needed with data_base64)'),
       alt: z.string().trim().max(150).optional().describe('photo: what it shows, e.g. "Sample chapter page"'),
       title: z.string().trim().max(120).optional().describe('ebook_file: the label buyers see, e.g. "Part 1" or "Answer key"'),
       replace_ebook_files: z.boolean().default(false).describe('ebook_file: remove the existing files first'),
     }),
     async run(ctx, a) {
-      if (!a.source_url === !a.data_base64) throw new ToolError('Give the file as source_url (a public link) or data_base64, one of the two.');
+      if ([a.upload_id, a.source_url, a.data_base64].filter(Boolean).length !== 1) {
+        throw new ToolError('Give the file one way: upload_id (from get_upload_link), source_url (a public link) or data_base64.');
+      }
       if (a.data_base64 && !a.file_name) throw new ToolError('Give file_name with data_base64.');
       const ebook = a.kind === 'ebook_file';
-      const maxBytes = ebook ? (a.data_base64 ? 3 : 100) * 1048576 : 5 * 1048576;
-      // The file's bytes, from the link or from the call.
-      let bytes: Uint8Array;
-      let name = a.file_name ?? '';
-      if (a.data_base64) {
-        bytes = new Uint8Array(Buffer.from(a.data_base64.replace(/^data:[^,]*,/, ''), 'base64'));
-        if (!bytes.length) throw new ToolError('data_base64 is empty or isn’t base64.');
-        if (bytes.length > Math.min(maxBytes, 3 * 1048576)) throw new ToolError('That file is too big to pass directly (3 MB at most): give a public link as source_url instead.');
-      } else {
-        try {
-          const got = await (ctx.deps.fetchFile ?? remoteFiles())(a.source_url, maxBytes);
-          bytes = got.bytes;
-          name ||= got.name;
-        } catch (e) {
-          if (e instanceof RemoteFileError) throw new ToolError(e.message);
-          throw e;
-        }
-      }
-      // What it really is, from its first bytes (never the name or the link).
-      const head = String.fromCharCode(...bytes.subarray(0, 60));
-      const type = sniff(bytes) ?? (bytes[0] === 0x50 && bytes[1] === 0x4b && head.includes('application/epub+zip') ? 'application/epub+zip' : null);
-      if (ebook ? type !== 'application/pdf' && type !== 'application/epub+zip' : !type || !isImage(type)) {
-        const looksLikePage = /^\s*</.test(head);
-        throw new ToolError(`That isn’t ${ebook ? 'a PDF or EPUB' : 'a JPG, PNG or WebP image'}${looksLikePage ? ': the link opened a web page, not the file (for Google Drive, share it as "anyone with the link"; very large Drive files need downloading and a different link)' : ''}.`);
-      }
-      // Photos lose hidden metadata (camera, GPS location) before they're stored.
-      if (type && isImage(type)) {
-        try { bytes = stripImageMetadata(bytes, type); } catch { throw new ToolError('That image looks damaged.'); }
-      }
-      const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf', 'application/epub+zip': 'epub' }[type as string]!;
-      const base = name.replace(/\.[^.]+$/, '').trim() || (ebook ? 'ebook' : a.kind);
-      const fileName = `${base}.${ext}`;
-
+      const bucket = ebook ? 'ebooks' : 'covers';
       const id = await productId(ctx, a.product);
       const cur: Detail = await ctx.api('GET', `/products/${id}`);
       if (a.kind === 'photo' && (cur.product.images ?? []).length >= 20) throw new ToolError('This book already has 20 photos, the most it can have.');
       if (ebook && !a.replace_ebook_files && (cur.variants.digital?.files ?? []).length >= 20) throw new ToolError('This e-book already has 20 files, the most it can have.');
-      // Through the admin's upload endpoint (its rules, a fresh path, the activity log), then stored.
-      const bucket = ebook ? 'ebooks' : 'covers';
-      const up = await ctx.api<{ path: string }>('POST', '/uploads', { bucket, fileName, contentType: type, size: bytes.length });
-      await ctx.deps.storage.write(bucket, up.path, bytes, type!);
+
+      const kindOk = (type: string | null) => (ebook ? type === 'application/pdf' || type === 'application/epub+zip' : Boolean(type && isImage(type)));
+      const wrong = (head: Uint8Array) => {
+        const looksLikePage = /^\s*</.test(String.fromCharCode(...head.subarray(0, 60)));
+        return new ToolError(`That isn’t ${ebook ? 'a PDF or EPUB' : 'a JPG, PNG or WebP image'}${looksLikePage ? ': the link opened a web page, not the file (for Google Drive, share it as "anyone with the link"; very large Drive files need downloading and a different link)' : ''}.`);
+      };
+      let path: string;
+      let fileName: string;
+      let type: string;
+      let size: number;
+
+      if (a.upload_id) {
+        // Uploaded straight to storage with get_upload_link's command: check what arrived.
+        const m = /^(covers|ebooks)\/(\d{4}\/[0-9a-f-]{36}\/[a-z0-9-]+\.(jpg|jpeg|png|webp|pdf|epub))$/.exec(a.upload_id);
+        if (!m) throw new ToolError('That upload_id isn’t one from get_upload_link.');
+        if (m[1] !== bucket) throw new ToolError(`That upload_id is for ${m[1] === 'ebooks' ? 'an e-book file' : 'an image (cover or photo)'}, so it can’t be used as ${ebook ? 'an e-book file' : `the ${a.kind}`}.`);
+        path = m[2];
+        const storage = ctx.deps.storage;
+        const head = storage.head ? await storage.head(bucket, path, 64 * 1024) : await storage.read(bucket, path).then((b) => ({ bytes: b, size: b.length }), () => null);
+        if (!head || !head.size) throw new ToolError('Nothing has been uploaded to that link yet: run get_upload_link’s command first (and check it didn’t print an error).');
+        const sniffed = sniffFile(head.bytes);
+        if (!kindOk(sniffed)) { await storage.remove(bucket, path).catch(() => {}); throw wrong(head.bytes); }
+        type = sniffed!;
+        size = head.size;
+        if (!ebook && size > 5 * 1048576) { await storage.remove(bucket, path).catch(() => {}); throw new ToolError('Images can be up to 5 MB.'); }
+        if (isImage(type)) {
+          // Photos lose hidden metadata (camera, GPS location): read it whole (5 MB at most) and write it back.
+          let bytes = await storage.read(bucket, path);
+          try { bytes = stripImageMetadata(bytes, type); } catch { throw new ToolError('That image looks damaged.'); }
+          await storage.write(bucket, path, bytes, type);
+          size = bytes.length;
+        }
+        fileName = path.split('/').pop()!;
+      } else {
+        // The bytes, from a link or from the call.
+        const maxBytes = ebook ? (a.data_base64 ? 3 : 100) * 1048576 : 5 * 1048576;
+        let bytes: Uint8Array;
+        let name = a.file_name ?? '';
+        if (a.data_base64) {
+          bytes = new Uint8Array(Buffer.from(a.data_base64.replace(/^data:[^,]*,/, ''), 'base64'));
+          if (!bytes.length) throw new ToolError('data_base64 is empty or isn’t base64.');
+          if (bytes.length > Math.min(maxBytes, 3 * 1048576)) throw new ToolError('That file is too big to pass directly: use get_upload_link (from this computer) or a public link as source_url.');
+        } else {
+          try {
+            const got = await (ctx.deps.fetchFile ?? remoteFiles())(a.source_url, maxBytes);
+            bytes = got.bytes;
+            name ||= got.name;
+          } catch (e) {
+            if (e instanceof RemoteFileError) throw new ToolError(e.message);
+            throw e;
+          }
+        }
+        const sniffed = sniffFile(bytes);
+        if (!kindOk(sniffed)) throw wrong(bytes);
+        type = sniffed!;
+        if (isImage(type)) {
+          try { bytes = stripImageMetadata(bytes, type); } catch { throw new ToolError('That image looks damaged.'); }
+        }
+        const base = name.replace(/\.[^.]+$/, '').trim() || (ebook ? 'ebook' : a.kind);
+        fileName = `${base}.${EXT[type]}`;
+        // Through the admin's upload endpoint (its rules, a fresh path, the activity log), then stored.
+        const up = await ctx.api<{ path: string }>('POST', '/uploads', { bucket, fileName, contentType: type, size: bytes.length });
+        await ctx.deps.storage.write(bucket, up.path, bytes, type);
+        path = up.path;
+        size = bytes.length;
+      }
 
       const b = bodyFrom(cur);
-      if (a.kind === 'cover') b.coverPath = up.path;
-      if (a.kind === 'photo') b.images = [...b.images, { path: up.path, alt: a.alt ?? '' }];
+      if (a.kind === 'cover') b.coverPath = path;
+      if (a.kind === 'photo') b.images = [...b.images, { path, alt: a.alt ?? '' }];
       if (ebook) {
         const files = a.replace_ebook_files ? [] : (cur.variants.digital?.files ?? []).map((f: { path: string; name: string; title: string; size: number | null }) => ({ path: f.path, name: f.name, title: f.title ?? '', size: f.size ?? null }));
-        (b.digital as Record<string, unknown>).files = [...files, { path: up.path, name: fileName, title: a.title ?? '', size: bytes.length }];
+        (b.digital as Record<string, unknown>).files = [...files, { path, name: fileName, title: a.title ?? '', size }];
       }
       const saved = await ctx.api('PUT', `/products/${id}`, b);
       return {
-        uploaded: { kind: a.kind, fileName, sizeKb: Math.round(bytes.length / 1024), type },
+        uploaded: { kind: a.kind, fileName, sizeKb: Math.round(size / 1024), type },
         product: productOut(saved),
         ...(ebook && !saved.variants?.digital?.active ? { note: 'The e-book format is off for this book: turn it on with update_product (ebook: { price_inr }) to sell it.' } : {}),
       };
