@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { catalogueHref, relatedTo } from '../catalogue';
@@ -24,6 +24,12 @@ import { dropPrerender } from '../prerender';
 import { engagedPage } from '../engagedVisit';
 
 const TABS = ['Overview', 'Contents'] as const;
+type Section = (typeof TABS)[number];
+
+// Phones get Overview / Contents as closed dropdowns; wider screens keep the tabs.
+const PHONE = '(max-width: 640px)';
+const onPhoneChange = (cb: () => void) => { const m = window.matchMedia(PHONE); m.addEventListener('change', cb); return () => m.removeEventListener('change', cb); };
+const usePhone = () => useSyncExternalStore(onPhoneChange, () => window.matchMedia(PHONE).matches);
 
 export function BookDetail() {
   const { slug } = useParams();
@@ -33,7 +39,7 @@ export function BookDetail() {
   // failed to load, it stays: it's the book's real content.
   useLayoutEffect(() => { if (!book && status === 'ready') dropPrerender(); }, [book, status]);
   if (!book) return status === 'loading' ? <div className="wrap page-head" aria-busy="true"><div className="skeleton skeleton--hero" /></div> : <NotFound />;
-  // Keyed so tab / format selection resets when moving between books.
+  // Keyed so tab / section / format selection resets when moving between books.
   return <BookView key={book.id} book={book} />;
 }
 
@@ -46,7 +52,11 @@ function BookView({ book }: { book: Product }) {
   const cart = useCart();
   const navigate = useNavigate();
   const { print, digital } = book.formats;
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Overview');
+  const phone = usePhone();
+  const [tab, setTab] = useState<Section>('Overview');
+  // On a phone, Overview and Contents start closed; each opens on its own.
+  const [open, setOpen] = useState<Set<Section>>(() => new Set());
+  const toggle = (s: Section) => setOpen((o) => { const n = new Set(o); if (n.has(s)) n.delete(s); else n.add(s); return n; });
   const [format, setFormat] = useState<'print' | 'digital'>(print?.available || !digital ? 'print' : 'digital');
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
@@ -99,6 +109,25 @@ function BookView({ book }: { book: Product }) {
     : kind === 'print' && print?.lowStock ? `Only ${print.lowStock} left · dispatched in ${config.policy.dispatch}`
     : `In stock · dispatched in ${config.policy.dispatch}`;
   const c = PAL[book.palette] ?? PAL[0];
+
+  // Overview / Contents bodies, shown in the tabs or (on a phone) the dropdowns.
+  const overview = (
+    <div className="stack-18">
+      {book.description && book.description !== book.blurb && <p className="pd__desc prewrap">{book.description}</p>}
+      {book.highlights.length > 0 && <h3 className="t-h3">What’s inside</h3>}
+      <ul className="highlights">
+        {book.highlights.map((h) => <li key={h}>{h}</li>)}
+      </ul>
+      {!book.description && !book.highlights.length && <p className="body">{book.blurb}</p>}
+    </div>
+  );
+  const contents = book.contents.length ? (
+    <ol className="toc">
+      {book.contents.map((t, i) => (
+        <li key={t + i}><span className="toc__n">{String(i + 1).padStart(2, '0')}</span><span className="toc__t">{t}</span><span className="toc__dots" aria-hidden="true" /></li>
+      ))}
+    </ol>
+  ) : <p className="body">The table of contents will be added soon.</p>;
   const freeAbove = cfg?.shipping.freeAbove ?? 0;
 
   return (
@@ -198,43 +227,52 @@ function BookView({ book }: { book: Product }) {
 
       <section className="pd__tabs-band">
         <div className="wrap pd__tabs-wrap">
-          <div className="tabs" role="tablist">
-            {TABS.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={tab === t} className={'tab' + (tab === t ? ' is-on' : '')} onClick={() => setTab(t)}>
-                {t}
-                {tab === t && <motion.span layoutId="pd-tab" className="tab__line" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
-              </button>
-            ))}
-          </div>
-          <AnimatePresence mode="wait">
-            <motion.div key={tab} className="tab-panel" role="tabpanel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: EASE }}>
-              {tab === 'Overview' && (
-                <div className="stack-18">
-                  {book.description && book.description !== book.blurb && <p className="pd__desc prewrap">{book.description}</p>}
-                  {book.highlights.length > 0 && <h3 className="t-h3">What’s inside</h3>}
-                  <ul className="highlights">
-                    {book.highlights.map((h) => <li key={h}>{h}</li>)}
-                  </ul>
-                  {!book.description && !book.highlights.length && <p className="body">{book.blurb}</p>}
-                </div>
-              )}
-              {tab === 'Contents' && (
-                book.contents.length ? (
-                  <ol className="toc">
-                    {book.contents.map((t, i) => (
-                      <li key={t + i}><span className="toc__n">{String(i + 1).padStart(2, '0')}</span><span className="toc__t">{t}</span><span className="toc__dots" aria-hidden="true" /></li>
-                    ))}
-                  </ol>
-                ) : <p className="body">The table of contents will be added soon.</p>
-              )}
-            </motion.div>
-          </AnimatePresence>
+          {phone ? (
+            <div className="pd-acc">
+              {TABS.map((sec) => {
+                const isOpen = open.has(sec);
+                const id = 'pd-' + sec.toLowerCase();
+                return (
+                  <div key={sec} className={'pd-acc__item' + (isOpen ? ' is-open' : '')}>
+                    <h2 className="pd-acc__h">
+                      <button type="button" id={id + '-btn'} className="pd-acc__btn" aria-expanded={isOpen} aria-controls={id} onClick={() => toggle(sec)}>
+                        <span>{sec}</span>
+                        {sec === 'Contents' && book.contents.length > 0 && <span className="pd-acc__count">{book.contents.length} {book.contents.length === 1 ? 'chapter' : 'chapters'}</span>}
+                        <svg className="pd-acc__icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 8l5 5 5-5" /></svg>
+                      </button>
+                    </h2>
+                    {/* Kept in the page while closed, so find-in-page still reaches it. */}
+                    <div id={id} role="region" aria-labelledby={id + '-btn'} className="pd-acc__panel" inert={!isOpen}>
+                      <div className="pd-acc__clip"><div className="pd-acc__body">{sec === 'Overview' ? overview : contents}</div></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              <div className="tabs" role="tablist">
+                {TABS.map((t) => (
+                  <button key={t} type="button" role="tab" aria-selected={tab === t} className={'tab' + (tab === t ? ' is-on' : '')} onClick={() => setTab(t)}>
+                    {t}
+                    {tab === t && <motion.span layoutId="pd-tab" className="tab__line" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+                  </button>
+                ))}
+              </div>
+              <AnimatePresence mode="wait">
+                <motion.div key={tab} className="tab-panel" role="tabpanel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: EASE }}>
+                  {tab === 'Overview' ? overview : contents}
+                </motion.div>
+              </AnimatePresence>
+            </>
+          )}
         </div>
       </section>
 
       {related.length > 0 && (
         <section className="wrap section--tight pd__related">
           <Reveal><h2 className="t-h2">You may <span className="serif-i">also need.</span></h2></Reveal>
+          {/* A grid on wider screens; on a phone, a swipe row with two books across and the next peeking in. */}
           <Stagger className="grid-books pd__related-grid">
             {related.map((b) => <StaggerItem key={b.id}><BookCard book={b} variant="related" /></StaggerItem>)}
           </Stagger>
