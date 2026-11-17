@@ -603,6 +603,31 @@ select.input { appearance: none; padding-right: 42px; background: #FFFFFF url("d
 .toc__dots { flex: 1; border-bottom: 2px dotted var(--line-2); transform: translateY(-5px); }
 .pd__related .t-h2 { margin-bottom: 36px; }
 .pd__related-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); }
+/* Phone (BookDetail's PHONE query): Overview / Contents as dropdowns, closed until tapped */
+.pd-acc { max-width: 860px; }
+.pd-acc__item { border-bottom: 1px solid var(--line-2); }
+.pd-acc__item:first-child { border-top: 1px solid var(--line-2); }
+.pd-acc__h { margin: 0; font: inherit; }
+.pd-acc__btn { display: flex; align-items: center; gap: 14px; width: 100%; padding: 20px 0; border: 0; background: none; color: var(--ink); text-align: left; font: 600 clamp(20px, 2vw, 26px)/1.1 var(--f-display); letter-spacing: -.02em; cursor: pointer; }
+.pd-acc__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.pd-acc__count { font: 500 12px/1 var(--f-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+.pd-acc__icon { flex: none; margin-left: auto; width: 40px; height: 40px; padding: 10px; background: #FFFFFF; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform .35s var(--ease), background .2s; }
+.pd-acc__btn:hover .pd-acc__icon { background: var(--hl); }
+.pd-acc__item.is-open .pd-acc__icon { transform: rotate(180deg); }
+.pd-acc__panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .4s var(--ease); }
+.pd-acc__item.is-open .pd-acc__panel { grid-template-rows: 1fr; }
+.pd-acc__clip { min-height: 0; overflow: hidden; }
+.pd-acc__body { padding: 4px 0 32px; opacity: 0; transition: opacity .25s; }
+.pd-acc__item.is-open .pd-acc__body { opacity: 1; transition-delay: .1s; }
+@media (prefers-reduced-motion: reduce) { .pd-acc__panel, .pd-acc__body, .pd-acc__icon { transition: none; } }
+/* Phone: tighter Overview / Contents band, and You may also need as a swipe row (two books across, the next peeking in) */
+@media (max-width: 640px) {
+  .pd__tabs-wrap { padding-top: 28px; padding-bottom: 32px; }
+  .pd__related .t-h2 { margin-bottom: 24px; }
+  .pd__related-grid { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: calc((100% - 14px) / 2.25); gap: 14px; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter) 6px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding: 0 var(--gutter); scrollbar-width: none; }
+  .pd__related-grid::-webkit-scrollbar { display: none; }
+  .pd__related-grid > * { scroll-snap-align: start; }
+}
 @media (max-width: 900px) {
   .pd__grid { grid-template-columns: 1fr; }
   .pd__side { position: relative; top: 0; }
