@@ -20,7 +20,7 @@ export const INSTRUCTIONS = `Elden Academic Press (eldenap.in) back office: sale
 - Money fields ending in _inr are rupees (GST included). Dates are India time (IST).
 - Sales are paid orders minus refunds. Every order is credited to where the buyer came from (channel: meta_ads, google_ads, search, meta_social, social, email, referral, campaign, direct, unknown) and to its UTM campaign, content (ad) and term (ad set).
 - To compare with Meta ads: call get_sales_by_source for the same dates, get spend, purchases and purchase value per campaign from the Meta Ads connector, match Meta campaign names to utm_campaign, and show real ROAS (website revenue ÷ spend) and cost per real order next to what Meta reports.
-- New products are drafts. Covers and e-book files are uploaded in the admin (eldenap.in/admin → Products) before publishing with set_product_status.
+- New products are drafts. Add the cover, photos and e-book files with upload_product_file (a public link, or the file's bytes for small files), then publish with set_product_status.
 - You act with the role of the team member who connected you, and every change is in the activity log. Refunds, cancellations, competition decisions (approve/reject teams, results, notices), store settings, staff and deleting can be read but only changed in the admin: point the user there.
 - Anything that reaches customers (WhatsApp replies and new-book sends, newsletter sends and schedules, calls, marking orders shipped) needs the user's explicit OK on the exact content first; send a test before any bulk send.`;
 

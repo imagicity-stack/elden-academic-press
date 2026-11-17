@@ -1,7 +1,8 @@
 // The Claude connector: OAuth discovery, registration, approval, tokens, and the store tools.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { adminUsers, auditLog, mcpGrants, orders, products } from '../server/db/schema.js';
+import { adminUsers, auditLog, mcpGrants, orders, products, productVariants } from '../server/db/schema.js';
+import { directLink, isPrivateAddress, remoteFiles } from '../server/lib/remoteFile.js';
 import { address, contact, setup } from './helpers.js';
 import { as, BASE, CALLBACK, connector, form, OWNER, pkce, STAFF, type Ctx } from './mcpHelpers.js';
 
@@ -275,6 +276,83 @@ describe('MCP server', () => {
     const log = await t.db.select().from(auditLog);
     expect(log.map((l) => l.actor)).toContain('owner@eldenap.in (via Claude)');
     expect(log.map((l) => l.action)).toEqual(expect.arrayContaining(['mcp.connect', 'product.create', 'product.update', 'product.bulk', 'inventory.adjust']));
+  });
+
+  it('uploads the cover, photos and e-book files: from a link or the bytes, checked, metadata removed, logged', async () => {
+    const seg = (marker: number, payload: number[]) => [0xff, marker, (payload.length + 2) >> 8, (payload.length + 2) & 0xff, ...payload];
+    const enc = (x: string) => [...new TextEncoder().encode(x)];
+    // A phone photo with a GPS location in its EXIF.
+    const jpeg = Uint8Array.from([0xff, 0xd8, ...seg(0xe1, [...enc('Exif\0\0'), ...enc('GPSLatitude 23.99 N')]), ...seg(0xc0, [8, 0, 10, 0, 20, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]), ...seg(0xda, [3, 1, 0, 2, 0x11, 3, 0x11, 0, 0x3f, 0]), 1, 2, 3, 0xff, 0xd9]);
+    const pdf = new TextEncoder().encode('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF');
+    const links: Record<string, { bytes: Uint8Array; name: string }> = {
+      'https://example.com/inside.jpg': { bytes: jpeg, name: 'inside.jpg' },
+      'https://example.com/book.pdf': { bytes: pdf, name: 'Class 10 Science.pdf' },
+      'https://example.com/page': { bytes: new TextEncoder().encode('<!doctype html><html>Sign in to Drive</html>'), name: 'page' },
+    };
+    t.deps.fetchFile = async (url) => { const f = links[url]; if (!f) throw new Error('unknown'); return { ...f, contentType: '' }; };
+
+    const { access_token: tok } = await connect();
+    const p = (await tool(tok, 'create_product', { title: 'Board Booster Class X Science', level: 'S', ebook: { price_inr: 199 } })).data.created;
+    // The cover from its bytes (base64).
+    const cover = await tool(tok, 'upload_product_file', { product: p.slug, kind: 'cover', data_base64: Buffer.from(jpeg).toString('base64'), file_name: 'cover.jpg' });
+    expect(cover.isError).toBe(false);
+    expect(cover.data.product.hasCover).toBe(true);
+    // A photo from a link: stored without its GPS location.
+    const photo = await tool(tok, 'upload_product_file', { product: p.id, kind: 'photo', source_url: 'https://example.com/inside.jpg', alt: 'A sample page' });
+    expect(photo.data.product.photos).toBe(1);
+    const [row] = await t.db.select().from(products).where(eq(products.id, p.id));
+    expect(row.images).toEqual([{ path: expect.stringMatching(/^\d{4}\/[0-9a-f-]{36}\/inside\.jpg$/), alt: 'A sample page' }]);
+    const stored = await t.deps.storage.read('covers', row.images[0].path);
+    expect(new TextDecoder().decode(stored)).not.toContain('GPSLatitude');
+    // E-book files from links: added in order, with labels; or replacing them all.
+    await tool(tok, 'upload_product_file', { product: p.id, kind: 'ebook_file', source_url: 'https://example.com/book.pdf', title: 'Part 1' });
+    const two = await tool(tok, 'upload_product_file', { product: p.id, kind: 'ebook_file', data_base64: Buffer.from(pdf).toString('base64'), file_name: 'answers.pdf', title: 'Answer key' });
+    expect(two.data.product.formats.ebook.files).toEqual(['Part 1', 'Answer key']);
+    const [v] = await t.db.select().from(productVariants).where(eq(productVariants.productId, p.id));
+    expect(v.files.map((f) => f.name)).toEqual(['Class 10 Science.pdf', 'answers.pdf']);
+    expect(v.filePath).toBe(v.files[0].path);
+    const one = await tool(tok, 'upload_product_file', { product: p.id, kind: 'ebook_file', source_url: 'https://example.com/book.pdf', replace_ebook_files: true });
+    expect(one.data.product.formats.ebook.files).toEqual(['Class 10 Science.pdf']);
+    // Now it can go on sale.
+    expect((await tool(tok, 'set_product_status', { products: [p.id], status: 'active' })).data).toMatchObject({ ok: true });
+
+    // What isn't accepted.
+    const page = await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover', source_url: 'https://example.com/page' });
+    expect(page.isError).toBe(true);
+    expect(page.data).toContain('the link opened a web page');
+    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover', source_url: 'https://example.com/book.pdf' })).data).toContain('isn’t a JPG, PNG or WebP image');
+    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'ebook_file', source_url: 'https://example.com/inside.jpg' })).data).toContain('isn’t a PDF or EPUB');
+    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover' })).data).toContain('one of the two');
+    expect((await tool(tok, 'upload_product_file', { product: p.id, kind: 'cover', data_base64: 'abc' })).data).toContain('file_name');
+
+    // Logged as via Claude; staff don't get the tool.
+    const log = await t.db.select().from(auditLog);
+    expect(log.filter((l) => l.action === 'file.upload').map((l) => l.actor)).toEqual(Array(5).fill('owner@eldenap.in (via Claude)'));
+    const { access_token: staff } = await connect(STAFF);
+    expect((await rpc(staff, 'tools/list')).json.result.tools.map((x: { name: string }) => x.name)).not.toContain('upload_product_file');
+  });
+
+  it('downloads only public https links, within the size limit; share links become downloads', async () => {
+    expect(directLink('https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view?usp=sharing')).toBe('https://drive.google.com/uc?export=download&id=1AbCdEfGhIjKlMnOp');
+    expect(directLink('https://www.dropbox.com/s/abc/book.pdf?dl=0')).toBe('https://www.dropbox.com/s/abc/book.pdf?dl=1');
+    for (const ip of ['127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:10.0.0.1']) expect(isPrivateAddress(ip)).toBe(true);
+    for (const ip of ['142.250.1.1', '13.32.0.1', '2606:4700::1111']) expect(isPrivateAddress(ip)).toBe(false);
+
+    const dns: Record<string, string> = { 'files.example.com': '93.184.216.34', 'inside.example.com': '10.0.0.5' };
+    const lookup = (async (host: string) => (dns[host] ? [{ address: dns[host], family: 4 }] : [])) as never;
+    const fetchFake = (async (u: URL | string) => {
+      const url = String(u);
+      if (url.endsWith('/hop')) return new Response(null, { status: 302, headers: { location: 'https://inside.example.com/secret' } });
+      if (url.endsWith('/big')) return new Response(new Uint8Array(2048), { headers: { 'content-length': '2048' } });
+      return new Response(new TextEncoder().encode('%PDF-1.4'), { headers: { 'content-disposition': 'attachment; filename="Book.pdf"' } });
+    }) as typeof fetch;
+    const get = remoteFiles({ fetch: fetchFake, lookup });
+    expect((await get('https://files.example.com/x', 1024)).name).toBe('Book.pdf');
+    await expect(get('http://files.example.com/x', 1024)).rejects.toThrow('Only https');
+    await expect(get('https://inside.example.com/x', 1024)).rejects.toThrow('private network');
+    await expect(get('https://files.example.com/hop', 1024)).rejects.toThrow('private network'); // a redirect is checked too
+    await expect(get('https://127.0.0.1/x', 1024)).rejects.toThrow('private network');
+    await expect(get('https://files.example.com/big', 1024)).rejects.toThrow('too big');
   });
 
   it('creates discount codes in rupees and switches them off', async () => {

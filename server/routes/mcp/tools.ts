@@ -10,6 +10,8 @@ import { orders } from '../../db/schema.js';
 import { CHANNELS, channelLabel, type Channel } from '../../../src/shared/attribution.js';
 import { COMPETITIONS } from '../../../src/shared/competitions.js';
 import type { AdminSession, Role } from '../admin/auth.js';
+import { isImage, sniff, stripImageMetadata } from '../../lib/fileCheck.js';
+import { remoteFiles, RemoteFileError } from '../../lib/remoteFile.js';
 
 export class ToolError extends Error {}
 
@@ -133,7 +135,7 @@ const zProductFields = {
     gst_percent: z.number().int().min(0).max(28).optional().describe('Default 0 for printed books'),
   }).nullable().optional().describe('Sell a printed copy. null turns it off.'),
   ebook: z.object({ ...zFormat, gst_percent: z.number().int().min(0).max(28).optional().describe('Default 18 for e-books') })
-    .nullable().optional().describe('Sell an e-book (PDF). Its file is uploaded in the admin. null turns it off.'),
+    .nullable().optional().describe('Sell an e-book (PDF). Add its file with upload_product_file. null turns it off.'),
   bundle: z.object(zFormat).nullable().optional().describe('E-book plus printed copy at one price (needs both). null turns it off.'),
 };
 
@@ -503,7 +505,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'create_product',
     title: 'Create a product',
-    description: 'Adds a book as a draft (not on sale yet). Turn on at least one format: print, ebook, or both (bundle needs both). Prices are in rupees, GST included. Covers, photos and e-book files are uploaded in the admin (eldenap.in/admin → Products); then publish with set_product_status.',
+    description: 'Adds a book as a draft (not on sale yet). Turn on at least one format: print, ebook, or both (bundle needs both). Prices are in rupees, GST included. Then add the cover, photos and e-book files with upload_product_file, and publish with set_product_status.',
     role: 'manager',
     input: z.object({ ...zProductFields }),
     async run(ctx, a) {
@@ -511,7 +513,7 @@ export const TOOLS: Tool[] = [
       const body = { ...applyFields(bodyFrom(null), a, true), status: 'draft' };
       delete (body as { slug?: string }).slug;
       const d = await ctx.api('POST', '/products', body);
-      return { created: productOut(d), next: 'It is a draft. Upload the cover (and the e-book file) in the admin, then publish it with set_product_status.' };
+      return { created: productOut(d), next: 'It is a draft. Add the cover (and the e-book file) with upload_product_file, then publish it with set_product_status.' };
     },
   },
   {
@@ -543,6 +545,85 @@ export const TOOLS: Tool[] = [
       const ids = [...new Set(await Promise.all(a.products.map((p: string) => productId(ctx, p))))];
       await ctx.api('POST', '/products/bulk', { ids, action: a.status });
       return { ok: true, status: a.status, products: ids.length };
+    },
+  },
+  {
+    name: 'upload_product_file',
+    title: 'Upload a cover, photo or e-book file',
+    description: 'Adds a file to a book: its cover (replaces the old one), another photo (inside pages, back cover; shown after the cover), or an e-book file (PDF or EPUB; added after the existing files, or replacing them all with replace_ebook_files). '
+      + 'Give the file as source_url: a public https link (Google Drive and Dropbox share links work when shared as "anyone with the link"; the store downloads it). '
+      + 'Or, for a small file whose bytes you have, as data_base64 with file_name (up to 3 MB). Images: JPG, PNG or WebP up to 5 MB. E-book files: up to 100 MB by link. '
+      + 'If you can only see the file (e.g. an image pasted in chat) and have neither a link nor its bytes, ask the user for a link or point them to eldenap.in/admin → Products.',
+    role: 'manager',
+    input: z.object({
+      product: z.string().trim().min(1).max(200).describe('Product id, slug or exact title'),
+      kind: z.enum(['cover', 'photo', 'ebook_file']),
+      source_url: z.string().trim().url().max(2000).optional().describe('Public https link to the image or PDF'),
+      data_base64: z.string().max(4_200_000).optional().describe('The file itself, base64-encoded (up to 3 MB)'),
+      file_name: z.string().trim().min(1).max(200).optional().describe('e.g. "class-10-science.pdf" (needed with data_base64)'),
+      alt: z.string().trim().max(150).optional().describe('photo: what it shows, e.g. "Sample chapter page"'),
+      title: z.string().trim().max(120).optional().describe('ebook_file: the label buyers see, e.g. "Part 1" or "Answer key"'),
+      replace_ebook_files: z.boolean().default(false).describe('ebook_file: remove the existing files first'),
+    }),
+    async run(ctx, a) {
+      if (!a.source_url === !a.data_base64) throw new ToolError('Give the file as source_url (a public link) or data_base64, one of the two.');
+      if (a.data_base64 && !a.file_name) throw new ToolError('Give file_name with data_base64.');
+      const ebook = a.kind === 'ebook_file';
+      const maxBytes = ebook ? (a.data_base64 ? 3 : 100) * 1048576 : 5 * 1048576;
+      // The file's bytes, from the link or from the call.
+      let bytes: Uint8Array;
+      let name = a.file_name ?? '';
+      if (a.data_base64) {
+        bytes = new Uint8Array(Buffer.from(a.data_base64.replace(/^data:[^,]*,/, ''), 'base64'));
+        if (!bytes.length) throw new ToolError('data_base64 is empty or isn’t base64.');
+        if (bytes.length > Math.min(maxBytes, 3 * 1048576)) throw new ToolError('That file is too big to pass directly (3 MB at most): give a public link as source_url instead.');
+      } else {
+        try {
+          const got = await (ctx.deps.fetchFile ?? remoteFiles())(a.source_url, maxBytes);
+          bytes = got.bytes;
+          name ||= got.name;
+        } catch (e) {
+          if (e instanceof RemoteFileError) throw new ToolError(e.message);
+          throw e;
+        }
+      }
+      // What it really is, from its first bytes (never the name or the link).
+      const head = String.fromCharCode(...bytes.subarray(0, 60));
+      const type = sniff(bytes) ?? (bytes[0] === 0x50 && bytes[1] === 0x4b && head.includes('application/epub+zip') ? 'application/epub+zip' : null);
+      if (ebook ? type !== 'application/pdf' && type !== 'application/epub+zip' : !type || !isImage(type)) {
+        const looksLikePage = /^\s*</.test(head);
+        throw new ToolError(`That isn’t ${ebook ? 'a PDF or EPUB' : 'a JPG, PNG or WebP image'}${looksLikePage ? ': the link opened a web page, not the file (for Google Drive, share it as "anyone with the link"; very large Drive files need downloading and a different link)' : ''}.`);
+      }
+      // Photos lose hidden metadata (camera, GPS location) before they're stored.
+      if (type && isImage(type)) {
+        try { bytes = stripImageMetadata(bytes, type); } catch { throw new ToolError('That image looks damaged.'); }
+      }
+      const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf', 'application/epub+zip': 'epub' }[type as string]!;
+      const base = name.replace(/\.[^.]+$/, '').trim() || (ebook ? 'ebook' : a.kind);
+      const fileName = `${base}.${ext}`;
+
+      const id = await productId(ctx, a.product);
+      const cur: Detail = await ctx.api('GET', `/products/${id}`);
+      if (a.kind === 'photo' && (cur.product.images ?? []).length >= 20) throw new ToolError('This book already has 20 photos, the most it can have.');
+      if (ebook && !a.replace_ebook_files && (cur.variants.digital?.files ?? []).length >= 20) throw new ToolError('This e-book already has 20 files, the most it can have.');
+      // Through the admin's upload endpoint (its rules, a fresh path, the activity log), then stored.
+      const bucket = ebook ? 'ebooks' : 'covers';
+      const up = await ctx.api<{ path: string }>('POST', '/uploads', { bucket, fileName, contentType: type, size: bytes.length });
+      await ctx.deps.storage.write(bucket, up.path, bytes, type!);
+
+      const b = bodyFrom(cur);
+      if (a.kind === 'cover') b.coverPath = up.path;
+      if (a.kind === 'photo') b.images = [...b.images, { path: up.path, alt: a.alt ?? '' }];
+      if (ebook) {
+        const files = a.replace_ebook_files ? [] : (cur.variants.digital?.files ?? []).map((f: { path: string; name: string; title: string; size: number | null }) => ({ path: f.path, name: f.name, title: f.title ?? '', size: f.size ?? null }));
+        (b.digital as Record<string, unknown>).files = [...files, { path: up.path, name: fileName, title: a.title ?? '', size: bytes.length }];
+      }
+      const saved = await ctx.api('PUT', `/products/${id}`, b);
+      return {
+        uploaded: { kind: a.kind, fileName, sizeKb: Math.round(bytes.length / 1024), type },
+        product: productOut(saved),
+        ...(ebook && !saved.variants?.digital?.active ? { note: 'The e-book format is off for this book: turn it on with update_product (ebook: { price_inr }) to sell it.' } : {}),
+      };
     },
   },
   {
