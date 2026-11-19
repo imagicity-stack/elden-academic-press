@@ -1,3 +1,4 @@
+import type { FetchFile } from './lib/remoteFile.js';
 import { join } from 'node:path';
 import { access } from 'node:fs/promises';
 import { count } from 'drizzle-orm';
@@ -39,6 +40,8 @@ export interface Deps {
   whatsappTemplates?: WaTemplates | null;
   /** Delhivery's API (Admin → Shipping); a simulator in local development; unset on Vercel without a token. */
   delhivery?: Delhivery | null;
+  /** Downloads a file from a public link (the Claude connector's uploads); unset = the real one (lib/remoteFile.ts). */
+  fetchFile?: FetchFile;
 }
 
 // Kept on globalThis so the dev server's hot reloads reuse one database.

@@ -1,7 +1,7 @@
 // File storage: Supabase Storage in production; a local folder in development.
 // Buckets: `covers` and `resources` are public; `ebooks` is private and only
 // ever served through short-lived signed links.
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { hmacHex, safeEqual } from './crypto.js';
@@ -20,6 +20,11 @@ export interface Storage {
   read(bucket: Bucket, path: string): Promise<Uint8Array>;
   /** Replace a file's bytes (a student's photo after its location data is removed). */
   write(bucket: Bucket, path: string, data: Uint8Array, contentType?: string): Promise<void>;
+  /**
+   * The first `bytes` of a file and its full size, without downloading all of it (checking a large
+   * upload's type); null when there is no such file.
+   */
+  head?(bucket: Bucket, path: string, bytes: number): Promise<{ bytes: Uint8Array; size: number } | null>;
 }
 
 export function supabaseStorage(url: string, serviceKey: string): Storage {
@@ -47,6 +52,16 @@ export function supabaseStorage(url: string, serviceKey: string): Storage {
     async write(bucket, path, data, contentType) {
       const { error } = await client.storage.from(bucket).upload(path, data, { upsert: true, contentType });
       if (error) throw new Error(error.message);
+    },
+    async head(bucket, path, bytes) {
+      const { data, error } = await client.storage.from(bucket).createSignedUrl(path, 60);
+      if (error || !data) return null;
+      const res = await fetch(data.signedUrl, { headers: { Range: `bytes=0-${bytes - 1}` }, signal: AbortSignal.timeout(15_000) });
+      if (res.status === 404 || res.status === 400) return null;
+      if (!res.ok) throw new Error(`Storage answered ${res.status}`);
+      const body = new Uint8Array(await res.arrayBuffer());
+      const total = Number(/\/(\d+)$/.exec(res.headers.get('content-range') ?? '')?.[1] ?? res.headers.get('content-length') ?? body.length);
+      return { bytes: body.subarray(0, bytes), size: total };
     },
   };
 }
@@ -82,6 +97,17 @@ export function localStorage(root: string, baseUrl: string, secret = 'local-stor
       const f = file(bucket, path);
       await mkdir(dirname(f), { recursive: true });
       await writeFile(f, data);
+    },
+    async head(bucket, path, bytes) {
+      const f = file(bucket, path);
+      const size = await stat(f).then((x) => x.size, () => null);
+      if (size === null) return null;
+      const fh = await open(f, 'r');
+      try {
+        const buf = new Uint8Array(Math.min(bytes, size));
+        await fh.read(buf, 0, buf.length, 0);
+        return { bytes: buf, size };
+      } finally { await fh.close(); }
     },
   };
 }
